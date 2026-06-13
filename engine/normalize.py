@@ -9,6 +9,8 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from engine.lang import detect_language
+
 # Pipeline state machine. Order matters for analytics (index = stage rank).
 STATES = [
     "discovered",
@@ -129,14 +131,17 @@ class Job(BaseModel):
     salary_currency: str | None = None
     salary_interval: str | None = None  # yearly | monthly | hourly
     date_posted: str | None = None
+    language: str | None = None  # detected posting language (en|es|de|fr|pt|None)
     raw: dict[str, Any] = Field(default_factory=dict)
 
     def finalize(self) -> Job:
-        """Fill derived fields (id, remote inference). Call before persisting."""
+        """Fill derived fields (id, remote inference, language). Call before persisting."""
         if not self.id:
             self.id = compute_job_id(self.company, self.title, self.location or "")
         if self.is_remote is None:
             self.is_remote, self.workplace_type = infer_remote(
                 self.location, self.workplace_type, self.description
             )
+        if self.language is None:
+            self.language = detect_language(self.description or self.title)
         return self

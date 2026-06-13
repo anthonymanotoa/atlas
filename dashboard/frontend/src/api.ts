@@ -19,6 +19,14 @@ export type Job = {
   age_days?: number | null;
   applied_days?: number | null;
   description?: string;
+  // P1-A quality-gate fields (additive; backend may omit on older rows)
+  salary_min?: number | null;
+  salary_max?: number | null;
+  salary_currency?: string | null;
+  salary_interval?: string | null;
+  language?: string | null;
+  posted_days?: number | null;
+  salary_visible?: boolean;
 };
 
 export type Action = {
@@ -104,7 +112,9 @@ export const api = {
   job: (id: string) => get<JobDetail>(`/api/jobs/${id}`),
   setState: (id: string, state: string) => post(`/api/jobs/${id}/state`, { state }),
   markApplied: (id: string) => post(`/api/jobs/${id}/applied`),
-  prep: (id: string, language = "en") => post(`/api/jobs/${id}/prep`, { language }),
+  // language omitted → backend auto-picks the posting's language (es offers → ES CV, else EN)
+  prep: (id: string, language?: string) =>
+    post(`/api/jobs/${id}/prep`, language ? { language } : {}),
   markSent: (mid: number) => post(`/api/messages/${mid}/sent`),
   discover: () => post<{ started: boolean; running?: boolean }>("/api/discover"),
   discoverStatus: () => get<{ running: boolean }>("/api/discover/status"),

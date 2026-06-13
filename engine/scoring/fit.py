@@ -8,11 +8,33 @@ of borderline matches. Deal-breakers cap the score; knockouts are flagged, not a
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 
 from engine.config import Criteria
+from engine.lang import detect_language
+from engine.normalize import norm_company
 
-SENIOR_TERMS = ("senior", "sr.", "sr ", "lead", "staff", "principal", "head of", "director")
+# Senior IC track (good fit). NOTE: director/head/chief live in EXEC_TERMS, not here —
+# they're over-qualified for an IC pivoting into AI, so they must NOT earn a seniority bonus.
+SENIOR_TERMS = ("senior", "sr.", "sr ", "lead", "staff", "principal")
+EXEC_TERMS = (
+    "director",
+    "vp ",
+    "vp,",
+    "vice president",
+    "head of",
+    "chief",
+    " cto",
+    " ceo",
+    " cfo",
+    " coo",
+    "svp",
+    "evp",
+    "c-level",
+    "managing director",
+)
 JUNIOR_TERMS = (
     "junior",
     "jr.",
@@ -29,9 +51,7 @@ JUNIOR_TERMS = (
     "apprentice",
 )
 
-# Minimal "obviously not EN/ES" detector (Adzuna DE/FR can return local-language posts).
-_DE = (" und ", " für ", " mitarbeiter", " wir ", " sie ", " bei uns", " kenntnisse")
-_FR = (" et de ", " pour ", " vous ", " nous ", " entreprise ", " compétences")
+_YEARS = re.compile(r"(\d{1,2})\s*\+?\s*(?:years|yrs|años)", re.I)
 
 
 @dataclass
@@ -46,13 +66,26 @@ def _has(hay: str, term: str) -> bool:
     return term.lower() in hay
 
 
-def _detect_offlang(text: str, allowed: list[str]) -> str | None:
-    t = f" {text.lower()} "
-    if "de" not in allowed and sum(m in t for m in _DE) >= 3:
-        return "de"
-    if "fr" not in allowed and sum(m in t for m in _FR) >= 3:
-        return "fr"
-    return None
+def _age_days(job: dict) -> float | None:
+    """Days since the posting went live (date_posted), falling back to when we found it."""
+    raw = job.get("date_posted") or job.get("discovered_at")
+    if not raw:
+        return None
+    try:
+        dt = datetime.fromisoformat(raw)
+    except (ValueError, TypeError):
+        try:
+            dt = datetime.strptime(str(raw)[:10], "%Y-%m-%d")
+        except (ValueError, TypeError):
+            return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=UTC)
+    return (datetime.now(UTC) - dt).total_seconds() / 86400
+
+
+def _required_years(text: str) -> int | None:
+    yrs = [int(m) for m in _YEARS.findall(text)]
+    return max(yrs) if yrs else None
 
 
 def score_job(job: dict, criteria: Criteria) -> ScoreResult:
@@ -65,6 +98,12 @@ def score_job(job: dict, criteria: Criteria) -> ScoreResult:
     reasons: list[str] = []
     knockouts: list[str] = []
     disq = False
+
+    # 0. Company blocklist — never surface these (hard filter, short-circuits).
+    if criteria.company_blocklist:
+        blocked = {norm_company(c) for c in criteria.company_blocklist}
+        if norm_company(job.get("company")) in blocked:
+            return ScoreResult(0.0, ["company in blocklist"], ["company in blocklist"], True)
 
     # 1. Role relevance (strongest signal; title-weighted).
     role_terms = criteria.all_role_terms
@@ -91,10 +130,15 @@ def score_job(job: dict, criteria: Criteria) -> ScoreResult:
         else:
             reasons.append("remote status unknown")
 
-    # 3. Seniority.
+    # 3. Seniority — junior is under-qualified (DQ); exec is over-qualified (DQ when excluded).
+    title_pad = f" {title_l} "
     if any(_has(title_l, t) for t in JUNIOR_TERMS):
         disq = True
-        reasons.append("junior/intern level")
+        reasons.append("junior/intern level (under-qualified)")
+    elif criteria.exclude_exec and any(_has(title_pad, t) for t in EXEC_TERMS):
+        disq = True
+        knockouts.append("over-qualified (exec/management role)")
+        reasons.append("exec/management title — over-qualified for an IC track")
     elif any(_has(title_l, t.strip()) for t in [s.strip() for s in criteria.seniority]) or any(
         _has(title_l, t) for t in SENIOR_TERMS
     ):
@@ -138,12 +182,28 @@ def score_job(job: dict, criteria: Criteria) -> ScoreResult:
         score -= min(len(ko) * 5, 10)
         reasons.append(f"knockout flags: {', '.join(ko)}")
 
-    # 8. Off-target language.
-    if desc:
-        off = _detect_offlang(desc, criteria.languages)
-        if off:
-            score -= 25
-            reasons.append(f"likely {off}-language posting")
+    # 8. Off-target language — use the language stored at discovery, else detect now.
+    lang = job.get("language") or detect_language(desc or title)
+    if lang and lang not in criteria.languages:
+        score -= 25
+        reasons.append(f"likely {lang}-language posting (off-target)")
+
+    # 9. Freshness — relatively-new postings only; stale ones downranked (DQ if hard).
+    if criteria.max_age_days:
+        age = _age_days(job)
+        if age is not None and age > criteria.max_age_days:
+            score -= 15
+            reasons.append(f"posted ~{age:.0f}d ago (stale, >{criteria.max_age_days}d)")
+            if criteria.freshness_hard:
+                disq = True
+
+    # 10. Over-demanding experience requirement (flag, don't reject).
+    if criteria.max_years_required and desc:
+        req = _required_years(desc)
+        if req and req > criteria.max_years_required:
+            knockouts.append(f"requires {req}+ years")
+            score -= 8
+            reasons.append(f"requires {req}+ years (> your {criteria.max_years_required})")
 
     score = max(0.0, min(100.0, score))
     if disq:

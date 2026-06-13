@@ -1,11 +1,12 @@
 import * as Dialog from "@radix-ui/react-dialog";
 import { Command as CmdIcon, Loader2, Moon, RefreshCw, Search, Sun, X } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, type Action, type Job, type Overview, type Profile } from "./api";
 import { AnalyticsStrip } from "./components/AnalyticsStrip";
 import { Board } from "./components/Board";
 import { CommandPalette } from "./components/CommandPalette";
 import { DetailDrawer } from "./components/DetailDrawer";
+import { FilterBar, type Filters } from "./components/FilterBar";
 import { NeedsAction } from "./components/NeedsAction";
 
 export default function App() {
@@ -20,6 +21,11 @@ export default function App() {
   const [briefOpen, setBriefOpen] = useState(false);
   const [brief, setBrief] = useState("");
   const [searching, setSearching] = useState(false);
+  const [filters, setFilters] = useState<Filters>({
+    onlySalary: false,
+    language: "",
+    maxAgeDays: 0,
+  });
   const [theme, setTheme] = useState<string>(() => localStorage.getItem("atlas-theme") || "dark");
 
   useEffect(() => {
@@ -106,6 +112,23 @@ export default function App() {
   }
 
   const allJobs = Object.values(jobs).flat();
+  const languages = Array.from(
+    new Set(allJobs.map((j) => j.language).filter((l): l is string => !!l)),
+  ).sort();
+  const filteredJobs = useMemo(() => {
+    const out: Record<string, Job[]> = {};
+    for (const c of Object.keys(jobs)) {
+      out[c] = jobs[c].filter((j) => {
+        const age = j.posted_days ?? j.age_days;
+        return (
+          (!filters.onlySalary || j.salary_visible) &&
+          (!filters.language || j.language === filters.language) &&
+          (!filters.maxAgeDays || age == null || age <= filters.maxAgeDays)
+        );
+      });
+    }
+    return out;
+  }, [jobs, filters]);
 
   return (
     <div className="min-h-full px-5 py-4 max-w-[1500px] mx-auto">
@@ -189,7 +212,8 @@ export default function App() {
       </div>
 
       <h2 className="text-sm font-semibold tracking-wide mb-2">Pipeline</h2>
-      <Board columns={columns} jobs={jobs} onOpen={setSelected} onMove={move} />
+      <FilterBar filters={filters} setFilters={setFilters} languages={languages} />
+      <Board columns={columns} jobs={filteredJobs} onOpen={setSelected} onMove={move} />
 
       <DetailDrawer jobId={selected} onClose={() => setSelected(null)} onChanged={load} />
       <CommandPalette
