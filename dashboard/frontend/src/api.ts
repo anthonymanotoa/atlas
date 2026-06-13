@@ -27,6 +27,9 @@ export type Job = {
   language?: string | null;
   posted_days?: number | null;
   salary_visible?: boolean;
+  // CV↔JD match (distinct from fit_score): how well the master CV covers the posting.
+  match_score?: number | null;
+  missing_keywords?: string[]; // importance-ranked JD keywords the CV doesn't evidence (detail only)
 };
 
 export type Action = {

@@ -27,6 +27,8 @@ CREATE TABLE IF NOT EXISTS jobs (
     fit_score       REAL,
     fit_reasons     TEXT,                      -- json
     knockout_flags  TEXT,                      -- json array of strings
+    match_score     INTEGER,                   -- CV↔JD keyword match 0–100 (distinct from fit_score)
+    match_missing   TEXT,                      -- json array of JD keywords the CV doesn't evidence
 
     discovered_at   TEXT NOT NULL,
     scored_at       TEXT,

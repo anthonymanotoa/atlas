@@ -230,6 +230,19 @@ def test_onboarding_status_and_complete(atlas_app):
         assert client.get("/api/onboarding").json()["complete"] is True
 
 
+# ── FASE B: CV↔JD match score persists + surfaces via the job-detail API ───────
+def test_match_score_surfaces_in_job_detail(atlas_app):
+    from engine.db.models import DB
+
+    with TestClient(atlas_app) as client:
+        jid = _seed_job()
+        with DB() as db:
+            db.set_match(jid, 72, ["kubernetes", "terraform"])
+        detail = client.get(f"/api/jobs/{jid}").json()
+    assert detail["job"]["match_score"] == 72
+    assert detail["job"]["missing_keywords"] == ["kubernetes", "terraform"]
+
+
 # ── Plan 019: dashboard-triggered discover→score (deterministic, keyless) ──────
 def test_discover_endpoint_runs_deterministic_pipeline(atlas_app, monkeypatch):
     import engine.discovery.runner as runner_mod

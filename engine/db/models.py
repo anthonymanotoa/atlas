@@ -68,6 +68,8 @@ class DB:
         we check `PRAGMA table_info` first — safe to run on every startup.
         """
         self._ensure_column("jobs", "language", "TEXT")
+        self._ensure_column("jobs", "match_score", "INTEGER")
+        self._ensure_column("jobs", "match_missing", "TEXT")
 
     def _ensure_column(self, table: str, column: str, decl: str) -> None:
         existing = {r["name"] for r in self.conn.execute(f"PRAGMA table_info({table})")}
@@ -195,6 +197,14 @@ class DB:
         self.conn.execute(
             "UPDATE jobs SET fit_score=?, fit_reasons=?, knockout_flags=? WHERE id=?",
             (score, json.dumps(reasons), json.dumps(knockouts), job_id),
+        )
+        self.conn.commit()
+
+    def set_match(self, job_id: str, score: int, missing: list[str]) -> None:
+        """Persist the CV↔JD match score (0–100) + importance-ranked missing JD keywords."""
+        self.conn.execute(
+            "UPDATE jobs SET match_score=?, match_missing=? WHERE id=?",
+            (score, json.dumps(missing), job_id),
         )
         self.conn.commit()
 
