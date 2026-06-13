@@ -45,3 +45,7 @@ dashboard/frontend/.vite/
 .idea/
 .vscode/
 *.swp
+
+# ── Tooling (graphify knowledge graph + git worktrees) ───────────────────────
+graphify-out/
+.claude/worktrees/
