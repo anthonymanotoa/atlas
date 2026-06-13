@@ -199,3 +199,30 @@ CREATE TABLE IF NOT EXISTS social_mentions (
     found_at          TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_social_job ON social_mentions(job_id);
+
+-- Interview prep (P3-E): interviews are entered MANUALLY in the dashboard. Interviewer
+-- research is SUPERVISED Claude-in-Chrome (the human confirms LinkedIn URLs).
+CREATE TABLE IF NOT EXISTS interviews (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    job_id       TEXT REFERENCES jobs(id) ON DELETE CASCADE,
+    scheduled_at TEXT,
+    round        TEXT,                          -- phone | technical | system_design | hiring_manager | final | other
+    mode         TEXT,                          -- video | onsite | phone
+    status       TEXT DEFAULT 'scheduled',      -- scheduled | done | cancelled
+    notes        TEXT,
+    prep_path    TEXT,
+    created_at   TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_interviews_job ON interviews(job_id);
+
+CREATE TABLE IF NOT EXISTS interviewers (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    interview_id   INTEGER REFERENCES interviews(id) ON DELETE CASCADE,
+    name           TEXT,
+    title          TEXT,
+    company        TEXT,
+    linkedin_url   TEXT,
+    research_notes TEXT,
+    created_at     TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_interviewers_iv ON interviewers(interview_id);

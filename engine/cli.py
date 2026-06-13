@@ -484,5 +484,64 @@ def profiles_list() -> None:
         console.print(f"  {mark} [bold]{p['id']}[/]{owner} — {p.get('label', '')}")
 
 
+# ── interviews (P3-E) — manual entry + prep-doc generation ─────────────────────
+interview_app = typer.Typer(help="Manage interviews + generate prep docs (manual entry).")
+app.add_typer(interview_app, name="interview")
+
+
+@interview_app.command("add")
+def interview_add(
+    job_id: str,
+    scheduled_at: str = typer.Argument(None, help="When (YYYY-MM-DD or ISO)."),
+    round: str = typer.Option(
+        None, "--round", help="phone|technical|system_design|hiring_manager|final"
+    ),
+    mode: str = typer.Option(None, help="video|onsite|phone"),
+) -> None:
+    """Add an interview for a job (manual)."""
+    with _db() as db:
+        if not db.get_job(job_id):
+            console.print(f"[red]✗[/] job desconocido: {job_id}")
+            raise typer.Exit(2)
+        iid = db.add_interview(job_id, scheduled_at=scheduled_at, round=round, mode=mode)
+    console.print(
+        f"[green]✓[/] entrevista {iid} para {job_id}. Agrega entrevistadores en el dashboard."
+    )
+
+
+@interview_app.command("list")
+def interview_list() -> None:
+    """List scheduled interviews."""
+    with _db() as db:
+        rows = db.list_interviews()
+        jobs = {j["id"]: j for j in db.list_jobs()}
+    if not rows:
+        console.print("Sin entrevistas. Agrega una con `atlas interview add <job_id>`.")
+        return
+    table = Table(title="Interviews")
+    for col in ("id", "when", "round", "company", "prep"):
+        table.add_column(col)
+    for r in rows:
+        job = jobs.get(r["job_id"], {})
+        table.add_row(
+            str(r["id"]),
+            (r.get("scheduled_at") or "—")[:16],
+            r.get("round") or "—",
+            (job.get("company") or "—")[:24],
+            "✓" if r.get("prep_path") else "—",
+        )
+    console.print(table)
+
+
+@interview_app.command("prep")
+def interview_prep(interview_id: int, language: str = typer.Option("en", help="en | es")) -> None:
+    """Generate the prep doc (likely questions + STAR scaffolds) for an interview."""
+    from engine.interview.interview_prep import gen_prep_doc
+
+    with _db() as db:
+        path = gen_prep_doc(db, interview_id, language=language)
+    console.print(f"[green]✓[/] Prep generado → {path}")
+
+
 if __name__ == "__main__":
     app()

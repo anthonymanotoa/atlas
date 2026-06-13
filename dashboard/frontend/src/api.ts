@@ -103,6 +103,24 @@ export type OnboardingStatus = {
   cv_present: boolean;
   audit: { findings: Finding[]; summary: { high: number; med: number; low: number } };
 };
+export type Interviewer = {
+  id: number;
+  name: string;
+  title?: string;
+  company?: string;
+  linkedin_url?: string;
+  research_notes?: string;
+};
+export type Interview = {
+  id: number;
+  job_id: string;
+  scheduled_at?: string;
+  round?: string;
+  mode?: string;
+  status?: string;
+  prep_path?: string;
+  interviewers?: Interviewer[];
+};
 export type Learning = {
   id: number;
   company: string;
@@ -175,6 +193,17 @@ export const api = {
     get<{ learnings: Learning[] }>(
       `/api/learnings${company ? `?company=${encodeURIComponent(company)}` : ""}`,
     ),
+  interviews: (jobId: string) => get<{ interviews: Interview[] }>(`/api/jobs/${jobId}/interviews`),
+  addInterview: (
+    jobId: string,
+    body: { scheduled_at?: string; round?: string; mode?: string; notes?: string },
+  ) => post<{ ok: boolean; id: number }>(`/api/jobs/${jobId}/interview`, body),
+  addInterviewer: (interviewId: number, body: Partial<Interviewer>) =>
+    post<{ ok: boolean; id: number }>(`/api/interview/${interviewId}/interviewer`, body),
+  genPrep: (interviewId: number, language = "en") =>
+    post<{ ok: boolean; path: string; markdown: string }>(`/api/interview/${interviewId}/prep`, {
+      language,
+    }),
   socialMentions: (id: string) =>
     get<{ mentions: SocialMention[] }>(`/api/jobs/${id}/social_mentions`),
   startSocialSearch: (id: string) =>
