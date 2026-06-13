@@ -14,8 +14,10 @@ reviews and sends from the dashboard. Today's work is idempotent; safe to re-run
 
 1. **Run the deterministic pipeline.** In a terminal:
    ```bash
-   cd /Users/anthonymanotoa/dev/personal/atlas && uv run atlas brain --limit 8 --language en --json
+   cd /Users/anthonymanotoa/dev/personal/atlas && uv run atlas --profile owner brain --limit 8 --language en --json
    ```
+   `--profile owner` pins the auto-run to the owner's profile regardless of which profile
+   the dashboard last had active. The brain refuses to run for any non-owner profile.
    This discovers jobs, scores fit, shortlists, and for the top matches generates a parse-safe
    tailored CV (DOCX), drafts all outreach variants, writes a per-job `package.md`, updates
    `data/atlas.db`, and writes `data/outbox/MORNING_BRIEF.md`. It does the heavy lifting.

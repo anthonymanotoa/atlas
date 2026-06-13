@@ -74,6 +74,7 @@ export type Referral = {
   title?: string;
   linkedin_url?: string;
 };
+export type Profile = { id: string; label: string; is_owner?: boolean };
 export type JobDetail = {
   job: Job;
   cv_versions: CvVersion[];
@@ -110,4 +111,6 @@ export const api = {
   brief: () => get<{ markdown: string }>("/api/brief"),
   cvDownload: (jobId: string, vid: number, fmt = "docx") =>
     `/api/cv/${jobId}/${vid}/download?fmt=${fmt}`,
+  profiles: () => get<{ profiles: Profile[]; active: string }>("/api/profiles"),
+  switchProfile: (id: string) => post<{ ok: boolean; active: string }>("/api/profile", { id }),
 };

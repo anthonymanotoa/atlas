@@ -263,6 +263,30 @@ uv run atlas advise                 asesoría de CV/LinkedIn
 uv run atlas status                 estado general (última corrida, salud de fuentes)
 ```
 
+**Varias cuentas en la misma Mac (perfiles).** Atlas puede alojar varios perfiles
+independientes —pensado para unas pocas personas de confianza (≤5)—, cada uno con su
+**propia base de datos, su CV y sus criterios**, todo aislado y siempre local ($0). No hay
+contraseñas: es un *selector* de perfil, no un control de acceso (la app solo escucha en
+`127.0.0.1`).
+
+- En el tablero, arriba a la derecha, un **selector** cambia de perfil al vuelo, sin
+  reiniciar. La ★ marca el perfil dueño.
+- La **corrida automática diaria (el cerebro) es solo del dueño** —corre sobre *tu*
+  suscripción de Claude—. Los demás perfiles usan Atlas a mano (descubrir/preparar con un
+  clic o por terminal), que es gratis. El brain se niega a correr para un perfil que no sea
+  el dueño.
+
+```
+uv run atlas profiles list                            ver perfiles y cuál está activo
+uv run atlas profiles create <id> --label "Nombre"    crear un perfil nuevo (sembrado y listo para editar)
+uv run atlas --profile <id> <comando>                 correr un comando para un perfil concreto
+uv run atlas profiles init                            (una sola vez) migrar tus datos actuales al perfil "owner"
+```
+
+> La primera vez, `./scripts/run.sh` corre `atlas profiles init` solo: mueve tus datos
+> actuales al perfil **owner** sin perder nada. Cada perfil nuevo edita su propio
+> `profiles/<id>/config/criteria.md` y `profiles/<id>/profile/master_cv.yaml`.
+
 **Pruebas** (siempre vía RTK):
 
 ```
@@ -278,8 +302,10 @@ uv run rtk pytest
 
 Atlas corre **enteramente en tu Mac**. Nada de lo personal sale de tu equipo ni se sube a
 GitHub. El `.gitignore` protege explícitamente: tu CV maestro (`master_cv.yaml`), la base de
-datos (`*.db`), las carpetas `data/`, los documentos generados (`*.docx`, `*.pdf`), tu
-`Connections.csv` y cualquier `.env`. El repositorio es **privado**.
+datos (`*.db`), las carpetas `data/` y `profiles/` (donde vive cada perfil con su BD, su CV
+y sus criterios), los documentos generados (`*.docx`, `*.pdf`), tu `Connections.csv` y
+cualquier `.env`. Cada perfil queda **aislado** en su propia carpeta. El repositorio es
+**privado**.
 
 **Seguridad de dependencias:** la auditoría de **producción** da **0 vulnerabilidades**
 (`npm --prefix dashboard/frontend run audit:prod`). Las alertas que pueda mostrar `npm audit`
