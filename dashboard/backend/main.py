@@ -6,12 +6,14 @@ Run:  uv run uvicorn dashboard.backend.main:app --port 8787 --reload
 """
 from __future__ import annotations
 
+import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 from threading import Lock
 from typing import Literal
+from urllib.parse import urlsplit
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -60,6 +62,43 @@ app.add_middleware(
 )
 
 
+# ── Server-side request-authenticity check on state-mutating POSTs (plan 020) ──
+# Localhost-only, single-user, no auth. The CORS preflight + loopback bind are the
+# first line; this is the server-side backstop for when a request reaches a handler
+# anyway. Origins permitted to mutate state; config-driven so it tracks the bound
+# host/port (set ATLAS_ALLOWED_ORIGINS as a comma-list to override). Defaults cover
+# the loopback backend (documented --port 8787) + the Vite dev server.
+_DEFAULT_ALLOWED_ORIGINS = (
+    "http://127.0.0.1:8787", "http://localhost:8787",
+    "http://localhost:5173", "http://127.0.0.1:5173",
+)
+ALLOWED_ORIGINS = frozenset(
+    o.strip() for o in os.environ.get(
+        "ATLAS_ALLOWED_ORIGINS", ",".join(_DEFAULT_ALLOWED_ORIGINS)
+    ).split(",") if o.strip()
+)
+
+
+def require_trusted_origin(request: Request) -> None:
+    """Reject state-mutating requests from an untrusted browser origin (403).
+
+    Same-origin and non-browser requests omit Origin and are allowed (this is
+    load-bearing for production "served-from-FastAPI" mode); a present
+    Origin/Referer must be in ALLOWED_ORIGINS.
+    """
+    origin = request.headers.get("origin")
+    if origin is None:
+        referer = request.headers.get("referer")
+        if referer is None:
+            return  # same-origin / non-browser request: nothing to verify
+        parts = urlsplit(referer)
+        origin = f"{parts.scheme}://{parts.netloc}" if parts.scheme and parts.netloc else None
+        if origin is None:
+            return
+    if origin not in ALLOWED_ORIGINS:
+        raise HTTPException(403, "origin not allowed")
+
+
 class StateBody(BaseModel):
     state: str
 
@@ -98,7 +137,7 @@ def api_job(job_id: str, db: DB = Depends(get_db)):
     return detail
 
 
-@app.post("/api/jobs/{job_id}/state")
+@app.post("/api/jobs/{job_id}/state", dependencies=[Depends(require_trusted_origin)])
 def api_set_state(job_id: str, body: StateBody, db: DB = Depends(get_db)):
     from engine.outreach import followups
     if body.state not in STATES:
@@ -114,7 +153,7 @@ def api_set_state(job_id: str, body: StateBody, db: DB = Depends(get_db)):
     return {"ok": True, "state": body.state}
 
 
-@app.post("/api/jobs/{job_id}/applied")
+@app.post("/api/jobs/{job_id}/applied", dependencies=[Depends(require_trusted_origin)])
 def api_mark_applied(job_id: str, db: DB = Depends(get_db)):
     from engine.outreach import followups
     db.set_state(job_id, "applied", {"via": "dashboard"})
@@ -122,7 +161,7 @@ def api_mark_applied(job_id: str, db: DB = Depends(get_db)):
     return {"ok": True}
 
 
-@app.post("/api/jobs/{job_id}/prep")
+@app.post("/api/jobs/{job_id}/prep", dependencies=[Depends(require_trusted_origin)])
 def api_prep(job_id: str, body: PrepBody, db: DB = Depends(get_db)):
     from engine.cv.build import build_for_job
     from engine.outreach.build import build_outreach, write_package
@@ -134,7 +173,7 @@ def api_prep(job_id: str, body: PrepBody, db: DB = Depends(get_db)):
     return {"ok": True, "coverage": cv.coverage, "parse_ok": cv.parse_ok}
 
 
-@app.post("/api/messages/{message_id}/sent")
+@app.post("/api/messages/{message_id}/sent", dependencies=[Depends(require_trusted_origin)])
 def api_mark_sent(message_id: int, db: DB = Depends(get_db)):
     db.conn.execute("UPDATE messages SET state='sent', sent_at=? WHERE id=?",
                     (now_iso(), message_id))
