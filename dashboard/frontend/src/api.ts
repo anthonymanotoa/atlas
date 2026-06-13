@@ -86,6 +86,8 @@ export const api = {
   markApplied: (id: string) => post(`/api/jobs/${id}/applied`),
   prep: (id: string, language = "en") => post(`/api/jobs/${id}/prep`, { language }),
   markSent: (mid: number) => post(`/api/messages/${mid}/sent`),
+  discover: () => post<{ started: boolean; running?: boolean }>("/api/discover"),
+  discoverStatus: () => get<{ running: boolean }>("/api/discover/status"),
   brief: () => get<{ markdown: string }>("/api/brief"),
   cvDownload: (jobId: string, vid: number, fmt = "docx") => `/api/cv/${jobId}/${vid}/download?fmt=${fmt}`,
 };

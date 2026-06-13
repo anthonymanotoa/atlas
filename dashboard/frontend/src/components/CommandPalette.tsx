@@ -1,10 +1,10 @@
 import { Command } from "cmdk";
-import { FileText, RefreshCw, Search } from "lucide-react";
+import { FileText, RefreshCw, Search, Sparkles } from "lucide-react";
 import type { Job } from "../api";
 import { STATE_ES } from "../lib";
 
 export function CommandPalette({
-  open, setOpen, jobs, onOpenJob, onRefresh, onBrief,
+  open, setOpen, jobs, onOpenJob, onRefresh, onBrief, onSearch,
 }: {
   open: boolean;
   setOpen: (o: boolean) => void;
@@ -12,6 +12,7 @@ export function CommandPalette({
   onOpenJob: (id: string) => void;
   onRefresh: () => void;
   onBrief: () => void;
+  onSearch: () => void;
 }) {
   return (
     <Command.Dialog
@@ -36,6 +37,7 @@ export function CommandPalette({
             Sin resultados.
           </Command.Empty>
           <Command.Group heading="Acciones" className="text-[0.7rem] text-[var(--color-faint)] px-2">
+            <Item onSelect={() => { onSearch(); setOpen(false); }} icon={<Sparkles size={14} />} text="Buscar vacantes nuevas" />
             <Item onSelect={() => { onRefresh(); setOpen(false); }} icon={<RefreshCw size={14} />} text="Actualizar tablero" />
             <Item onSelect={() => { onBrief(); setOpen(false); }} icon={<FileText size={14} />} text="Abrir resumen del día" />
           </Command.Group>

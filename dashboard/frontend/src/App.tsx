@@ -1,5 +1,5 @@
 import * as Dialog from "@radix-ui/react-dialog";
-import { Command as CmdIcon, Moon, RefreshCw, Sun, X } from "lucide-react";
+import { Command as CmdIcon, Loader2, Moon, RefreshCw, Search, Sun, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { api, type Action, type Job, type Overview } from "./api";
 import { AnalyticsStrip } from "./components/AnalyticsStrip";
@@ -17,6 +17,7 @@ export default function App() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [briefOpen, setBriefOpen] = useState(false);
   const [brief, setBrief] = useState("");
+  const [searching, setSearching] = useState(false);
   const [theme, setTheme] = useState<string>(() => localStorage.getItem("atlas-theme") || "dark");
 
   useEffect(() => {
@@ -33,6 +34,23 @@ export default function App() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  // Trigger a deterministic discover→score run, then poll until it finishes and refresh.
+  const buscarAhora = useCallback(async () => {
+    if (searching) return;
+    setSearching(true);
+    try {
+      await api.discover();
+      for (let i = 0; i < 60; i++) {          // cap polling at ~2 min
+        await new Promise((r) => setTimeout(r, 2000));
+        const { running } = await api.discoverStatus();
+        if (!running) break;
+      }
+      await load();
+    } finally {
+      setSearching(false);
+    }
+  }, [searching, load]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -84,6 +102,11 @@ export default function App() {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <button className="btn !py-1.5" title="Buscar vacantes nuevas (discover + score)"
+                  onClick={buscarAhora} disabled={searching}>
+            {searching ? <Loader2 size={14} className="animate-spin" /> : <Search size={14} />}
+            {searching ? "Buscando…" : "Buscar"}
+          </button>
           <button className="btn !py-1.5" onClick={() => setPaletteOpen(true)}>
             <CmdIcon size={14} /> K
           </button>
@@ -111,7 +134,7 @@ export default function App() {
       <DetailDrawer jobId={selected} onClose={() => setSelected(null)} onChanged={load} />
       <CommandPalette
         open={paletteOpen} setOpen={setPaletteOpen} jobs={allJobs}
-        onOpenJob={setSelected} onRefresh={load} onBrief={openBrief}
+        onOpenJob={setSelected} onRefresh={load} onBrief={openBrief} onSearch={buscarAhora}
       />
 
       <Dialog.Root open={briefOpen} onOpenChange={setBriefOpen}>
