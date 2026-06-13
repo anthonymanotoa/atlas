@@ -19,6 +19,27 @@
           }
         ]
       }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ -f graphify-out/graph.json ] && touch graphify-out/.needs_update 2>/dev/null; true"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ -f graphify-out/.needs_update ] && [ -f graphify-out/graph.json ] && command -v graphify >/dev/null 2>&1 && { rm -f graphify-out/.needs_update; graphify update . >/dev/null 2>&1; }; true"
+          }
+        ]
+      }
     ]
   }
 }
