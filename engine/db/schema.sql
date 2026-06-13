@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS jobs (
     salary_currency TEXT,
     salary_interval TEXT,
     date_posted     TEXT,
+    language        TEXT,                      -- detected posting language (en|es|de|fr|pt)
     raw_json        TEXT,
     sources_json    TEXT,                      -- json array of every source it was seen on
 

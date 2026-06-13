@@ -7,9 +7,9 @@ import {
   useDroppable,
   type DragEndEvent,
 } from "@dnd-kit/core";
-import { MapPin, Users } from "lucide-react";
+import { Banknote, MapPin, Users } from "lucide-react";
 import type { Job } from "../api";
-import { COLUMN_ES, ageLabel, cn, fitTone } from "../lib";
+import { COLUMN_ES, ageLabel, cn, fitTone, freshLabel, langLabel, salaryLabel } from "../lib";
 
 function JobCard({
   job,
@@ -28,6 +28,8 @@ function JobCard({
     ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`, zIndex: 50 }
     : undefined;
   const remote = job.is_remote === 1 ? "Remoto" : job.is_remote === 0 ? "No remoto" : "Remoto?";
+  const sal = salaryLabel(job);
+  const posted = job.posted_days ?? job.age_days;
   return (
     <div
       ref={setNodeRef}
@@ -50,11 +52,19 @@ function JobCard({
         </span>
       </div>
       <div className="text-[0.8rem] text-[var(--color-muted)] mt-1 truncate">{job.company}</div>
-      <div className="flex items-center gap-2 mt-2 text-[0.7rem] text-[var(--color-faint)]">
+      <div className="flex items-center gap-x-2 gap-y-1 mt-2 text-[0.7rem] text-[var(--color-faint)] flex-wrap">
         <span className="inline-flex items-center gap-1">
           <MapPin size={11} /> {remote}
         </span>
-        {job.age_days != null && <span>· {ageLabel(job.age_days)}</span>}
+        {posted != null && <span title={freshLabel(posted)}>· {ageLabel(posted)}</span>}
+        {job.language && (
+          <span className="chip !px-1.5 !py-0 uppercase">{langLabel(job.language)}</span>
+        )}
+        {sal && (
+          <span className="inline-flex items-center gap-1" title="Salario publicado">
+            <Banknote size={11} /> {sal}
+          </span>
+        )}
         {job.knockout_flags && job.knockout_flags.length > 0 && (
           <span
             title="Filtros del puesto (clearance/ciudadanía)"

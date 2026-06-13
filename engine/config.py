@@ -38,6 +38,12 @@ class Criteria(BaseModel):
     deal_breakers: list[str] = Field(default_factory=list)
     knockout_terms: list[str] = Field(default_factory=list)
     shortlist_threshold: float = 60.0
+    # ── quality gates (P1-A): keep me from chasing roles I'd never get / stale posts ──
+    max_age_days: int = 0  # 0 = off; older postings are downranked (see freshness_hard)
+    freshness_hard: bool = False  # if True, a stale posting is disqualified, not just downranked
+    company_blocklist: list[str] = Field(default_factory=list)  # never surface these companies
+    exclude_exec: bool = True  # drop director/VP/head/chief roles (over-qualified for an IC track)
+    max_years_required: int = 0  # 0 = off; flag postings demanding more than N years
     prose: str = ""  # the Markdown body (for the LLM)
 
     @property

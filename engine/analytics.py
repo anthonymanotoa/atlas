@@ -28,12 +28,29 @@ def _days_since(iso: str | None) -> float | None:
     if not iso:
         return None
     try:
-        return round((datetime.now(UTC) - datetime.fromisoformat(iso)).total_seconds() / 86400, 1)
-    except (
-        ValueError,
-        TypeError,
-    ):  # TypeError = naive-vs-aware subtraction; degrade to None, don't crash
-        return None
+        dt = datetime.fromisoformat(iso)
+    except (ValueError, TypeError):
+        try:  # bare 'YYYY-MM-DD' (e.g. date_posted) — fromisoformat handles it on 3.11+, but be safe
+            dt = datetime.strptime(str(iso)[:10], "%Y-%m-%d")
+        except (ValueError, TypeError):
+            return None
+    if dt.tzinfo is None:  # naive (bare date) → assume UTC so the subtraction is aware-safe
+        dt = dt.replace(tzinfo=UTC)
+    return round((datetime.now(UTC) - dt).total_seconds() / 86400, 1)
+
+
+def annotate(job: dict) -> dict:
+    """Add UI-facing computed fields to a raw jobs row (mutates + returns it).
+
+    `posted_days` is from the posting's own date_posted (how long the vacancy has been
+    open); `age_days` is since we discovered it. `salary_visible` drives the
+    'solo con salario' filter + the salary chip.
+    """
+    job["age_days"] = _days_since(job.get("discovered_at"))
+    posted = _days_since(job.get("date_posted"))
+    job["posted_days"] = posted if posted is not None else job["age_days"]
+    job["salary_visible"] = bool(job.get("salary_min") or job.get("salary_max"))
+    return job
 
 
 def overview(db: DB) -> dict[str, Any]:
@@ -143,7 +160,7 @@ def job_detail(db: DB, job_id: str) -> dict | None:
     job["fit_reasons"] = json.loads(job.get("fit_reasons") or "[]")
     job["knockout_flags"] = json.loads(job.get("knockout_flags") or "[]")
     job["sources"] = json.loads(job.get("sources_json") or "[]")
-    job["age_days"] = _days_since(job.get("discovered_at"))
+    annotate(job)  # age_days, posted_days, salary_visible
     job["applied_days"] = _days_since(job.get("applied_at"))
     return {
         "job": job,

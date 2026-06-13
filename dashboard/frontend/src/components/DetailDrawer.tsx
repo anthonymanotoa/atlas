@@ -2,7 +2,7 @@ import * as Dialog from "@radix-ui/react-dialog";
 import { Check, Copy, Download, ExternalLink, FileText, Send, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { api, type JobDetail } from "../api";
-import { STATE_ES, copy, fitTone, pct } from "../lib";
+import { STATE_ES, copy, fitTone, freshLabel, langLabel, pct, salaryLabel } from "../lib";
 
 const KIND_ES: Record<string, string> = {
   cover_letter: "Carta de presentación",
@@ -124,7 +124,7 @@ export function DetailDrawer({
 
   async function prep() {
     if (!jobId) return;
-    await api.prep(jobId, "en");
+    await api.prep(jobId); // language auto-picked from the posting (es offer → ES, else EN)
     api.job(jobId).then(setD);
     onChanged();
   }
@@ -165,6 +165,17 @@ export function DetailDrawer({
                 </span>
                 <span className="chip">{STATE_ES[d.job.state] || d.job.state}</span>
                 {d.job.is_remote === 1 && <span className="chip">Remoto</span>}
+                {salaryLabel(d.job) && (
+                  <span className="chip" title="Salario publicado">
+                    💰 {salaryLabel(d.job)}
+                  </span>
+                )}
+                {d.job.language && (
+                  <span className="chip uppercase">{langLabel(d.job.language)}</span>
+                )}
+                {(d.job.posted_days ?? d.job.age_days) != null && (
+                  <span className="chip">{freshLabel(d.job.posted_days ?? d.job.age_days)}</span>
+                )}
                 {(d.job.apply_url || d.job.url) && (
                   <a
                     href={d.job.apply_url || d.job.url}

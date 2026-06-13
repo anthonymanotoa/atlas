@@ -5,6 +5,8 @@ GET https://api.lever.co/v0/postings/{site}?mode=json        (EU: api.eu.lever.c
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 import httpx
 
 from engine.config import CompanyTarget
@@ -16,6 +18,14 @@ from engine.util import canonical_salary_interval, first, to_float
 def _base(eu: bool) -> str:
     host = "api.eu.lever.co" if eu else "api.lever.co"
     return f"https://{host}/v0/postings"
+
+
+def _date_from_ms(ms: object) -> str | None:
+    """Lever exposes `createdAt` as epoch milliseconds → ISO date (YYYY-MM-DD)."""
+    try:
+        return datetime.fromtimestamp(int(ms) / 1000, UTC).date().isoformat()
+    except (TypeError, ValueError, OSError, OverflowError):
+        return None
 
 
 def fetch(target: CompanyTarget, client: httpx.Client) -> list[Job]:
@@ -48,7 +58,7 @@ def fetch(target: CompanyTarget, client: httpx.Client) -> list[Job]:
                 salary_max=to_float(sal.get("max")),
                 salary_currency=sal.get("currency"),
                 salary_interval=canonical_salary_interval(sal.get("interval")),
-                date_posted=None,
+                date_posted=_date_from_ms(p.get("createdAt")),
                 raw={"team": cats.get("team"), "country": p.get("country")},
             )
         )

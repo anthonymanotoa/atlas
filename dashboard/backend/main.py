@@ -110,9 +110,9 @@ class StateBody(BaseModel):
 
 
 class PrepBody(BaseModel):
-    language: Literal["en", "es"] = (
-        "en"  # constrained: never reaches the CV output path as a raw string
-    )
+    # constrained: never reaches the CV output path as a raw string.
+    # None → auto-pick from the posting's detected language (create it in the offer's language).
+    language: Literal["en", "es"] | None = None
 
 
 class ProfileBody(BaseModel):
@@ -126,8 +126,28 @@ def api_overview(db: DB = Depends(get_db)):
 
 
 @app.get("/api/jobs")
-def api_jobs(state: str | None = None, limit: int = 500, db: DB = Depends(get_db)):
-    return {"jobs": db.list_jobs(state=state, limit=limit), "states": STATES}
+def api_jobs(
+    state: str | None = None,
+    limit: int = 500,
+    min_freshness_days: int | None = None,
+    has_salary: bool = False,
+    language: str | None = None,
+    db: DB = Depends(get_db),
+):
+    """Job list with the P1-A quality filters (freshness / salary-disclosed / language)."""
+    jobs = [analytics.annotate(j) for j in db.list_jobs(state=state, limit=limit)]
+    if has_salary:
+        jobs = [j for j in jobs if j["salary_visible"]]
+    if language:
+        jobs = [j for j in jobs if (j.get("language") or "") == language]
+    if min_freshness_days is not None:
+        # keep fresh-enough postings; never hide jobs whose age is unknown
+        jobs = [
+            j
+            for j in jobs
+            if j.get("posted_days") is None or j["posted_days"] <= min_freshness_days
+        ]
+    return {"jobs": jobs, "states": STATES}
 
 
 @app.get("/api/board")
@@ -137,8 +157,20 @@ def api_board(db: DB = Depends(get_db)):
     rows = db.list_jobs(states=columns)  # one query; preserves fit_score/discovered_at ordering
     grouped: dict[str, list] = {c: [] for c in columns}
     for j in rows:
-        grouped[j["state"]].append(j)
+        grouped[j["state"]].append(analytics.annotate(j))
     return {"columns": columns, "jobs": grouped}
+
+
+@app.get("/api/filters")
+def api_filters(db: DB = Depends(get_db)):
+    """Filter options for the board/list UI (freshness presets + languages actually present)."""
+    langs = [
+        r["language"]
+        for r in db.conn.execute(
+            "SELECT DISTINCT language FROM jobs WHERE language IS NOT NULL ORDER BY language"
+        ).fetchall()
+    ]
+    return {"freshness_days": [14, 30, 60, 90], "languages": langs}
 
 
 @app.get("/api/jobs/{job_id}")
@@ -180,12 +212,15 @@ def api_prep(job_id: str, body: PrepBody, db: DB = Depends(get_db)):
     from engine.cv.build import build_for_job
     from engine.outreach.build import build_outreach, write_package
 
-    if not db.get_job(job_id):
+    job = db.get_job(job_id)
+    if not job:
         raise HTTPException(404, "job not found")
-    cv = build_for_job(db, job_id, language=body.language)
-    build_outreach(db, job_id, language=body.language)
-    write_package(db, job_id, language=body.language)
-    return {"ok": True, "coverage": cv.coverage, "parse_ok": cv.parse_ok}
+    # Create the application in the posting's language (es if the offer is in Spanish, else en).
+    language = body.language or ("es" if job.get("language") == "es" else "en")
+    cv = build_for_job(db, job_id, language=language)
+    build_outreach(db, job_id, language=language)
+    write_package(db, job_id, language=language)
+    return {"ok": True, "coverage": cv.coverage, "parse_ok": cv.parse_ok, "language": language}
 
 
 @app.post("/api/messages/{message_id}/sent", dependencies=[Depends(require_trusted_origin)])

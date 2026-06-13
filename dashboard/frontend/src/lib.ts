@@ -48,6 +48,47 @@ export function ageLabel(days?: number | null): string {
   return `${Math.round(days)}d`;
 }
 
+// "publicado hace X" from the vacancy's own posting date (requisito #4).
+export function freshLabel(days?: number | null): string {
+  if (days == null) return "";
+  if (days < 1) return "publicado hoy";
+  if (days < 30) return `publicado hace ${Math.round(days)}d`;
+  const m = Math.round(days / 30);
+  return `publicado hace ${m} ${m === 1 ? "mes" : "meses"}`;
+}
+
+const _CUR_SYM: Record<string, string> = { USD: "$", EUR: "€", GBP: "£" };
+
+// Compact salary range, e.g. "$120k–$160k/año". Null when no salary is disclosed.
+export function salaryLabel(job: {
+  salary_min?: number | null;
+  salary_max?: number | null;
+  salary_currency?: string | null;
+  salary_interval?: string | null;
+}): string | null {
+  const lo = job.salary_min ?? null;
+  const hi = job.salary_max ?? null;
+  if (lo == null && hi == null) return null;
+  const sym = job.salary_currency
+    ? (_CUR_SYM[job.salary_currency] ?? `${job.salary_currency} `)
+    : "";
+  const fmt = (n: number) => (n >= 1000 ? `${Math.round(n / 1000)}k` : `${Math.round(n)}`);
+  const range = lo != null && hi != null ? `${fmt(lo)}–${fmt(hi)}` : fmt((hi ?? lo) as number);
+  const per =
+    job.salary_interval === "yearly"
+      ? "/año"
+      : job.salary_interval === "monthly"
+        ? "/mes"
+        : job.salary_interval === "hourly"
+          ? "/h"
+          : "";
+  return `${sym}${range}${per}`;
+}
+
+export function langLabel(code?: string | null): string {
+  return code ? code.toUpperCase() : "";
+}
+
 export async function copy(text: string): Promise<void> {
   try {
     await navigator.clipboard.writeText(text);

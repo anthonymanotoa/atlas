@@ -56,7 +56,23 @@ class DB:
     # ── lifecycle ────────────────────────────────────────────────────────────
     def init_schema(self) -> None:
         self.conn.executescript(_SCHEMA.read_text())
+        self._migrate()
         self.conn.commit()
+
+    def _migrate(self) -> None:
+        """Idempotent additive migrations.
+
+        `CREATE TABLE IF NOT EXISTS` never adds a column to a table that already
+        exists, so a new column on an established `jobs` row needs a guarded
+        `ALTER TABLE ... ADD COLUMN`. SQLite has no `ADD COLUMN IF NOT EXISTS`, so
+        we check `PRAGMA table_info` first — safe to run on every startup.
+        """
+        self._ensure_column("jobs", "language", "TEXT")
+
+    def _ensure_column(self, table: str, column: str, decl: str) -> None:
+        existing = {r["name"] for r in self.conn.execute(f"PRAGMA table_info({table})")}
+        if column not in existing:
+            self.conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {decl}")
 
     def close(self) -> None:
         self.conn.close()
@@ -83,8 +99,8 @@ class DB:
                    (id, source, source_job_id, title, company, location, is_remote,
                     workplace_type, url, apply_url, description, employment_type,
                     salary_min, salary_max, salary_currency, salary_interval,
-                    date_posted, raw_json, sources_json, state, discovered_at)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'discovered', ?)""",
+                    date_posted, language, raw_json, sources_json, state, discovered_at)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'discovered', ?)""",
                 (
                     job.id,
                     job.source,
@@ -103,6 +119,7 @@ class DB:
                     job.salary_currency,
                     job.salary_interval,
                     job.date_posted,
+                    job.language,
                     json.dumps(job.raw),
                     json.dumps([job.source]),
                     now,
@@ -126,6 +143,7 @@ class DB:
                  salary_interval = COALESCE(salary_interval, ?),
                  employment_type = COALESCE(employment_type, ?),
                  date_posted     = COALESCE(date_posted, ?),
+                 language        = COALESCE(language, ?),
                  is_remote       = COALESCE(is_remote, ?),
                  sources_json    = ?
                WHERE id=?""",
@@ -139,6 +157,7 @@ class DB:
                 job.salary_interval,
                 job.employment_type,
                 job.date_posted,
+                job.language,
                 _b(job.is_remote),
                 json.dumps(sorted(sources)),
                 job.id,
