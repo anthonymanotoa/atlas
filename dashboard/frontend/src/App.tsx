@@ -1,12 +1,32 @@
 import * as Dialog from "@radix-ui/react-dialog";
-import { Command as CmdIcon, Loader2, Moon, RefreshCw, Search, Sun, X } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
-import { api, type Action, type Job, type Overview, type Profile } from "./api";
+import {
+  Command as CmdIcon,
+  Loader2,
+  Moon,
+  RefreshCw,
+  Search,
+  Settings as SettingsIcon,
+  Sun,
+  X,
+} from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  api,
+  type Action,
+  type Job,
+  type OnboardingStatus,
+  type Overview,
+  type Profile,
+} from "./api";
 import { AnalyticsStrip } from "./components/AnalyticsStrip";
 import { Board } from "./components/Board";
 import { CommandPalette } from "./components/CommandPalette";
 import { DetailDrawer } from "./components/DetailDrawer";
+import { FilterBar, type Filters } from "./components/FilterBar";
 import { NeedsAction } from "./components/NeedsAction";
+import { OnboardingGate } from "./components/OnboardingGate";
+import { PortfolioViewer } from "./components/PortfolioViewer";
+import { SettingsModal } from "./components/SettingsModal";
 
 export default function App() {
   const [ov, setOv] = useState<Overview | null>(null);
@@ -16,10 +36,18 @@ export default function App() {
   const [selected, setSelected] = useState<string | null>(null);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [activeProfile, setActiveProfile] = useState<string>("");
+  const [onboarding, setOnboarding] = useState<OnboardingStatus | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [briefOpen, setBriefOpen] = useState(false);
   const [brief, setBrief] = useState("");
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [view, setView] = useState<"pipeline" | "portfolio">("pipeline");
   const [searching, setSearching] = useState(false);
+  const [filters, setFilters] = useState<Filters>({
+    onlySalary: false,
+    language: "",
+    maxAgeDays: 0,
+  });
   const [theme, setTheme] = useState<string>(() => localStorage.getItem("atlas-theme") || "dark");
 
   useEffect(() => {
@@ -28,13 +56,20 @@ export default function App() {
   }, [theme]);
 
   const load = useCallback(async () => {
-    const [o, b, p] = await Promise.all([api.overview(), api.board(), api.profiles()]);
+    const [p, ob] = await Promise.all([api.profiles(), api.onboarding()]);
+    setProfiles(p.profiles);
+    setActiveProfile(p.active);
+    setOnboarding(ob);
+    if (!ob.complete) return; // onboarding gate: don't load the board until CV+LinkedIn are done
+    const [o, b] = await Promise.all([api.overview(), api.board()]);
     setOv(o.overview);
     setActions(o.needs_action);
     setColumns(b.columns);
     setJobs(b.jobs);
-    setProfiles(p.profiles);
-    setActiveProfile(p.active);
+  }, []);
+
+  const refreshOnboarding = useCallback(async () => {
+    setOnboarding(await api.onboarding());
   }, []);
 
   async function switchProfile(id: string) {
@@ -106,6 +141,23 @@ export default function App() {
   }
 
   const allJobs = Object.values(jobs).flat();
+  const languages = Array.from(
+    new Set(allJobs.map((j) => j.language).filter((l): l is string => !!l)),
+  ).sort();
+  const filteredJobs = useMemo(() => {
+    const out: Record<string, Job[]> = {};
+    for (const c of Object.keys(jobs)) {
+      out[c] = jobs[c].filter((j) => {
+        const age = j.posted_days ?? j.age_days;
+        return (
+          (!filters.onlySalary || j.salary_visible) &&
+          (!filters.language || j.language === filters.language) &&
+          (!filters.maxAgeDays || age == null || age <= filters.maxAgeDays)
+        );
+      });
+    }
+    return out;
+  }, [jobs, filters]);
 
   return (
     <div className="min-h-full px-5 py-4 max-w-[1500px] mx-auto">
@@ -160,6 +212,13 @@ export default function App() {
           </button>
           <button
             className="btn !py-1.5"
+            title="Ajustes y exportar CSV"
+            onClick={() => setSettingsOpen(true)}
+          >
+            <SettingsIcon size={14} />
+          </button>
+          <button
+            className="btn !py-1.5"
             title="Tema claro / oscuro"
             onClick={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}
           >
@@ -171,26 +230,55 @@ export default function App() {
         </div>
       </header>
 
-      {ov?.downtime_hours ? (
-        <div className="card p-3 mb-4 text-sm" style={{ borderColor: "var(--color-pending)" }}>
-          ⚠️ Estuve sin correr ~{Math.round(ov.downtime_hours)}h. Revisa que el Mac esté despierto y
-          Claude Desktop abierto.
-        </div>
-      ) : null}
+      {onboarding && !onboarding.complete ? (
+        <OnboardingGate status={onboarding} onComplete={load} onRefresh={refreshOnboarding} />
+      ) : (
+        <>
+          <nav className="mb-4 flex gap-2">
+            {(["pipeline", "portfolio"] as const).map((v) => (
+              <button
+                key={v}
+                className="btn !py-1.5"
+                style={view === v ? { borderColor: "var(--color-accent)" } : undefined}
+                onClick={() => setView(v)}
+              >
+                {v === "pipeline" ? "Pipeline" : "Portafolio"}
+              </button>
+            ))}
+          </nav>
 
-      {ov && (
-        <div className="mb-5">
-          <AnalyticsStrip ov={ov} />
-        </div>
+          {view === "portfolio" ? (
+            <PortfolioViewer />
+          ) : (
+            <>
+              {ov?.downtime_hours ? (
+                <div
+                  className="card p-3 mb-4 text-sm"
+                  style={{ borderColor: "var(--color-pending)" }}
+                >
+                  ⚠️ Estuve sin correr ~{Math.round(ov.downtime_hours)}h. Revisa que el Mac esté
+                  despierto y Claude Desktop abierto.
+                </div>
+              ) : null}
+
+              {ov && (
+                <div className="mb-5">
+                  <AnalyticsStrip ov={ov} />
+                </div>
+              )}
+
+              <div className="mb-6">
+                <NeedsAction actions={actions} onOpen={setSelected} />
+              </div>
+
+              <FilterBar filters={filters} setFilters={setFilters} languages={languages} />
+              <Board columns={columns} jobs={filteredJobs} onOpen={setSelected} onMove={move} />
+            </>
+          )}
+        </>
       )}
 
-      <div className="mb-6">
-        <NeedsAction actions={actions} onOpen={setSelected} />
-      </div>
-
-      <h2 className="text-sm font-semibold tracking-wide mb-2">Pipeline</h2>
-      <Board columns={columns} jobs={jobs} onOpen={setSelected} onMove={move} />
-
+      <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
       <DetailDrawer jobId={selected} onClose={() => setSelected(null)} onChanged={load} />
       <CommandPalette
         open={paletteOpen}

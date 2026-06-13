@@ -47,12 +47,18 @@ describe("api client", () => {
     expect(opts.body).toBeUndefined();
   });
 
-  it("prep() defaults language to en", async () => {
+  it("prep() omits language by default so the backend picks the posting's language", async () => {
     fetchMock.mockResolvedValue(okJson({ ok: true }));
     await api.prep("abc");
     const [url, opts] = fetchMock.mock.calls[0];
     expect(url).toBe("/api/jobs/abc/prep");
-    expect(opts.body).toBe(JSON.stringify({ language: "en" }));
+    expect(opts.body).toBe(JSON.stringify({}));
+  });
+
+  it("prep(lang) sends the explicit language when given", async () => {
+    fetchMock.mockResolvedValue(okJson({ ok: true }));
+    await api.prep("abc", "es");
+    expect(fetchMock.mock.calls[0][1].body).toBe(JSON.stringify({ language: "es" }));
   });
 
   it("discover() POSTs /api/discover", async () => {

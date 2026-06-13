@@ -23,6 +23,7 @@ from engine.config import load_criteria, load_master_cv
 from engine.cv.build import build_for_job
 from engine.db.models import DB
 from engine.discovery.runner import discover
+from engine.learning.runner import auto_learn_all
 from engine.normalize import now_iso
 from engine.outreach.build import build_outreach, write_package
 from engine.outreach.followups import followup_text
@@ -90,6 +91,10 @@ def run(db: DB, *, limit: int = 8, language: str = "en", do_discover: bool = Tru
         db.mark_followup(f["id"], "done")
         summary["followups"] += 1
 
+    # Refresh per-company learnings from any HUMAN-confirmed outcomes (P2-D). The brain
+    # never fabricates outcomes — it only rolls up what the user recorded via form/CLI.
+    summary["learnings"] = auto_learn_all(db)
+
     summary["downtime_hours"] = heartbeat.downtime_hours(db)
     heartbeat.beat(db)
     db.log_event(
@@ -127,6 +132,16 @@ def write_morning_brief(db: DB, summary: dict, language: str = "en") -> None:
             f"- **{j['title']}** @ {j['company']} (fit {j.get('fit_score')}){ref}\n"
             f"  - Postular: {link}\n  - Paquete: data/outbox/{j['id']}/package.md"
         )
+    top_learnings = [
+        learning_row for learning_row in db.all_learnings() if learning_row["confidence"] >= 0.6
+    ][:8]
+    if top_learnings:
+        lines += ["", "## 🧠 Lo aprendido (empresas)"]
+        lines += [
+            f"- **{learning_row['company']}**: {learning_row['observation']} "
+            f"(confianza {learning_row['confidence']:.0%})"
+            for learning_row in top_learnings
+        ]
     if summary.get("prepare_errors"):
         lines += ["", "## ⚠️ Errores al preparar"]
         lines += [f"- {e['id']}: {e['error']}" for e in summary["prepare_errors"]]

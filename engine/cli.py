@@ -361,6 +361,65 @@ def status() -> None:
         console.print(table)
 
 
+@app.command(name="export")
+def export_csv(
+    state: str | None = typer.Option(None, help="Limit to a pipeline state (e.g. shortlisted)."),
+    columns: str | None = typer.Option(None, help="Comma list of column ids (else saved/default)."),
+    to: str | None = typer.Option(
+        None, "--to", help="Output dir (else your download_dir setting, else the outbox)."
+    ),
+) -> None:
+    """Export jobs to CSV using your editable template, into your chosen folder."""
+    from datetime import UTC, datetime
+    from pathlib import Path
+
+    from engine import export as exp
+
+    requested = [c.strip() for c in columns.split(",") if c.strip()] if columns else None
+    with _db() as db:
+        cols = exp.resolve_columns(requested, db.meta_get("csv_columns"))
+        jobs = db.list_jobs(state=state, limit=5000)
+        dest_raw = to or db.meta_get("download_dir") or str(paths.OUTBOX_DIR)
+        text = exp.generate_csv(jobs, cols)
+    dest = Path(exp.validate_download_dir(dest_raw))
+    out = dest / f"atlas_jobs_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}.csv"
+    out.write_text(text, encoding="utf-8")
+    console.print(f"[green]✓[/] Exporté {len(jobs)} filas → {out}")
+
+
+@app.command()
+def outcome(
+    job_id: str = typer.Argument(..., help="Job id the outcome is for."),
+    state: str = typer.Option(..., help="rejected | responded | interviewed | offer | ghosted"),
+    response_days: int | None = typer.Option(None, help="Days until they responded."),
+    interviews: int = typer.Option(0, help="How many interview rounds happened."),
+    recruiter_source: str | None = typer.Option(
+        None, help="referral | recruiter | cold | inbound | unknown"
+    ),
+    reason: str | None = typer.Option(None, help="Short reason / feedback."),
+) -> None:
+    """Record a CONFIRMED application outcome and refresh this company's learnings (P2-D)."""
+    from engine.learning.runner import auto_learn
+
+    with _db() as db:
+        job = db.get_job(job_id)
+        if not job:
+            console.print(f"[red]✗[/] job desconocido: {job_id}")
+            raise typer.Exit(2)
+        db.record_outcome(
+            job_id,
+            job.get("company", ""),
+            final_state=state,
+            response_days=response_days,
+            interview_count=interviews,
+            offer_made=(state == "offer"),
+            recruiter_source=recruiter_source,
+            reason=reason,
+        )
+        n = auto_learn(db, job.get("company", ""))
+    console.print(f"[green]✓[/] Outcome registrado para {job.get('company')}. Learnings: {n}.")
+
+
 @app.command(name="resolve-ats")
 def resolve_ats(url: str) -> None:
     """Detect which ATS a company careers URL uses (for companies.yaml)."""
@@ -423,6 +482,114 @@ def profiles_list() -> None:
         mark = "[green]●[/]" if p["id"] == active else " "
         owner = " [dim](dueño)[/]" if p.get("is_owner") else ""
         console.print(f"  {mark} [bold]{p['id']}[/]{owner} — {p.get('label', '')}")
+
+
+# ── interviews (P3-E) — manual entry + prep-doc generation ─────────────────────
+interview_app = typer.Typer(help="Manage interviews + generate prep docs (manual entry).")
+app.add_typer(interview_app, name="interview")
+
+
+@interview_app.command("add")
+def interview_add(
+    job_id: str,
+    scheduled_at: str = typer.Argument(None, help="When (YYYY-MM-DD or ISO)."),
+    round: str = typer.Option(
+        None, "--round", help="phone|technical|system_design|hiring_manager|final"
+    ),
+    mode: str = typer.Option(None, help="video|onsite|phone"),
+) -> None:
+    """Add an interview for a job (manual)."""
+    with _db() as db:
+        if not db.get_job(job_id):
+            console.print(f"[red]✗[/] job desconocido: {job_id}")
+            raise typer.Exit(2)
+        iid = db.add_interview(job_id, scheduled_at=scheduled_at, round=round, mode=mode)
+    console.print(
+        f"[green]✓[/] entrevista {iid} para {job_id}. Agrega entrevistadores en el dashboard."
+    )
+
+
+@interview_app.command("list")
+def interview_list() -> None:
+    """List scheduled interviews."""
+    with _db() as db:
+        rows = db.list_interviews()
+        jobs = {j["id"]: j for j in db.list_jobs()}
+    if not rows:
+        console.print("Sin entrevistas. Agrega una con `atlas interview add <job_id>`.")
+        return
+    table = Table(title="Interviews")
+    for col in ("id", "when", "round", "company", "prep"):
+        table.add_column(col)
+    for r in rows:
+        job = jobs.get(r["job_id"], {})
+        table.add_row(
+            str(r["id"]),
+            (r.get("scheduled_at") or "—")[:16],
+            r.get("round") or "—",
+            (job.get("company") or "—")[:24],
+            "✓" if r.get("prep_path") else "—",
+        )
+    console.print(table)
+
+
+@interview_app.command("prep")
+def interview_prep(interview_id: int, language: str = typer.Option("en", help="en | es")) -> None:
+    """Generate the prep doc (likely questions + STAR scaffolds) for an interview."""
+    from engine.interview.interview_prep import gen_prep_doc
+
+    with _db() as db:
+        path = gen_prep_doc(db, interview_id, language=language)
+    console.print(f"[green]✓[/] Prep generado → {path}")
+
+
+# ── portfolio (P3-F) — local generation + peer references ──────────────────────
+portfolio_app = typer.Typer(help="Generate a local portfolio site + manage peer references.")
+app.add_typer(portfolio_app, name="portfolio")
+
+
+@portfolio_app.command("generate")
+def portfolio_generate(
+    github: bool = typer.Option(False, "--github", help="Include public GitHub repos."),
+) -> None:
+    """Render your master_cv.yaml into a standalone local portfolio (never published)."""
+    from datetime import UTC, datetime
+
+    from engine.config import load_master_cv
+    from engine.portfolio.builder import generate_portfolio
+
+    version = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
+    with _db() as db:
+        path = generate_portfolio(load_master_cv(), version=version, include_github=github)
+        db.add_portfolio(version=version, path_html=str(path))
+    console.print(f"[green]✓[/] Portafolio → {path}")
+    console.print("[dim]Local y privado. Ábrelo con `atlas portfolio open`.[/]")
+
+
+@portfolio_app.command("list")
+def portfolio_list() -> None:
+    """List generated portfolio versions."""
+    with _db() as db:
+        rows = db.list_portfolios()
+    if not rows:
+        console.print("Sin portafolios. Corre `atlas portfolio generate`.")
+        return
+    for r in rows:
+        console.print(f"  [bold]{r['version']}[/] → {r['path_html']}")
+
+
+@portfolio_app.command("open")
+def portfolio_open() -> None:
+    """Open the latest portfolio in your browser (local file)."""
+    import subprocess
+
+    with _db() as db:
+        p = db.latest_portfolio()
+    if not p:
+        console.print("Sin portafolios. Corre `atlas portfolio generate`.")
+        raise typer.Exit(1)
+    subprocess.run(["open", p["path_html"]], check=False)  # noqa: S607 — local macOS open
+    console.print(f"Abriendo {p['path_html']}")
 
 
 if __name__ == "__main__":
