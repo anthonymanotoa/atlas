@@ -41,4 +41,4 @@ adzuna:
 # Global pacing / safety knobs.
 limits:
   per_source_timeout_s: 45
-  max_jobs_per_run: 400
+  max_jobs_per_run: 1500
