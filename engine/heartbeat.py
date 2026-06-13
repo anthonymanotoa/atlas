@@ -4,10 +4,10 @@ Every successful brain run stamps `last_success_ts`. If the gap since the last s
 exceeds the threshold, the dashboard shows an 'I was down' banner so a silently-skipped
 schedule (sleeping Mac / closed app) never goes unnoticed.
 """
+
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import UTC, datetime
 
 from engine.db.models import DB
 from engine.normalize import now_iso
@@ -19,7 +19,7 @@ def beat(db: DB) -> None:
     db.meta_set("last_success_ts", now_iso())
 
 
-def last_success(db: DB) -> Optional[datetime]:
+def last_success(db: DB) -> datetime | None:
     raw = db.meta_get("last_success_ts")
     if not raw:
         return None
@@ -28,13 +28,13 @@ def last_success(db: DB) -> Optional[datetime]:
     except (ValueError, TypeError):
         return None
     # Assume UTC for any naive value so the downtime subtraction below never raises TypeError.
-    return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+    return dt if dt.tzinfo else dt.replace(tzinfo=UTC)
 
 
-def downtime_hours(db: DB) -> Optional[float]:
+def downtime_hours(db: DB) -> float | None:
     """Hours since last success if it exceeds STALE_HOURS, else None."""
     ls = last_success(db)
     if not ls:
         return None
-    gap = (datetime.now(timezone.utc) - ls).total_seconds() / 3600
+    gap = (datetime.now(UTC) - ls).total_seconds() / 3600
     return round(gap, 1) if gap > STALE_HOURS else None

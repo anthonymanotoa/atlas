@@ -1,10 +1,16 @@
 import { Command } from "cmdk";
-import { FileText, RefreshCw, Search } from "lucide-react";
+import { FileText, RefreshCw, Search, Sparkles } from "lucide-react";
 import type { Job } from "../api";
 import { STATE_ES } from "../lib";
 
 export function CommandPalette({
-  open, setOpen, jobs, onOpenJob, onRefresh, onBrief,
+  open,
+  setOpen,
+  jobs,
+  onOpenJob,
+  onRefresh,
+  onBrief,
+  onSearch,
 }: {
   open: boolean;
   setOpen: (o: boolean) => void;
@@ -12,6 +18,7 @@ export function CommandPalette({
   onOpenJob: (id: string) => void;
   onRefresh: () => void;
   onBrief: () => void;
+  onSearch: () => void;
 }) {
   return (
     <Command.Dialog
@@ -35,15 +42,46 @@ export function CommandPalette({
           <Command.Empty className="px-3 py-6 text-center text-sm text-[var(--color-muted)]">
             Sin resultados.
           </Command.Empty>
-          <Command.Group heading="Acciones" className="text-[0.7rem] text-[var(--color-faint)] px-2">
-            <Item onSelect={() => { onRefresh(); setOpen(false); }} icon={<RefreshCw size={14} />} text="Actualizar tablero" />
-            <Item onSelect={() => { onBrief(); setOpen(false); }} icon={<FileText size={14} />} text="Abrir resumen del día" />
+          <Command.Group
+            heading="Acciones"
+            className="text-[0.7rem] text-[var(--color-faint)] px-2"
+          >
+            <Item
+              onSelect={() => {
+                onSearch();
+                setOpen(false);
+              }}
+              icon={<Sparkles size={14} />}
+              text="Buscar vacantes nuevas"
+            />
+            <Item
+              onSelect={() => {
+                onRefresh();
+                setOpen(false);
+              }}
+              icon={<RefreshCw size={14} />}
+              text="Actualizar tablero"
+            />
+            <Item
+              onSelect={() => {
+                onBrief();
+                setOpen(false);
+              }}
+              icon={<FileText size={14} />}
+              text="Abrir resumen del día"
+            />
           </Command.Group>
-          <Command.Group heading="Vacantes" className="text-[0.7rem] text-[var(--color-faint)] px-2 mt-1">
+          <Command.Group
+            heading="Vacantes"
+            className="text-[0.7rem] text-[var(--color-faint)] px-2 mt-1"
+          >
             {jobs.map((j) => (
               <Item
                 key={j.id}
-                onSelect={() => { onOpenJob(j.id); setOpen(false); }}
+                onSelect={() => {
+                  onOpenJob(j.id);
+                  setOpen(false);
+                }}
                 text={`${j.title} — ${j.company}`}
                 hint={`${j.fit_score ?? "—"} · ${STATE_ES[j.state] || j.state}`}
               />
@@ -55,7 +93,17 @@ export function CommandPalette({
   );
 }
 
-function Item({ onSelect, text, icon, hint }: { onSelect: () => void; text: string; icon?: React.ReactNode; hint?: string }) {
+function Item({
+  onSelect,
+  text,
+  icon,
+  hint,
+}: {
+  onSelect: () => void;
+  text: string;
+  icon?: React.ReactNode;
+  hint?: string;
+}) {
   return (
     <Command.Item
       onSelect={onSelect}
