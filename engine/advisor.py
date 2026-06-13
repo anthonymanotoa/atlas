@@ -42,6 +42,11 @@ def audit_cv(master: dict) -> list[Finding]:
         f.append(Finding("high", "completitud",
                          f"Hay placeholders sin rellenar: {', '.join(placeholders[:6])}",
                          "Completa con tus datos reales antes de usar el CV."))
+    confirma = blob.count("[confirma")
+    if confirma:
+        f.append(Finding("high", "completitud",
+                         f"Hay {confirma} campos marcados [confirma: …] por llenar.",
+                         "Rellena fechas, educación, rol anterior y métricas reales."))
 
     # 2. Contact.
     if not basics.get("email"):
