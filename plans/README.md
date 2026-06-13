@@ -29,7 +29,7 @@ dependency says otherwise; honor each plan's STOP conditions; update your row wh
 | 012 | PDF/DOCX render parity (PDF silently drops project descriptions) | P2 | S | — | DONE |
 | 009 | Remove dead empty `dashboard/backend/api` package | P3 | S | — | DONE |
 | 017 | Add root `AGENTS.md` + one-command `scripts/check.sh` | P2 | S | 007 | DONE |
-| 013 | Engine characterization tests (parsers, analytics, caps) | P2 | M | 003,006 | PARTIAL — lever+analytics+followups+download covered inline; broad parser-fixture + FastAPI TestClient suite remains TODO |
+| 013 | Engine characterization tests (parsers, analytics, caps) | P2 | M | 003,006 | DONE — fixture parser tests (greenhouse/lever/smartrecruiters), outreach cap tests, FastAPI TestClient suite via shared `conftest.atlas_app` |
 | 020 | Server-side Origin/Referer checks on POST routes | P3 | S | — | TODO — risk to served-from-FastAPI mode; needs config-driven allowlist |
 | 014 | Reuse one SQLite connection across requests | P2 | M | — | TODO — threading design (check_same_thread / pool) |
 | 015 | Add ruff + eslint/prettier + .editorconfig + pre-commit | P3 | M | 007 | TODO — first run reformats ~3k lines; land as a mechanical-only commit |
