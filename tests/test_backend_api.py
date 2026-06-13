@@ -106,3 +106,31 @@ def test_mutating_post_allows_allowlisted_origin(atlas_app):
         resp = client.post(f"/api/jobs/{jid}/applied",
                            headers={"origin": "http://localhost:8787"})
     assert resp.status_code != 403
+
+
+# ── Plan 019: dashboard-triggered discover→score (deterministic, keyless) ──────
+def test_discover_endpoint_runs_deterministic_pipeline(atlas_app, monkeypatch):
+    import engine.discovery.runner as runner_mod
+    import engine.scoring.run as score_mod
+    calls = {"discover": 0, "score": 0}
+
+    def fake_discover(db, **kw):
+        calls["discover"] += 1
+        return {"sources": {}, "new": 0, "seen": 0, "fetched": 0, "errors": []}
+
+    def fake_score(db, criteria, **kw):
+        calls["score"] += 1
+        return (0, 0)
+
+    # Stub the engine fns so the test makes NO network calls (the real run hits HTTP).
+    monkeypatch.setattr(runner_mod, "discover", fake_discover)
+    monkeypatch.setattr(score_mod, "score_jobs", fake_score)
+
+    with TestClient(atlas_app) as client:
+        resp = client.post("/api/discover")
+        assert resp.status_code == 200
+        assert resp.json().get("started") is True
+        # The BackgroundTask runs within the request cycle under TestClient.
+        assert calls["discover"] == 1 and calls["score"] == 1
+        assert client.get("/api/discover/status").json() == {"running": False}
+

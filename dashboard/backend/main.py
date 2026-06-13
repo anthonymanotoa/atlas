@@ -13,7 +13,7 @@ from threading import Lock
 from typing import Literal
 from urllib.parse import urlsplit
 
-from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -179,6 +179,51 @@ def api_mark_sent(message_id: int, db: DB = Depends(get_db)):
                     (now_iso(), message_id))
     db.conn.commit()
     return {"ok": True}
+
+
+# ── On-demand discover + score (plan 019) ─────────────────────────────────────
+# Lets the cockpit pull fresh jobs between scheduled brain runs. Progress model:
+# fire-and-forget + poll (the SPA polls /api/discover/status). The run is
+# deterministic and keyless (engine.discovery.runner + engine.scoring.run — no LLM,
+# no SDK, no API key), so this stays within the $0 invariant. The background task
+# opens its OWN short-lived `with DB()` connection (NOT the shared one from
+# get_db): a ~45s/source run must not hold the API lock and block the SPA's polls.
+# WAL handles the background writer + the shared reader concurrently.
+_DISCOVER_LOCK = Lock()
+_discovering = False
+
+
+def _run_discover_and_score(only: set[str] | None) -> None:
+    global _discovering
+    try:
+        from engine.config import load_criteria
+        from engine.discovery.runner import discover as run_discover
+        from engine.scoring.run import score_jobs
+        with DB() as db:                       # own connection — see note above
+            run_discover(db, only=only)
+            score_jobs(db, load_criteria())
+    finally:
+        with _DISCOVER_LOCK:
+            _discovering = False
+
+
+@app.post("/api/discover", dependencies=[Depends(require_trusted_origin)])
+def api_discover(background: BackgroundTasks, only: str | None = None):
+    """Kick off a deterministic discover→score run in the background (202-style)."""
+    global _discovering
+    with _DISCOVER_LOCK:
+        if _discovering:
+            return {"started": False, "running": True}   # one run at a time
+        _discovering = True
+    only_set = {s.strip() for s in only.split(",")} if only else None
+    background.add_task(_run_discover_and_score, only_set)
+    return {"started": True}
+
+
+@app.get("/api/discover/status")
+def api_discover_status():
+    with _DISCOVER_LOCK:
+        return {"running": _discovering}
 
 
 @app.get("/api/brief")

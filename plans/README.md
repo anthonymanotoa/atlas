@@ -35,7 +35,7 @@ dependency says otherwise; honor each plan's STOP conditions; update your row wh
 | 015 | Add ruff + eslint/prettier + .editorconfig + pre-commit | P3 | M | 007 | TODO — first run reformats ~3k lines; land as a mechanical-only commit |
 | 016 | Frontend test harness (vitest + testing-library) | P3 | M | — | TODO |
 | 018 | [DIRECTION] Workday/Taleo/iCIMS direct-feed source (spike) | P3 | M | — | TODO — design spike; `CompanyTarget.instance` hook already reserved |
-| 019 | [DIRECTION] Dashboard-triggered discover/score (spike) | P3 | M | 014 | TODO — design spike; keep deterministic/$0 |
+| 019 | [DIRECTION] Dashboard-triggered discover/score (spike) | P3 | M | 014 | DONE — `POST /api/discover` (BackgroundTasks, own conn) + `/api/discover/status` poll; "Buscar" button + palette item; deterministic/$0; origin-guarded |
 
 Status values: TODO | IN PROGRESS | DONE | PARTIAL | BLOCKED | REJECTED.
 
