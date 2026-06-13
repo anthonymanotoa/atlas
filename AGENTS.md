@@ -52,3 +52,20 @@ npm --prefix dashboard/frontend run build       # production build
   natural keys (`normalize.compute_job_id`).
 - Tests live in `tests/test_engine.py` (network-free) — model new tests after the existing ones.
 - Languages for CVs/outreach are constrained to `{en, es}`.
+
+## Knowledge graph (graphify)
+
+This repo has a graphify knowledge graph (god nodes, community structure, cross-file edges).
+The `graphify-out/` artifact is **gitignored** — rebuild it locally with `/graphify .`.
+
+- **Codebase questions:** when `graphify-out/graph.json` exists, run `graphify query "<question>"`
+  first — it returns a scoped subgraph, usually much smaller than grep or `GRAPH_REPORT.md`. Use
+  `graphify path "<A>" "<B>"` for relationships and `graphify explain "<concept>"` for one node.
+  The `.claude/settings.json` `PreToolUse` hooks nudge this automatically before grep/read.
+- **After changing code:** the graph auto-refreshes at the end of each Claude turn that edited a
+  file — a `Stop` hook in `.claude/settings.json` runs `graphify update .` (AST-only, **no LLM, no
+  API cost**, ~1s), so it stays within the $0 hard rule. To refresh by hand: `graphify update .`
+  (code only). **Doc/markdown changes are NOT picked up by the auto-update** — run a full
+  `/graphify .` occasionally for those (uses the Claude session as backend, never an
+  `ANTHROPIC_API_KEY`).
+- Read `graphify-out/GRAPH_REPORT.md` only for broad architecture review.
