@@ -200,7 +200,9 @@ def api_jobs(
     db: DB = Depends(get_db),
 ):
     """Job list with the P1-A quality filters (freshness / salary-disclosed / language)."""
-    jobs = [analytics.annotate(j) for j in db.list_jobs(state=state, limit=limit)]
+    # Filter BEFORE applying the limit, so a salary/language/freshness filter can't
+    # silently under-report by capping rows first.
+    jobs = [analytics.annotate(j) for j in db.list_jobs(state=state)]
     if has_salary:
         jobs = [j for j in jobs if j["salary_visible"]]
     if language:
@@ -212,7 +214,7 @@ def api_jobs(
             for j in jobs
             if j.get("posted_days") is None or j["posted_days"] <= min_freshness_days
         ]
-    return {"jobs": jobs, "states": STATES}
+    return {"jobs": jobs[:limit], "states": STATES}
 
 
 @app.get("/api/board")
@@ -464,6 +466,9 @@ def api_learnings(company: str | None = None, db: DB = Depends(get_db)):
 
 @app.post("/api/learnings/{learning_id}/feedback", dependencies=[Depends(require_trusted_origin)])
 def api_learning_feedback(learning_id: int, body: FeedbackBody, db: DB = Depends(get_db)):
+    # Guard the FK: a stale/unknown id would otherwise raise an IntegrityError → 500.
+    if not db.conn.execute("SELECT 1 FROM learnings WHERE id=?", (learning_id,)).fetchone():
+        raise HTTPException(404, "learning not found")
     db.record_learning_feedback(
         learning_id, feedback_type=body.feedback_type, reasoning=body.reasoning
     )
@@ -477,7 +482,10 @@ def api_portfolio_latest(db: DB = Depends(get_db)):
 
 
 @app.post("/api/portfolio/generate", dependencies=[Depends(require_trusted_origin)])
-def api_portfolio_generate(body: PortfolioBody, db: DB = Depends(get_db)):
+def api_portfolio_generate(body: PortfolioBody):
+    """Generate the portfolio. NOT under get_db: with --github this makes a ~15s network
+    call, and holding the global _DB_LOCK that long would freeze every other request. We
+    build first (no lock), then persist via a short-lived own connection (WAL-safe)."""
     from datetime import UTC, datetime
 
     from engine.config import load_master_cv
@@ -485,7 +493,8 @@ def api_portfolio_generate(body: PortfolioBody, db: DB = Depends(get_db)):
 
     version = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
     path = generate_portfolio(load_master_cv(), version=version, include_github=body.include_github)
-    pid = db.add_portfolio(version=version, path_html=str(path))
+    with DB() as db:  # own connection — does not hold the shared API lock
+        pid = db.add_portfolio(version=version, path_html=str(path))
     return {"ok": True, "id": pid, "version": version, "path": str(path)}
 
 

@@ -211,12 +211,13 @@ def score_job(job: dict, criteria: Criteria, learnings: list[dict] | None = None
             continue
         pt, obs = learning.get("pattern_type"), learning.get("observation", "")
         if pt == "offer_rate":
+            # the one positive scoring nudge: this company has made offers to people like me.
             score += 4
             reasons.append(f"learning: {obs}")
-        elif pt == "rejection_rate":
-            score -= 4
-            reasons.append(f"learning: {obs}")
-        elif pt in ("referral_conversion", "process_speed"):
+        else:
+            # rejection_rate / referral_conversion / process_speed are informational context,
+            # not score penalties — a past rejection (often role-specific) shouldn't down-rank
+            # a *different* future role, and "rejection in 0/N" must never penalize at all.
             reasons.append(f"learning: {obs}")
 
     score = max(0.0, min(100.0, score))

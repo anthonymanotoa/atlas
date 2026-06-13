@@ -192,6 +192,12 @@ def test_record_outcome_creates_learnings(atlas_app):
         assert client.get("/api/learnings").json()["learnings"]
 
 
+def test_learning_feedback_unknown_id_is_404(atlas_app):
+    with TestClient(atlas_app) as client:
+        resp = client.post("/api/learnings/999999/feedback", json={"feedback_type": "disagree"})
+    assert resp.status_code == 404
+
+
 # ── P2-C: supervised social search ──────────────────────────────────────────────
 def test_social_search_flow(atlas_app):
     with TestClient(atlas_app) as client:
