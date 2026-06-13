@@ -1,0 +1,70 @@
+# Atlas — master CV template.
+#
+# Copy this to profile/master_cv.yaml and replace every value with YOUR OWN, TRUTHFUL data:
+#   cp profile/master_cv.example.yaml profile/master_cv.yaml
+#
+# profile/master_cv.yaml is gitignored (this .example.yaml is the only one committed).
+# Atlas NEVER invents content — `atlas tailor` only reorders/selects what you put here, so
+# the richer and more accurate this file is, the better the tailored CVs. Keep dates as
+# "Mon YYYY" (e.g. "Jan 2022") and "Present" for current roles — the parse-safe renderer
+# expects that format.
+
+basics:
+  name: "Ada Lovelace"
+  label: "Senior Data Scientist"          # default headline; `atlas tailor` overrides it per job
+  email: "ada@example.com"
+  phone: "+1 555 0100"
+  location: "Remote (UTC-5)"
+  linkedin: "linkedin.com/in/example"
+  github: "github.com/example"
+  website: "example.com"
+  summary: >
+    Senior data scientist with 8+ years turning messy data into shipped products. Replace this
+    with a truthful 2–3 sentence summary of who you are and the impact you have had.
+
+# Flat list of your real skills. `atlas tailor` reorders these to surface JD-matched ones first
+# and caps the rendered set; it never adds a skill you do not list here.
+skills:
+  - "Python"
+  - "SQL"
+  - "Machine Learning"
+  - "Experimentation / A-B Testing"
+  - "Data Visualization"
+  - "ETL / Data Pipelines"
+
+experience:
+  - title: "Senior Data Scientist"
+    company: "Example Corp"
+    location: "Remote"
+    start: "Jan 2022"
+    end: "Present"
+    skills: ["Python", "SQL", "Machine Learning"]   # tags used to rank this role's relevance to a JD
+    highlights:
+      - "Built a churn model that cut monthly churn by 0.0% (replace with your real, true metric)."
+      - "Led the experimentation platform powering 0 A/B tests per quarter."
+  - title: "Data Analyst"
+    company: "Another Example Inc"
+    location: "Hybrid — City, Country"
+    start: "Jun 2018"
+    end: "Dec 2021"
+    skills: ["SQL", "Data Visualization"]
+    highlights:
+      - "Owned the executive KPI dashboards used weekly by leadership."
+
+education:
+  - degree: "B.Sc."
+    area: "Computer Science"
+    institution: "Example University"
+    start: "2014"
+    end: "2018"
+
+certifications:
+  - name: "Example Cloud Data Engineer"
+    issuer: "Example Cloud"
+    date: "2023"
+
+projects:
+  - name: "Open-Source Example Project"
+    description: "One sentence on what it is and your role — appears in both the DOCX and PDF."
+    highlights:
+      - "Describe a concrete, true outcome (stars, users, adoption)."

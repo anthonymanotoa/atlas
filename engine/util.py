@@ -33,6 +33,29 @@ def to_float(v: Any) -> Optional[float]:
         return None
 
 
+def canonical_salary_interval(raw: Optional[str]) -> Optional[str]:
+    """Normalize a source's salary-interval string to a canonical token.
+
+    Sources are inconsistent: Lever emits 'per-year-salary'/'per-month-salary'/'per-hour-wage',
+    others emit 'annually'/'yearly'/'monthly'/'hourly'. Returns one of
+    hourly|daily|weekly|monthly|yearly (matching scoring.fit's multiplier map) or None.
+    """
+    if not raw:
+        return None
+    s = str(raw).lower()
+    if "hour" in s:
+        return "hourly"
+    if "week" in s:
+        return "weekly"
+    if "month" in s:
+        return "monthly"
+    if "year" in s or "annum" in s or "annual" in s:
+        return "yearly"
+    if "day" in s or "dai" in s:  # "per-day-wage" and the bare token "daily" both → daily
+        return "daily"
+    return None
+
+
 def first(*vals: Any) -> Any:
     for v in vals:
         if v not in (None, "", []):

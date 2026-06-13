@@ -92,7 +92,8 @@ def score_job(job: dict, criteria: Criteria) -> ScoreResult:
     if floor and (smin or smax):
         top = smax or smin
         interval = (job.get("salary_interval") or "yearly").lower()
-        annual = top * {"hourly": 2080, "monthly": 12, "yearly": 1}.get(interval, 1)
+        annual = top * {"hourly": 2080, "daily": 260, "weekly": 52,
+                        "monthly": 12, "yearly": 1}.get(interval, 1)
         if annual >= floor:
             score += 10
             reasons.append("salary meets floor")
