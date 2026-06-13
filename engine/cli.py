@@ -543,5 +543,54 @@ def interview_prep(interview_id: int, language: str = typer.Option("en", help="e
     console.print(f"[green]✓[/] Prep generado → {path}")
 
 
+# ── portfolio (P3-F) — local generation + peer references ──────────────────────
+portfolio_app = typer.Typer(help="Generate a local portfolio site + manage peer references.")
+app.add_typer(portfolio_app, name="portfolio")
+
+
+@portfolio_app.command("generate")
+def portfolio_generate(
+    github: bool = typer.Option(False, "--github", help="Include public GitHub repos."),
+) -> None:
+    """Render your master_cv.yaml into a standalone local portfolio (never published)."""
+    from datetime import UTC, datetime
+
+    from engine.config import load_master_cv
+    from engine.portfolio.builder import generate_portfolio
+
+    version = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
+    with _db() as db:
+        path = generate_portfolio(load_master_cv(), version=version, include_github=github)
+        db.add_portfolio(version=version, path_html=str(path))
+    console.print(f"[green]✓[/] Portafolio → {path}")
+    console.print("[dim]Local y privado. Ábrelo con `atlas portfolio open`.[/]")
+
+
+@portfolio_app.command("list")
+def portfolio_list() -> None:
+    """List generated portfolio versions."""
+    with _db() as db:
+        rows = db.list_portfolios()
+    if not rows:
+        console.print("Sin portafolios. Corre `atlas portfolio generate`.")
+        return
+    for r in rows:
+        console.print(f"  [bold]{r['version']}[/] → {r['path_html']}")
+
+
+@portfolio_app.command("open")
+def portfolio_open() -> None:
+    """Open the latest portfolio in your browser (local file)."""
+    import subprocess
+
+    with _db() as db:
+        p = db.latest_portfolio()
+    if not p:
+        console.print("Sin portafolios. Corre `atlas portfolio generate`.")
+        raise typer.Exit(1)
+    subprocess.run(["open", p["path_html"]], check=False)  # noqa: S607 — local macOS open
+    console.print(f"Abriendo {p['path_html']}")
+
+
 if __name__ == "__main__":
     app()

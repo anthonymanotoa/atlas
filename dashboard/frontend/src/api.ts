@@ -129,6 +129,18 @@ export type Learning = {
   confidence: number;
   evidence_count: number;
 };
+export type Portfolio = { id: number; version: string; path_html?: string; generated_at?: string };
+export type Peer = {
+  id: number;
+  peer_name: string;
+  role_match?: string;
+  peer_profile_url?: string;
+  peer_portfolio_url?: string;
+  key_strengths?: string[];
+  how_to_emulate?: string[];
+  source_url?: string;
+  notes?: string;
+};
 export type JobDetail = {
   job: Job;
   cv_versions: CvVersion[];
@@ -210,6 +222,14 @@ export const api = {
     post<{ ok: boolean; queries: Record<string, string> }>(`/api/jobs/${id}/start-social-search`),
   addSocialMention: (id: string, body: Partial<SocialMention>) =>
     post<{ ok: boolean; id: number }>(`/api/jobs/${id}/social_mentions`, body),
+  portfolioLatest: () => get<{ portfolio: Portfolio | null }>("/api/portfolio/latest"),
+  generatePortfolio: (include_github = false) =>
+    post<{ ok: boolean; id: number; version: string; path: string }>("/api/portfolio/generate", {
+      include_github,
+    }),
+  portfolioPreviewUrl: (id: number) => `/api/portfolio/${id}/preview`,
+  peers: () => get<{ peers: Peer[] }>("/api/peers"),
+  addPeer: (body: Partial<Peer>) => post<{ ok: boolean; id: number }>("/api/peers", body),
   exportUrl: (columns?: string[], state?: string) => {
     const p = new URLSearchParams();
     if (columns?.length) p.set("columns", columns.join(","));
