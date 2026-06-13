@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import csv
 from pathlib import Path
+from typing import Optional
 
 from rapidfuzz import fuzz
 
@@ -44,13 +45,18 @@ def import_connections_csv(db: DB, csv_path: Path) -> int:
     return imported
 
 
-def match_referrals(db: DB, company: str, threshold: int = MATCH_THRESHOLD) -> list[dict]:
-    """Return 1st-degree contacts whose company fuzzy-matches `company`, best first."""
+def match_referrals(db: DB, company: str, threshold: int = MATCH_THRESHOLD,
+                    contacts: Optional[list[dict]] = None) -> list[dict]:
+    """Return 1st-degree contacts whose company fuzzy-matches `company`, best first.
+
+    Pass a preloaded `contacts` list (from db.all_contacts()) when matching many jobs in a
+    loop, so the full contacts table is read once instead of once per job."""
     target = norm_company(company)
     if not target:
         return []
+    rows = contacts if contacts is not None else db.all_contacts()
     out = []
-    for c in db.contacts_for_company(target):
+    for c in rows:
         score = fuzz.token_sort_ratio(target, norm_company(c.get("company") or ""))
         if score >= threshold:
             out.append({**c, "_match": score})
