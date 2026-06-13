@@ -1,4 +1,5 @@
 """Filesystem layout for Atlas. Single source of truth for every path."""
+
 from __future__ import annotations
 
 import os

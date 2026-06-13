@@ -4,15 +4,20 @@
 the deterministic scorer) followed by Markdown prose (read by the Cowork LLM brain
 for nuance). Companies / sources / ontology are plain YAML.
 """
+
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 import yaml
 from pydantic import BaseModel, Field
 
 from engine.paths import (
-    COMPANIES_PATH, CRITERIA_PATH, MASTER_CV_PATH, ONTOLOGY_PATH, SOURCES_PATH,
+    COMPANIES_PATH,
+    CRITERIA_PATH,
+    MASTER_CV_PATH,
+    ONTOLOGY_PATH,
+    SOURCES_PATH,
     example_fallback,
 )
 
@@ -27,19 +32,19 @@ def load_master_cv() -> dict:
 
 # ── criteria ────────────────────────────────────────────────────────────────
 class Criteria(BaseModel):
-    roles: list[str] = Field(default_factory=list)            # core title keywords
-    role_aliases: list[str] = Field(default_factory=list)     # alt titles that still count
+    roles: list[str] = Field(default_factory=list)  # core title keywords
+    role_aliases: list[str] = Field(default_factory=list)  # alt titles that still count
     seniority: list[str] = Field(default_factory=lambda: ["senior", "lead", "staff", "principal"])
     remote_required: bool = True
     locations_allowed: list[str] = Field(default_factory=lambda: ["worldwide"])
     languages: list[str] = Field(default_factory=lambda: ["en", "es"])
     salary_floor_usd: float = 0.0
-    salary_hard: bool = False                                  # soft by default
+    salary_hard: bool = False  # soft by default
     must_haves: list[str] = Field(default_factory=list)
     deal_breakers: list[str] = Field(default_factory=list)
     knockout_terms: list[str] = Field(default_factory=list)
     shortlist_threshold: float = 60.0
-    prose: str = ""                                            # the Markdown body (for the LLM)
+    prose: str = ""  # the Markdown body (for the LLM)
 
     @property
     def all_role_terms(self) -> list[str]:
@@ -68,11 +73,11 @@ def load_criteria() -> Criteria:
 # ── companies (ATS registry) ─────────────────────────────────────────────────
 class CompanyTarget(BaseModel):
     company: str
-    ats: str                                  # greenhouse | lever | ashby | smartrecruiters
-    token: Optional[str] = None               # board token / site slug / job_board_name / companyIdentifier
-    instance: Optional[str] = None            # workday tenant (e.g. "nvidia" in nvidia.wd5.myworkdayjobs.com)
-    eu: bool = False                          # lever EU host
-    careers_url: Optional[str] = None         # for re-resolution
+    ats: str  # greenhouse | lever | ashby | smartrecruiters
+    token: str | None = None  # board token / site slug / job_board_name / companyIdentifier
+    instance: str | None = None  # workday tenant (e.g. "nvidia" in nvidia.wd5.myworkdayjobs.com)
+    eu: bool = False  # lever EU host
+    careers_url: str | None = None  # for re-resolution
 
 
 def load_companies() -> list[CompanyTarget]:
@@ -100,5 +105,5 @@ def load_ontology() -> dict[str, list[str]]:
     data = yaml.safe_load(path.read_text()) or {}
     out: dict[str, list[str]] = {}
     for canonical, aliases in (data.get("skills") or {}).items():
-        out[canonical] = [a for a in (aliases or [])]
+        out[canonical] = [a for a in (aliases or [])]  # noqa: C416
     return out

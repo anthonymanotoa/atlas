@@ -1,10 +1,11 @@
 """Normalized job posting + the stable natural key used for cross-source dedupe."""
+
 from __future__ import annotations
 
 import hashlib
 import re
-from datetime import datetime, timezone
-from typing import Any, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -45,10 +46,10 @@ _NONALNUM = re.compile(r"[^a-z0-9 ]+")
 
 
 def now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
-def norm_text(s: Optional[str]) -> str:
+def norm_text(s: str | None) -> str:
     """Lowercase, strip punctuation/extra whitespace — for dedupe keys only."""
     if not s:
         return ""
@@ -57,11 +58,23 @@ def norm_text(s: Optional[str]) -> str:
     return _WS.sub(" ", s).strip()
 
 
-def norm_company(s: Optional[str]) -> str:
+def norm_company(s: str | None) -> str:
     """Normalize a company name, dropping common suffixes that vary by source."""
     base = norm_text(s)
-    for suffix in (" inc", " llc", " ltd", " limited", " gmbh", " corp",
-                   " corporation", " co", " company", " sa", " srl", " bv"):
+    for suffix in (
+        " inc",
+        " llc",
+        " ltd",
+        " limited",
+        " gmbh",
+        " corp",
+        " corporation",
+        " co",
+        " company",
+        " sa",
+        " srl",
+        " bv",
+    ):
         if base.endswith(suffix):
             base = base[: -len(suffix)].strip()
     return base
@@ -77,8 +90,9 @@ _REMOTE_HINT = re.compile(r"\b(remote|remoto|work from home|wfh|anywhere|distrib
 _ONSITE_HINT = re.compile(r"\b(on[- ]?site|in[- ]?office|presencial|hybrid|h[ií]brido)\b", re.I)
 
 
-def infer_remote(location: Optional[str], workplace_type: Optional[str],
-                 text: Optional[str] = None) -> tuple[Optional[bool], str]:
+def infer_remote(
+    location: str | None, workplace_type: str | None, text: str | None = None
+) -> tuple[bool | None, str]:
     """Best-effort (is_remote, workplace_type) inference from messy source fields."""
     wt = (workplace_type or "").lower()
     if wt in ("remote", "fully remote"):
@@ -100,24 +114,24 @@ class Job(BaseModel):
 
     id: str = ""
     source: str
-    source_job_id: Optional[str] = None
+    source_job_id: str | None = None
     title: str
     company: str
-    location: Optional[str] = None
-    is_remote: Optional[bool] = None
+    location: str | None = None
+    is_remote: bool | None = None
     workplace_type: str = "unknown"
-    url: Optional[str] = None
-    apply_url: Optional[str] = None
-    description: Optional[str] = None
-    employment_type: Optional[str] = None
-    salary_min: Optional[float] = None
-    salary_max: Optional[float] = None
-    salary_currency: Optional[str] = None
-    salary_interval: Optional[str] = None  # yearly | monthly | hourly
-    date_posted: Optional[str] = None
+    url: str | None = None
+    apply_url: str | None = None
+    description: str | None = None
+    employment_type: str | None = None
+    salary_min: float | None = None
+    salary_max: float | None = None
+    salary_currency: str | None = None
+    salary_interval: str | None = None  # yearly | monthly | hourly
+    date_posted: str | None = None
     raw: dict[str, Any] = Field(default_factory=dict)
 
-    def finalize(self) -> "Job":
+    def finalize(self) -> Job:
         """Fill derived fields (id, remote inference). Call before persisting."""
         if not self.id:
             self.id = compute_job_id(self.company, self.title, self.location or "")

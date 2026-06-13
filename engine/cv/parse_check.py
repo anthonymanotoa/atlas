@@ -4,6 +4,7 @@ Emulates what Lever/Workday store: extract plain text + structure and assert the
 contact info, standard section headings and dates survived. Cheap local equivalent
 of an ATS-screener second opinion.
 """
+
 from __future__ import annotations
 
 import re
@@ -13,7 +14,9 @@ from docx import Document
 
 from engine.cv.render import HEADINGS
 
-_DATE = re.compile(r"(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{4}|\b(19|20)\d{2}\b", re.I)
+_DATE = re.compile(
+    r"(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{4}|\b(19|20)\d{2}\b", re.I
+)
 _EMAIL = re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+")
 
 
