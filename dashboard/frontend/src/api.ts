@@ -47,14 +47,33 @@ export type Overview = {
 };
 
 export type Message = {
-  id: number; kind: string; channel: string; subject?: string; body: string;
-  language: string; state: string; variant?: string;
+  id: number;
+  kind: string;
+  channel: string;
+  subject?: string;
+  body: string;
+  language: string;
+  state: string;
+  variant?: string;
 };
 export type CvVersion = {
-  id: number; language: string; ats_target?: string; path_docx?: string; path_pdf?: string;
-  keyword_coverage?: number; matched_keywords?: string; missing_keywords?: string; parse_ok?: number;
+  id: number;
+  language: string;
+  ats_target?: string;
+  path_docx?: string;
+  path_pdf?: string;
+  keyword_coverage?: number;
+  matched_keywords?: string;
+  missing_keywords?: string;
+  parse_ok?: number;
 };
-export type Referral = { id: number; name: string; company?: string; title?: string; linkedin_url?: string };
+export type Referral = {
+  id: number;
+  name: string;
+  company?: string;
+  title?: string;
+  linkedin_url?: string;
+};
 export type JobDetail = {
   job: Job;
   cv_versions: CvVersion[];
@@ -89,5 +108,6 @@ export const api = {
   discover: () => post<{ started: boolean; running?: boolean }>("/api/discover"),
   discoverStatus: () => get<{ running: boolean }>("/api/discover/status"),
   brief: () => get<{ markdown: string }>("/api/brief"),
-  cvDownload: (jobId: string, vid: number, fmt = "docx") => `/api/cv/${jobId}/${vid}/download?fmt=${fmt}`,
+  cvDownload: (jobId: string, vid: number, fmt = "docx") =>
+    `/api/cv/${jobId}/${vid}/download?fmt=${fmt}`,
 };
