@@ -19,6 +19,7 @@ dependencies = [
     "fastapi>=0.111",
     "uvicorn[standard]>=0.30",
     "python-dateutil>=2.9",
+    "reportlab>=4.2",
 ]
 
 [project.optional-dependencies]

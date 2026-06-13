@@ -87,5 +87,5 @@ export const api = {
   prep: (id: string, language = "en") => post(`/api/jobs/${id}/prep`, { language }),
   markSent: (mid: number) => post(`/api/messages/${mid}/sent`),
   brief: () => get<{ markdown: string }>("/api/brief"),
-  cvDownload: (jobId: string, vid: number) => `/api/cv/${jobId}/${vid}/download`,
+  cvDownload: (jobId: string, vid: number, fmt = "docx") => `/api/cv/${jobId}/${vid}/download?fmt=${fmt}`,
 };

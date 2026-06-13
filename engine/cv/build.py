@@ -41,7 +41,7 @@ def build_for_job(db: DB, job_id: str, *, language: str = "en",
     out_dir = OUTBOX_DIR / job_id
     docx_path = out_dir / f"cv_{language}.docx"
     render.render_docx(cv, docx_path, language=language)
-    pdf_path = render.render_pdf(docx_path) if make_pdf else None
+    pdf_path = render.render_pdf(cv, out_dir / f"cv_{language}.pdf", language=language) if make_pdf else None
     parse_ok, issues = parse_check.check(docx_path, cv, language=language)
 
     cv_version_id = db.add_cv_version(

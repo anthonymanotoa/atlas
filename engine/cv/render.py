@@ -6,8 +6,6 @@ contact info in the body, reverse-chronological. DOCX is the default (best parse
 """
 from __future__ import annotations
 
-import shutil
-import subprocess
 from pathlib import Path
 from typing import Optional
 
@@ -135,25 +133,80 @@ def render_docx(cv: dict, out_path: Path, language: str = "en") -> Path:
     return out_path
 
 
-def _soffice() -> Optional[str]:
-    for cand in ("soffice", "libreoffice",
-                 "/Applications/LibreOffice.app/Contents/MacOS/soffice"):
-        path = shutil.which(cand) if "/" not in cand else (cand if Path(cand).exists() else None)
-        if path:
-            return path
-    return None
+def _esc(s: str) -> str:
+    return (s or "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
-def render_pdf(docx_path: Path) -> Optional[Path]:
-    """Best-effort DOCX→PDF via LibreOffice headless. Returns None if unavailable."""
-    soffice = _soffice()
-    if not soffice:
-        return None
+def render_pdf(cv: dict, out_path: Path, language: str = "en") -> Optional[Path]:
+    """Render a clean single-column PDF (reportlab — no LibreOffice/Word needed)."""
+    from reportlab.lib.enums import TA_CENTER
+    from reportlab.lib.pagesizes import LETTER
+    from reportlab.lib.styles import ParagraphStyle
+    from reportlab.lib.units import inch
+    from reportlab.platypus import ListFlowable, ListItem, Paragraph, SimpleDocTemplate, Spacer
+
+    h = HEADINGS.get(language, HEADINGS["en"])
+    basics = cv.get("basics", {}) or {}
+    name_s = ParagraphStyle("name", fontName="Helvetica-Bold", fontSize=19, alignment=TA_CENTER, spaceAfter=2)
+    label_s = ParagraphStyle("label", fontName="Helvetica-Oblique", fontSize=11, alignment=TA_CENTER, textColor="#333333")
+    contact_s = ParagraphStyle("contact", fontName="Helvetica", fontSize=9, alignment=TA_CENTER, textColor="#444444", spaceAfter=8)
+    head_s = ParagraphStyle("head", fontName="Helvetica-Bold", fontSize=11.5, textColor="#1a1a1a", spaceBefore=10, spaceAfter=3)
+    body_s = ParagraphStyle("body", fontName="Helvetica", fontSize=10, leading=13)
+    role_s = ParagraphStyle("role", fontName="Helvetica-Bold", fontSize=10.5, spaceBefore=5)
+    meta_s = ParagraphStyle("meta", fontName="Helvetica-Oblique", fontSize=9, textColor="#555555", spaceAfter=2)
+    bullet_s = ParagraphStyle("bullet", fontName="Helvetica", fontSize=9.5, leading=12.5)
+
+    story = [Paragraph(_esc(basics.get("name", "")), name_s)]
+    if basics.get("label"):
+        story.append(Paragraph(_esc(basics["label"]), label_s))
+    story.append(Paragraph(_esc(_contact_line(basics)), contact_s))
+
+    def bullets(items):
+        return ListFlowable([ListItem(Paragraph(_esc(" ".join(i.split())), bullet_s), leftIndent=12)
+                             for i in items], bulletType="bullet", start="•", leftIndent=10)
+
+    if basics.get("summary"):
+        story += [Paragraph(h["summary"].upper(), head_s),
+                  Paragraph(_esc(" ".join(basics["summary"].split())), body_s)]
+    if cv.get("skills"):
+        story += [Paragraph(h["skills"].upper(), head_s),
+                  Paragraph("  ·  ".join(_esc(s) for s in cv["skills"]), body_s)]
+    if cv.get("experience"):
+        story.append(Paragraph(h["experience"].upper(), head_s))
+        for e in cv["experience"]:
+            story.append(Paragraph(f"{_esc(e.get('title',''))} — {_esc(e.get('company',''))}", role_s))
+            meta = "  |  ".join(p for p in [_esc(e.get("location")),
+                    f"{e.get('start','')} – {e.get('end','')}".strip(" –")] if p)
+            if meta:
+                story.append(Paragraph(meta, meta_s))
+            if e.get("highlights"):
+                story.append(bullets(e["highlights"]))
+    edu = cv.get("education") or []
+    if edu:
+        story.append(Paragraph(h["education"].upper(), head_s))
+        for ed in edu:
+            line = " ".join(p for p in [ed.get("degree"), ed.get("area"),
+                    "—" if ed.get("institution") else None, ed.get("institution")] if p)
+            dates = f"{ed.get('start','')} – {ed.get('end','')}".strip(" –")
+            story.append(Paragraph(f"<b>{_esc(line)}</b>" + (f"  ({dates})" if dates else ""), body_s))
+    certs = [c for c in (cv.get("certifications") or []) if c.get("name")]
+    if certs:
+        story.append(Paragraph(h["certs"].upper(), head_s))
+        story.append(bullets([" — ".join(p for p in [c.get("name"), c.get("issuer"), c.get("date")] if p)
+                              for c in certs]))
+    projects = cv.get("projects") or []
+    if projects:
+        story.append(Paragraph(h["projects"].upper(), head_s))
+        for pr in projects:
+            story.append(Paragraph(f"<b>{_esc(pr.get('name',''))}</b>", body_s))
+            if pr.get("highlights"):
+                story.append(bullets(pr["highlights"]))
+
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    doc = SimpleDocTemplate(str(out_path), pagesize=LETTER, topMargin=0.5 * inch,
+                            bottomMargin=0.5 * inch, leftMargin=0.7 * inch, rightMargin=0.7 * inch)
     try:
-        subprocess.run([soffice, "--headless", "--convert-to", "pdf", "--outdir",
-                        str(docx_path.parent), str(docx_path)],
-                       check=True, capture_output=True, timeout=90)
-    except (subprocess.SubprocessError, OSError):
+        doc.build(story)
+    except Exception:  # noqa: BLE001
         return None
-    pdf = docx_path.with_suffix(".pdf")
-    return pdf if pdf.exists() else None
+    return out_path if out_path.exists() else None

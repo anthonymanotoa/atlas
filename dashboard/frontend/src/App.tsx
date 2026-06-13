@@ -1,5 +1,5 @@
 import * as Dialog from "@radix-ui/react-dialog";
-import { Command as CmdIcon, RefreshCw, X } from "lucide-react";
+import { Command as CmdIcon, Moon, RefreshCw, Sun, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { api, type Action, type Job, type Overview } from "./api";
 import { AnalyticsStrip } from "./components/AnalyticsStrip";
@@ -17,6 +17,12 @@ export default function App() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [briefOpen, setBriefOpen] = useState(false);
   const [brief, setBrief] = useState("");
+  const [theme, setTheme] = useState<string>(() => localStorage.getItem("atlas-theme") || "dark");
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    localStorage.setItem("atlas-theme", theme);
+  }, [theme]);
 
   const load = useCallback(async () => {
     const [o, b] = await Promise.all([api.overview(), api.board()]);
@@ -80,6 +86,10 @@ export default function App() {
         <div className="flex items-center gap-2">
           <button className="btn !py-1.5" onClick={() => setPaletteOpen(true)}>
             <CmdIcon size={14} /> K
+          </button>
+          <button className="btn !py-1.5" title="Tema claro / oscuro"
+                  onClick={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}>
+            {theme === "dark" ? <Sun size={14} /> : <Moon size={14} />}
           </button>
           <button className="btn !py-1.5" onClick={load}><RefreshCw size={14} /></button>
         </div>
