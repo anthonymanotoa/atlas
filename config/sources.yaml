@@ -1,0 +1,44 @@
+# Discovery source configuration. Tuned for $0, low-volume, account-safe, remote-first.
+# Edit search_terms / locations to taste. Keep volume modest so LinkedIn stays under
+# its ~10-page (≈250 result) rate-limit wall and you never need proxies.
+
+search_terms:
+  - data scientist
+  - data analyst
+  - machine learning engineer
+  - ai engineer
+  - analytics engineer
+
+# Direct ATS feeds (Greenhouse/Lever/Ashby/SmartRecruiters) — the reliable spine.
+ats:
+  enabled: true
+
+# JobSpy aggregator. Indeed is rock-solid (no rate limit); LinkedIn is guest/no-login
+# (account-safe, IP-throttle only) and hard-capped. Google/ZipRecruiter omitted (broken).
+jobspy:
+  enabled: true
+  sites: [indeed, linkedin]
+  results_wanted: 25            # per site, per term
+  hours_old: 168               # last 7 days
+  is_remote: true
+  country_indeed: USA          # Indeed requires a country; remote filter does the rest
+  linkedin_fetch_description: false   # only hydrate full descriptions for shortlisted
+  linkedin_cap: 200            # stop well before the ~250 wall
+  google_search_term: ""       # left empty; Google Jobs is currently unreliable
+
+# Himalayas — free, no-auth, remote-first JSON API. Excellent fit for a remote seeker.
+himalayas:
+  enabled: true
+  limit: 50
+
+# Adzuna — free official API (needs ADZUNA_APP_ID / ADZUNA_APP_KEY in .env). Multi-country
+# + salary data. Disabled until you add free keys; harmless to leave on (skips if unset).
+adzuna:
+  enabled: true
+  countries: [us, gb, de]
+  results_per_country: 20
+
+# Global pacing / safety knobs.
+limits:
+  per_source_timeout_s: 45
+  max_jobs_per_run: 400
