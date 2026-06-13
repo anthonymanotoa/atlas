@@ -6,6 +6,7 @@ engine imports bind ``DB_PATH``). Used as a context manager so the lifespan
 startup/shutdown (shared-connection model, plan 014) runs. No network, no writes
 to the repo's real ``data/atlas.db``.
 """
+
 from __future__ import annotations
 
 from fastapi.testclient import TestClient
@@ -15,9 +16,17 @@ def _seed_job(state: str | None = None) -> str:
     """Insert one job into the (already-redirected) DB and return its id."""
     from engine.db.models import DB
     from engine.normalize import Job
+
     with DB() as db:
-        db.upsert_job(Job(source="greenhouse", source_job_id="1", title="Data Scientist",
-                          company="Acme", url="https://x/1"))
+        db.upsert_job(
+            Job(
+                source="greenhouse",
+                source_job_id="1",
+                title="Data Scientist",
+                company="Acme",
+                url="https://x/1",
+            )
+        )
         jid = db.list_jobs()[0]["id"]
         if state:
             db.set_state(jid, state, {"via": "test"})
@@ -48,13 +57,14 @@ def test_set_state_happy_path(atlas_app):
 def test_mark_applied_on_real_job_schedules_cadence(atlas_app):
     """Current behavior: /applied flips state and starts the follow-up cadence."""
     from engine.db.models import DB
+
     with TestClient(atlas_app) as client:
         jid = _seed_job()
         resp = client.post(f"/api/jobs/{jid}/applied")
     assert resp.status_code == 200 and resp.json() == {"ok": True}
     with DB() as db:
         assert db.get_job(jid)["state"] == "applied"
-        assert len(db.followups_for_job(jid)) == 4   # Day 3/7/14 + breakup scheduled
+        assert len(db.followups_for_job(jid)) == 4  # Day 3/7/14 + breakup scheduled
 
 
 def test_mark_sent_unknown_message_is_ok(atlas_app):
@@ -67,6 +77,7 @@ def test_mark_sent_unknown_message_is_ok(atlas_app):
 # ── Plan 014: the schema is initialized once at startup, not once per request ──
 def test_schema_init_runs_once_across_requests(atlas_app, monkeypatch):
     from engine.db.models import DB
+
     calls = {"n": 0}
     original = DB.init_schema
 
@@ -80,15 +91,16 @@ def test_schema_init_runs_once_across_requests(atlas_app, monkeypatch):
         for _ in range(4):
             assert client.get("/api/overview").status_code == 200
             assert client.get("/api/board").status_code == 200
-    assert calls["n"] == 1   # not 8 (was once per request before the shared connection)
+    assert calls["n"] == 1  # not 8 (was once per request before the shared connection)
 
 
 # ── Plan 020: state-mutating POSTs enforce a trusted Origin server-side ────────
 def test_mutating_post_rejects_foreign_origin(atlas_app):
     # The dependency fires before the handler, so no seed/DB state is needed.
     with TestClient(atlas_app) as client:
-        resp = client.post("/api/jobs/anyjob/applied",
-                           headers={"origin": "https://evil.example.com"})
+        resp = client.post(
+            "/api/jobs/anyjob/applied", headers={"origin": "https://evil.example.com"}
+        )
     assert resp.status_code == 403
 
 
@@ -103,8 +115,7 @@ def test_mutating_post_allows_no_origin(atlas_app):
 def test_mutating_post_allows_allowlisted_origin(atlas_app):
     with TestClient(atlas_app) as client:
         jid = _seed_job()
-        resp = client.post(f"/api/jobs/{jid}/applied",
-                           headers={"origin": "http://localhost:8787"})
+        resp = client.post(f"/api/jobs/{jid}/applied", headers={"origin": "http://localhost:8787"})
     assert resp.status_code != 403
 
 
@@ -112,6 +123,7 @@ def test_mutating_post_allows_allowlisted_origin(atlas_app):
 def test_discover_endpoint_runs_deterministic_pipeline(atlas_app, monkeypatch):
     import engine.discovery.runner as runner_mod
     import engine.scoring.run as score_mod
+
     calls = {"discover": 0, "score": 0}
 
     def fake_discover(db, **kw):
@@ -133,4 +145,3 @@ def test_discover_endpoint_runs_deterministic_pipeline(atlas_app, monkeypatch):
         # The BackgroundTask runs within the request cycle under TestClient.
         assert calls["discover"] == 1 and calls["score"] == 1
         assert client.get("/api/discover/status").json() == {"running": False}
-

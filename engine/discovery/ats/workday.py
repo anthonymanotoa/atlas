@@ -14,6 +14,7 @@ List rows carry NO description (Workday puts it behind a per-posting detail fetc
 we leave description="" rather than fabricate. A detail fetch is a documented
 open question (see plans/018), deferred to keep the spike account-safe.
 """
+
 from __future__ import annotations
 
 from urllib.parse import urlsplit
@@ -52,18 +53,20 @@ def fetch(target: CompanyTarget, client: httpx.Client) -> list[Job]:
         for p in postings:
             path = p.get("externalPath") or ""
             bullets = p.get("bulletFields") or []
-            jobs.append(Job(
-                source="workday",
-                source_job_id=(bullets[0] if bullets else path) or None,
-                title=(p.get("title") or "").strip(),
-                company=target.company,
-                location=p.get("locationsText"),
-                url=f"https://{host}/{site}{path}",
-                apply_url=f"https://{host}/{site}{path}",
-                description="",  # not in the list payload; never fabricated
-                date_posted=None,  # "postedOn" is relative text ("Posted 30+ Days Ago"), not a date
-                raw={"posted_on": p.get("postedOn")},
-            ))
+            jobs.append(
+                Job(
+                    source="workday",
+                    source_job_id=(bullets[0] if bullets else path) or None,
+                    title=(p.get("title") or "").strip(),
+                    company=target.company,
+                    location=p.get("locationsText"),
+                    url=f"https://{host}/{site}{path}",
+                    apply_url=f"https://{host}/{site}{path}",
+                    description="",  # not in the list payload; never fabricated
+                    date_posted=None,  # "postedOn" is relative text ("Posted 30+ Days Ago"), not a date
+                    raw={"posted_on": p.get("postedOn")},
+                )
+            )
             if len(jobs) >= MAX_JOBS:
                 break
         total = int(data.get("total") or 0)

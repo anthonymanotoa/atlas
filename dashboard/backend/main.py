@@ -4,6 +4,7 @@ Single-user, local only. No auth (binds to 127.0.0.1). Serves the built React ap
 in production; in dev the Vite server proxies here.
 Run:  uv run uvicorn dashboard.backend.main:app --port 8787 --reload
 """
+
 from __future__ import annotations
 
 import os
@@ -40,7 +41,7 @@ _DB_LOCK = Lock()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global _DB
-    _DB = DB(check_same_thread=False)   # connect + PRAGMAs + init_schema() — exactly once
+    _DB = DB(check_same_thread=False)  # connect + PRAGMAs + init_schema() — exactly once
     try:
         yield
     finally:
@@ -57,8 +58,10 @@ def get_db():
 
 app = FastAPI(title="Atlas", docs_url="/api/docs", lifespan=lifespan)
 app.add_middleware(
-    CORSMiddleware, allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
-    allow_methods=["*"], allow_headers=["*"],
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 
@@ -69,13 +72,15 @@ app.add_middleware(
 # host/port (set ATLAS_ALLOWED_ORIGINS as a comma-list to override). Defaults cover
 # the loopback backend (documented --port 8787) + the Vite dev server.
 _DEFAULT_ALLOWED_ORIGINS = (
-    "http://127.0.0.1:8787", "http://localhost:8787",
-    "http://localhost:5173", "http://127.0.0.1:5173",
+    "http://127.0.0.1:8787",
+    "http://localhost:8787",
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
 )
 ALLOWED_ORIGINS = frozenset(
-    o.strip() for o in os.environ.get(
-        "ATLAS_ALLOWED_ORIGINS", ",".join(_DEFAULT_ALLOWED_ORIGINS)
-    ).split(",") if o.strip()
+    o.strip()
+    for o in os.environ.get("ATLAS_ALLOWED_ORIGINS", ",".join(_DEFAULT_ALLOWED_ORIGINS)).split(",")
+    if o.strip()
 )
 
 
@@ -104,7 +109,9 @@ class StateBody(BaseModel):
 
 
 class PrepBody(BaseModel):
-    language: Literal["en", "es"] = "en"  # constrained: never reaches the CV output path as a raw string
+    language: Literal["en", "es"] = (
+        "en"  # constrained: never reaches the CV output path as a raw string
+    )
 
 
 # ── API ──────────────────────────────────────────────────────────────────────
@@ -140,6 +147,7 @@ def api_job(job_id: str, db: DB = Depends(get_db)):
 @app.post("/api/jobs/{job_id}/state", dependencies=[Depends(require_trusted_origin)])
 def api_set_state(job_id: str, body: StateBody, db: DB = Depends(get_db)):
     from engine.outreach import followups
+
     if body.state not in STATES:
         raise HTTPException(400, f"invalid state; must be one of {STATES}")
     if not db.get_job(job_id):
@@ -156,6 +164,7 @@ def api_set_state(job_id: str, body: StateBody, db: DB = Depends(get_db)):
 @app.post("/api/jobs/{job_id}/applied", dependencies=[Depends(require_trusted_origin)])
 def api_mark_applied(job_id: str, db: DB = Depends(get_db)):
     from engine.outreach import followups
+
     db.set_state(job_id, "applied", {"via": "dashboard"})
     followups.schedule(db, job_id, channel="email")  # start the Day 3/7/14 + breakup cadence
     return {"ok": True}
@@ -165,6 +174,7 @@ def api_mark_applied(job_id: str, db: DB = Depends(get_db)):
 def api_prep(job_id: str, body: PrepBody, db: DB = Depends(get_db)):
     from engine.cv.build import build_for_job
     from engine.outreach.build import build_outreach, write_package
+
     if not db.get_job(job_id):
         raise HTTPException(404, "job not found")
     cv = build_for_job(db, job_id, language=body.language)
@@ -175,8 +185,9 @@ def api_prep(job_id: str, body: PrepBody, db: DB = Depends(get_db)):
 
 @app.post("/api/messages/{message_id}/sent", dependencies=[Depends(require_trusted_origin)])
 def api_mark_sent(message_id: int, db: DB = Depends(get_db)):
-    db.conn.execute("UPDATE messages SET state='sent', sent_at=? WHERE id=?",
-                    (now_iso(), message_id))
+    db.conn.execute(
+        "UPDATE messages SET state='sent', sent_at=? WHERE id=?", (now_iso(), message_id)
+    )
     db.conn.commit()
     return {"ok": True}
 
@@ -199,7 +210,8 @@ def _run_discover_and_score(only: set[str] | None) -> None:
         from engine.config import load_criteria
         from engine.discovery.runner import discover as run_discover
         from engine.scoring.run import score_jobs
-        with DB() as db:                       # own connection — see note above
+
+        with DB() as db:  # own connection — see note above
             run_discover(db, only=only)
             score_jobs(db, load_criteria())
     finally:
@@ -213,7 +225,7 @@ def api_discover(background: BackgroundTasks, only: str | None = None):
     global _discovering
     with _DISCOVER_LOCK:
         if _discovering:
-            return {"started": False, "running": True}   # one run at a time
+            return {"started": False, "running": True}  # one run at a time
         _discovering = True
     only_set = {s.strip() for s in only.split(",")} if only else None
     background.add_task(_run_discover_and_score, only_set)
@@ -229,7 +241,11 @@ def api_discover_status():
 @app.get("/api/brief")
 def api_brief():
     path = OUTBOX_DIR / "MORNING_BRIEF.md"
-    return {"markdown": path.read_text() if path.exists() else "# Sin resumen todavía\n\nEjecuta `atlas brain`."}
+    return {
+        "markdown": path.read_text()
+        if path.exists()
+        else "# Sin resumen todavía\n\nEjecuta `atlas brain`."
+    }
 
 
 @app.get("/api/cv/{job_id}/{version_id}/download")
@@ -244,8 +260,11 @@ def api_cv_download(job_id: str, version_id: int, fmt: str = "docx", db: DB = De
     # Confine downloads to the outbox: never serve a file outside data/outbox, whatever the DB row says.
     if not p.is_relative_to(OUTBOX_DIR.resolve()) or not p.exists():
         raise HTTPException(404, f"{fmt} file not available")
-    media = ("application/pdf" if fmt == "pdf"
-             else "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+    media = (
+        "application/pdf"
+        if fmt == "pdf"
+        else "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    )
     return FileResponse(str(p), filename=p.name, media_type=media)
 
 

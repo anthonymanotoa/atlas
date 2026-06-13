@@ -6,6 +6,7 @@ so the only reliable redirect is to set ``ATLAS_DATA_DIR`` *before* those module
 are imported and then reload them. The ``atlas_app`` fixture does exactly that and
 hands back a freshly-imported FastAPI ``app`` pointed at a throwaway DB.
 """
+
 from __future__ import annotations
 
 import importlib
@@ -19,10 +20,12 @@ def atlas_app(tmp_path, monkeypatch):
     monkeypatch.setenv("ATLAS_DATA_DIR", str(tmp_path))
     # Reload the import-time-bound modules AFTER the env var is set so DB_PATH /
     # OUTBOX_DIR bind to tmp_path, not the repo's real data dir.
-    import engine.paths
     import engine.db.models
+    import engine.paths
+
     importlib.reload(engine.paths)
     importlib.reload(engine.db.models)
     from dashboard.backend import main as backend_main
+
     importlib.reload(backend_main)
     return backend_main.app

@@ -5,6 +5,7 @@ triage, not a magic keyword score. So this scorer is a transparent pre-filter th
 surfaces *reasons* and *knockout flags* — the Cowork brain does the nuanced ranking
 of borderline matches. Deal-breakers cap the score; knockouts are flagged, not auto-rejected.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -12,8 +13,21 @@ from dataclasses import dataclass, field
 from engine.config import Criteria
 
 SENIOR_TERMS = ("senior", "sr.", "sr ", "lead", "staff", "principal", "head of", "director")
-JUNIOR_TERMS = ("junior", "jr.", "jr ", "intern", "internship", "entry level", "entry-level",
-                "graduate", "trainee", "becario", "practicante", "working student", "apprentice")
+JUNIOR_TERMS = (
+    "junior",
+    "jr.",
+    "jr ",
+    "intern",
+    "internship",
+    "entry level",
+    "entry-level",
+    "graduate",
+    "trainee",
+    "becario",
+    "practicante",
+    "working student",
+    "apprentice",
+)
 
 # Minimal "obviously not EN/ES" detector (Adzuna DE/FR can return local-language posts).
 _DE = (" und ", " für ", " mitarbeiter", " wir ", " sie ", " bei uns", " kenntnisse")
@@ -42,9 +56,9 @@ def _detect_offlang(text: str, allowed: list[str]) -> str | None:
 
 
 def score_job(job: dict, criteria: Criteria) -> ScoreResult:
-    title = (job.get("title") or "")
+    title = job.get("title") or ""
     title_l = title.lower()
-    desc = (job.get("description") or "")
+    desc = job.get("description") or ""
     hay = f"{title_l} {desc.lower()}"
 
     score = 50.0
@@ -81,8 +95,9 @@ def score_job(job: dict, criteria: Criteria) -> ScoreResult:
     if any(_has(title_l, t) for t in JUNIOR_TERMS):
         disq = True
         reasons.append("junior/intern level")
-    elif any(_has(title_l, t.strip()) for t in [s.strip() for s in criteria.seniority]) \
-            or any(_has(title_l, t) for t in SENIOR_TERMS):
+    elif any(_has(title_l, t.strip()) for t in [s.strip() for s in criteria.seniority]) or any(
+        _has(title_l, t) for t in SENIOR_TERMS
+    ):
         score += 10
         reasons.append("seniority matches")
 
@@ -92,8 +107,9 @@ def score_job(job: dict, criteria: Criteria) -> ScoreResult:
     if floor and (smin or smax):
         top = smax or smin
         interval = (job.get("salary_interval") or "yearly").lower()
-        annual = top * {"hourly": 2080, "daily": 260, "weekly": 52,
-                        "monthly": 12, "yearly": 1}.get(interval, 1)
+        annual = top * {"hourly": 2080, "daily": 260, "weekly": 52, "monthly": 12, "yearly": 1}.get(
+            interval, 1
+        )
         if annual >= floor:
             score += 10
             reasons.append("salary meets floor")

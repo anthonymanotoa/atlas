@@ -4,6 +4,7 @@ These lock the *current observed* field mapping of each keyless ATS source by
 feeding a saved JSON fixture through an offline stub client (no network). If a
 vendor renames a field or a mapping drifts, the relevant assertion fails loudly.
 """
+
 from __future__ import annotations
 
 import json
@@ -48,12 +49,12 @@ def test_greenhouse_maps_fields_and_dehtmls():
     assert len(jobs) == 1
     j = jobs[0]
     assert j.source == "greenhouse"
-    assert j.source_job_id == "4012345"          # stringified id
-    assert j.title == "Senior Data Scientist"    # stripped
+    assert j.source_job_id == "4012345"  # stringified id
+    assert j.title == "Senior Data Scientist"  # stripped
     assert j.company == "Acme"
     assert j.location == "Remote - US"
-    assert "Python" in j.description and "<" not in j.description   # de-HTML'd
-    assert j.date_posted == "2026-06-01"         # 10-char slice
+    assert "Python" in j.description and "<" not in j.description  # de-HTML'd
+    assert j.date_posted == "2026-06-01"  # 10-char slice
     assert j.raw["departments"] == ["Data", "Engineering"]
 
 
@@ -65,8 +66,8 @@ def test_lever_remote_salary_and_location_join():
 
     # remote posting: tri-state True, salary interval canonicalized, list-location joined
     assert remote.is_remote is True and remote.workplace_type == "remote"
-    assert remote.location == "Remote, US"        # the ", ".join branch
-    assert remote.salary_interval == "yearly"     # "per-year-salary" → yearly
+    assert remote.location == "Remote, US"  # the ", ".join branch
+    assert remote.salary_interval == "yearly"  # "per-year-salary" → yearly
     assert remote.salary_min == 180000 and remote.salary_max == 220000
 
     # on-site posting: tri-state False
@@ -81,13 +82,13 @@ def test_smartrecruiters_remote_tristate_and_urls():
     target = CompanyTarget(company="Acme", ats="smartrecruiters", token="AcmeCorp")
     client = _StubClient(
         _load("smartrecruiters_postings.json"),
-        _load("smartrecruiters_detail.json"),   # detail for posting-1
-        _load("smartrecruiters_detail.json"),   # detail for posting-2
+        _load("smartrecruiters_detail.json"),  # detail for posting-1
+        _load("smartrecruiters_detail.json"),  # detail for posting-2
     )
     jobs = smartrecruiters.fetch(target, client)
     assert len(jobs) == 2
     remote, other = jobs
-    assert remote.is_remote is True              # location.remote == true
+    assert remote.is_remote is True  # location.remote == true
     assert remote.title == "Senior Data Scientist"
     assert remote.url == "https://jobs.smartrecruiters.com/AcmeCorp/posting-1"
     assert remote.apply_url == "https://jobs.smartrecruiters.com/AcmeCorp/posting-1"

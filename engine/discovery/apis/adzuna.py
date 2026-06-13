@@ -4,6 +4,7 @@
       &results_per_page=20&what=<term>&content-type=application/json
 Skips silently if no keys are configured (stays $0).
 """
+
 from __future__ import annotations
 
 import os
@@ -15,8 +16,17 @@ from engine.normalize import Job
 from engine.util import html_to_text, to_float
 
 BASE = "https://api.adzuna.com/v1/api/jobs"
-CURRENCY = {"us": "USD", "gb": "GBP", "de": "EUR", "ca": "CAD", "au": "AUD",
-            "fr": "EUR", "es": "EUR", "nl": "EUR", "it": "EUR"}
+CURRENCY = {
+    "us": "USD",
+    "gb": "GBP",
+    "de": "EUR",
+    "ca": "CAD",
+    "au": "AUD",
+    "fr": "EUR",
+    "es": "EUR",
+    "nl": "EUR",
+    "it": "EUR",
+}
 
 
 def configured() -> bool:
@@ -34,27 +44,39 @@ def fetch(cfg: dict, search_terms: list[str], client: httpx.Client) -> list[Job]
     out: list[Job] = []
     for country in countries:
         for term in terms:
-            data = get_json(client, f"{BASE}/{country}/search/1", params={
-                "app_id": app_id, "app_key": app_key, "results_per_page": per,
-                "what": term, "content-type": "application/json",
-            })
+            data = get_json(
+                client,
+                f"{BASE}/{country}/search/1",
+                params={
+                    "app_id": app_id,
+                    "app_key": app_key,
+                    "results_per_page": per,
+                    "what": term,
+                    "content-type": "application/json",
+                },
+            )
             for r in data.get("results", []):
                 loc = (r.get("location") or {}).get("display_name")
-                out.append(Job(
-                    source="adzuna",
-                    source_job_id=str(r.get("id")),
-                    title=(r.get("title") or "").strip(),
-                    company=(r.get("company") or {}).get("display_name") or "Unknown",
-                    location=loc,
-                    url=r.get("redirect_url"),
-                    apply_url=r.get("redirect_url"),
-                    description=html_to_text(r.get("description")),
-                    employment_type=r.get("contract_time"),
-                    salary_min=to_float(r.get("salary_min")),
-                    salary_max=to_float(r.get("salary_max")),
-                    salary_currency=CURRENCY.get(country, "USD"),
-                    salary_interval="yearly",
-                    date_posted=(r.get("created") or "")[:10] or None,
-                    raw={"country": country, "category": (r.get("category") or {}).get("label")},
-                ))
+                out.append(
+                    Job(
+                        source="adzuna",
+                        source_job_id=str(r.get("id")),
+                        title=(r.get("title") or "").strip(),
+                        company=(r.get("company") or {}).get("display_name") or "Unknown",
+                        location=loc,
+                        url=r.get("redirect_url"),
+                        apply_url=r.get("redirect_url"),
+                        description=html_to_text(r.get("description")),
+                        employment_type=r.get("contract_time"),
+                        salary_min=to_float(r.get("salary_min")),
+                        salary_max=to_float(r.get("salary_max")),
+                        salary_currency=CURRENCY.get(country, "USD"),
+                        salary_interval="yearly",
+                        date_posted=(r.get("created") or "")[:10] or None,
+                        raw={
+                            "country": country,
+                            "category": (r.get("category") or {}).get("label"),
+                        },
+                    )
+                )
     return out
