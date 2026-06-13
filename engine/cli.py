@@ -151,6 +151,61 @@ def tailor(job_id: str,
 
 
 @app.command()
+def outreach(job_id: str, language: str = typer.Option("en", help="en | es")) -> None:
+    """Draft all outreach variants for a job (cover/recruiter/HM/referral/cold/note)."""
+    from engine.outreach.build import build_outreach
+    with _db() as db:
+        drafts = build_outreach(db, job_id, language=language)
+    console.print(f"Drafted [green]{len(drafts)}[/] messages for {job_id}:")
+    for d in drafts:
+        console.print(f"  • {d.kind} ({d.channel})")
+
+
+@app.command()
+def prep(job_id: str, language: str = typer.Option("en", help="en | es")) -> None:
+    """Full prep for one job: tailor CV → draft outreach → write the send-ready package."""
+    from engine.cv.build import build_for_job
+    from engine.outreach.build import build_outreach, write_package
+    with _db() as db:
+        cv = build_for_job(db, job_id, language=language)
+        build_outreach(db, job_id, language=language)
+        pkg = write_package(db, job_id, language=language)
+    console.print(f"[bold green]Ready[/]: {job_id}")
+    console.print(f"  Coverage {cv.coverage:.0%} · parse {'✓' if cv.parse_ok else '✗'}")
+    console.print(f"  Package: {pkg}")
+
+
+@app.command(name="import-connections")
+def import_connections(csv_path: str) -> None:
+    """Import a LinkedIn Connections.csv export to power referral detection."""
+    from pathlib import Path
+    from engine.referrals.connections import import_connections_csv
+    with _db() as db:
+        n = import_connections_csv(db, Path(csv_path))
+    console.print(f"Imported [green]{n}[/] connections.")
+
+
+@app.command()
+def referrals() -> None:
+    """Show shortlisted jobs where you have a 1st-degree connection at the company."""
+    from engine.referrals.connections import match_referrals
+    with _db() as db:
+        jobs = db.list_jobs(states=["shortlisted", "tailored", "drafted", "ready"])
+        rows = [(j, match_referrals(db, j.get("company", ""))) for j in jobs]
+    rows = [(j, r) for j, r in rows if r]
+    if not rows:
+        console.print("No referral matches yet. Import your Connections.csv first.")
+        return
+    table = Table(title="Referral opportunities")
+    for col in ("company", "role", "connection", "title"):
+        table.add_column(col)
+    for j, r in rows:
+        c = r[0]
+        table.add_row(j["company"], (j["title"] or "")[:32], c["name"], (c.get("title") or "")[:30])
+    console.print(table)
+
+
+@app.command()
 def status() -> None:
     """Show pipeline counts and the latest health of each source."""
     with _db() as db:
