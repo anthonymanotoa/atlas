@@ -1,5 +1,14 @@
 import * as Dialog from "@radix-ui/react-dialog";
-import { Command as CmdIcon, Loader2, Moon, RefreshCw, Search, Sun, X } from "lucide-react";
+import {
+  Command as CmdIcon,
+  Loader2,
+  Moon,
+  RefreshCw,
+  Search,
+  Settings as SettingsIcon,
+  Sun,
+  X,
+} from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, type Action, type Job, type Overview, type Profile } from "./api";
 import { AnalyticsStrip } from "./components/AnalyticsStrip";
@@ -8,6 +17,7 @@ import { CommandPalette } from "./components/CommandPalette";
 import { DetailDrawer } from "./components/DetailDrawer";
 import { FilterBar, type Filters } from "./components/FilterBar";
 import { NeedsAction } from "./components/NeedsAction";
+import { SettingsModal } from "./components/SettingsModal";
 
 export default function App() {
   const [ov, setOv] = useState<Overview | null>(null);
@@ -20,6 +30,7 @@ export default function App() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [briefOpen, setBriefOpen] = useState(false);
   const [brief, setBrief] = useState("");
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [searching, setSearching] = useState(false);
   const [filters, setFilters] = useState<Filters>({
     onlySalary: false,
@@ -183,6 +194,13 @@ export default function App() {
           </button>
           <button
             className="btn !py-1.5"
+            title="Ajustes y exportar CSV"
+            onClick={() => setSettingsOpen(true)}
+          >
+            <SettingsIcon size={14} />
+          </button>
+          <button
+            className="btn !py-1.5"
             title="Tema claro / oscuro"
             onClick={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}
           >
@@ -215,6 +233,7 @@ export default function App() {
       <FilterBar filters={filters} setFilters={setFilters} languages={languages} />
       <Board columns={columns} jobs={filteredJobs} onOpen={setSelected} onMove={move} />
 
+      <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
       <DetailDrawer jobId={selected} onClose={() => setSelected(null)} onChanged={load} />
       <CommandPalette
         open={paletteOpen}

@@ -16,7 +16,7 @@ from urllib.parse import urlsplit
 
 from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -117,6 +117,11 @@ class PrepBody(BaseModel):
 
 class ProfileBody(BaseModel):
     id: str
+
+
+class SettingBody(BaseModel):
+    key: str
+    value: str
 
 
 # ── API ──────────────────────────────────────────────────────────────────────
@@ -311,6 +316,61 @@ def api_cv_download(job_id: str, version_id: int, fmt: str = "docx", db: DB = De
 @app.get("/api/health")
 def health():
     return {"ok": True}
+
+
+# ── Settings + CSV export (P1-B) ──────────────────────────────────────────────
+# Per-profile, stored in the profile's own `meta` KV table (no schema change).
+ALLOWED_SETTINGS = {"download_dir", "csv_columns"}
+
+
+@app.get("/api/settings")
+def api_settings(db: DB = Depends(get_db)):
+    return {k: db.meta_get(k) for k in ALLOWED_SETTINGS}
+
+
+@app.post("/api/settings", dependencies=[Depends(require_trusted_origin)])
+def api_set_setting(body: SettingBody, db: DB = Depends(get_db)):
+    if body.key not in ALLOWED_SETTINGS:
+        raise HTTPException(400, "unknown setting")
+    value = body.value
+    if body.key == "download_dir" and value:
+        from engine.export import validate_download_dir
+
+        try:
+            value = validate_download_dir(value)
+        except ValueError as e:
+            raise HTTPException(400, str(e)) from None
+    db.meta_set(body.key, value)
+    return {"ok": True, "key": body.key, "value": value}
+
+
+@app.get("/api/csv/columns")
+def api_csv_columns(db: DB = Depends(get_db)):
+    from engine import export
+
+    return {
+        "available": export.available_columns(),
+        "selected": export.resolve_columns(None, db.meta_get("csv_columns")),
+    }
+
+
+@app.get("/api/export")
+def api_export(columns: str | None = None, state: str | None = None, db: DB = Depends(get_db)):
+    """Stream the job list as a CSV attachment; the browser saves it where the user picks.
+
+    `columns` (comma list) overrides the saved/default template for this one export.
+    """
+    from engine import export
+
+    requested = [c.strip() for c in columns.split(",") if c.strip()] if columns else None
+    cols = export.resolve_columns(requested, db.meta_get("csv_columns"))
+    jobs = db.list_jobs(state=state, limit=5000)
+    text = export.generate_csv(jobs, cols)
+    return Response(
+        content=text,
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": 'attachment; filename="atlas_jobs.csv"'},
+    )
 
 
 # ── Profiles (selector, no password — profile *selection* on a trusted local box) ─────

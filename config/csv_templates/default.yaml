@@ -1,0 +1,14 @@
+# Atlas CSV export template — edit this list to change the default CSV "design".
+# Column ids come from engine/export.py:COLUMNS. Order here = column order in the CSV.
+# You can also customise + save a template from the dashboard's Export modal (stored
+# per-profile), which takes precedence over this file.
+columns:
+  - title
+  - company
+  - fit_score
+  - state
+  - salary
+  - language
+  - posted_days
+  - is_remote
+  - apply_url
