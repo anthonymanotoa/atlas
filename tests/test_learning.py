@@ -67,6 +67,26 @@ def test_score_job_applies_high_confidence_learning_only():
     assert low.score == base.score  # below confidence gate → ignored
 
 
+def test_rejection_rate_learning_is_informational_not_a_penalty():
+    crit = Criteria(roles=["data scientist"], remote_required=False)
+    job = {"title": "Senior Data Scientist", "description": "python sql", "company": "Acme"}
+    base = score_job(job, crit)
+    # A 0-rejection (or any rejection_rate) learning must NOT lower the score — only inform.
+    with_rej = score_job(
+        job,
+        crit,
+        [
+            {
+                "pattern_type": "rejection_rate",
+                "observation": "Rechazo en 0/4 casos",
+                "confidence": 0.9,
+            }
+        ],
+    )
+    assert with_rej.score == base.score
+    assert any("Rechazo" in r for r in with_rej.reasons)
+
+
 def test_feedback_disagree_halves_confidence(tmp_path):
     db = DB(tmp_path / "b.db")
     try:

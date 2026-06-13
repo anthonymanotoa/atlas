@@ -56,7 +56,10 @@ def get_json(client: httpx.Client, url: str, params: dict | None = None, retries
             _limiter().wait(url)
             r = client.get(url, params=params)
             if r.status_code == 429:
-                wait = float(r.headers.get("Retry-After", 2**attempt * 3))
+                try:  # Retry-After may be seconds OR an HTTP-date; fall back on a date
+                    wait = float(r.headers.get("Retry-After", 2**attempt * 3))
+                except ValueError:
+                    wait = 2**attempt * 3
                 time.sleep(min(wait, 20))
                 last = httpx.HTTPStatusError("429", request=r.request, response=r)
                 continue
@@ -84,7 +87,10 @@ def post_json(client: httpx.Client, url: str, json: dict | None = None, retries:
             _limiter().wait(url)
             r = client.post(url, json=json)
             if r.status_code == 429:
-                wait = float(r.headers.get("Retry-After", 2**attempt * 3))
+                try:  # Retry-After may be seconds OR an HTTP-date; fall back on a date
+                    wait = float(r.headers.get("Retry-After", 2**attempt * 3))
+                except ValueError:
+                    wait = 2**attempt * 3
                 time.sleep(min(wait, 20))
                 last = httpx.HTTPStatusError("429", request=r.request, response=r)
                 continue
