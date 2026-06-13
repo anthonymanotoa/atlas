@@ -83,6 +83,7 @@ export type Referral = {
   linkedin_url?: string;
 };
 export type Profile = { id: string; label: string; is_owner?: boolean };
+export type CsvColumn = { id: string; label: string };
 export type JobDetail = {
   job: Job;
   cv_versions: CvVersion[];
@@ -123,4 +124,16 @@ export const api = {
     `/api/cv/${jobId}/${vid}/download?fmt=${fmt}`,
   profiles: () => get<{ profiles: Profile[]; active: string }>("/api/profiles"),
   switchProfile: (id: string) => post<{ ok: boolean; active: string }>("/api/profile", { id }),
+  // settings + CSV export (P1-B)
+  settings: () => get<Record<string, string | null>>("/api/settings"),
+  setSetting: (key: string, value: string) =>
+    post<{ ok: boolean; key: string; value: string }>("/api/settings", { key, value }),
+  csvColumns: () => get<{ available: CsvColumn[]; selected: string[] }>("/api/csv/columns"),
+  exportUrl: (columns?: string[], state?: string) => {
+    const p = new URLSearchParams();
+    if (columns?.length) p.set("columns", columns.join(","));
+    if (state) p.set("state", state);
+    const q = p.toString();
+    return `/api/export${q ? `?${q}` : ""}`;
+  },
 };

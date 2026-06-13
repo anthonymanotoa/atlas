@@ -119,6 +119,35 @@ def test_mutating_post_allows_allowlisted_origin(atlas_app):
     assert resp.status_code != 403
 
 
+# ── P1-B: settings + CSV export ────────────────────────────────────────────────
+def test_settings_roundtrip_and_whitelist(atlas_app):
+    with TestClient(atlas_app) as client:
+        assert client.post("/api/settings", json={"key": "evil", "value": "x"}).status_code == 400
+        r = client.post(
+            "/api/settings", json={"key": "csv_columns", "value": '["title","company"]'}
+        )
+        assert r.status_code == 200
+        assert client.get("/api/settings").json()["csv_columns"] == '["title","company"]'
+
+
+def test_export_csv_headers_and_columns(atlas_app):
+    with TestClient(atlas_app) as client:
+        _seed_job("shortlisted")
+        r = client.get("/api/export?columns=title,company")
+    assert r.status_code == 200
+    assert "text/csv" in r.headers["content-type"]
+    assert "attachment" in r.headers["content-disposition"]
+    assert "Puesto,Empresa" in r.text and "Data Scientist,Acme" in r.text
+
+
+def test_csv_columns_lists_catalog(atlas_app):
+    with TestClient(atlas_app) as client:
+        r = client.get("/api/csv/columns").json()
+    ids = {c["id"] for c in r["available"]}
+    assert {"title", "company", "salary"} <= ids
+    assert r["selected"]
+
+
 # ── Plan 019: dashboard-triggered discover→score (deterministic, keyless) ──────
 def test_discover_endpoint_runs_deterministic_pipeline(atlas_app, monkeypatch):
     import engine.discovery.runner as runner_mod

@@ -361,6 +361,32 @@ def status() -> None:
         console.print(table)
 
 
+@app.command(name="export")
+def export_csv(
+    state: str | None = typer.Option(None, help="Limit to a pipeline state (e.g. shortlisted)."),
+    columns: str | None = typer.Option(None, help="Comma list of column ids (else saved/default)."),
+    to: str | None = typer.Option(
+        None, "--to", help="Output dir (else your download_dir setting, else the outbox)."
+    ),
+) -> None:
+    """Export jobs to CSV using your editable template, into your chosen folder."""
+    from datetime import UTC, datetime
+    from pathlib import Path
+
+    from engine import export as exp
+
+    requested = [c.strip() for c in columns.split(",") if c.strip()] if columns else None
+    with _db() as db:
+        cols = exp.resolve_columns(requested, db.meta_get("csv_columns"))
+        jobs = db.list_jobs(state=state, limit=5000)
+        dest_raw = to or db.meta_get("download_dir") or str(paths.OUTBOX_DIR)
+        text = exp.generate_csv(jobs, cols)
+    dest = Path(exp.validate_download_dir(dest_raw))
+    out = dest / f"atlas_jobs_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}.csv"
+    out.write_text(text, encoding="utf-8")
+    console.print(f"[green]✓[/] Exporté {len(jobs)} filas → {out}")
+
+
 @app.command(name="resolve-ats")
 def resolve_ats(url: str) -> None:
     """Detect which ATS a company careers URL uses (for companies.yaml)."""
