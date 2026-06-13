@@ -13,7 +13,7 @@ from engine.config import load_master_cv
 from engine.cv.tailor import detect_ats
 from engine.db.models import DB
 from engine.outreach.templates import Draft, build_package
-from engine.paths import OUTBOX_DIR
+import engine.paths as paths
 from engine.referrals.connections import match_referrals
 
 
@@ -75,7 +75,7 @@ def write_package(db: DB, job_id: str, language: str = "en") -> Path:
                        apply_url=job.get("apply_url") or job.get("url"),
                        cv_version_id=cv.get("id"), status="ready")
 
-    out = OUTBOX_DIR / job_id
+    out = paths.OUTBOX_DIR / job_id
     out.mkdir(parents=True, exist_ok=True)
     lines = [
         f"# {job.get('title','')} — {job.get('company','')}",

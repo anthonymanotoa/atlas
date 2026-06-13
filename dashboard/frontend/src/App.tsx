@@ -1,7 +1,7 @@
 import * as Dialog from "@radix-ui/react-dialog";
 import { Command as CmdIcon, Moon, RefreshCw, Sun, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
-import { api, type Action, type Job, type Overview } from "./api";
+import { api, type Action, type Job, type Overview, type Profile } from "./api";
 import { AnalyticsStrip } from "./components/AnalyticsStrip";
 import { Board } from "./components/Board";
 import { CommandPalette } from "./components/CommandPalette";
@@ -14,6 +14,8 @@ export default function App() {
   const [columns, setColumns] = useState<string[]>([]);
   const [jobs, setJobs] = useState<Record<string, Job[]>>({});
   const [selected, setSelected] = useState<string | null>(null);
+  const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [activeProfile, setActiveProfile] = useState<string>("");
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [briefOpen, setBriefOpen] = useState(false);
   const [brief, setBrief] = useState("");
@@ -25,12 +27,22 @@ export default function App() {
   }, [theme]);
 
   const load = useCallback(async () => {
-    const [o, b] = await Promise.all([api.overview(), api.board()]);
+    const [o, b, p] = await Promise.all([api.overview(), api.board(), api.profiles()]);
     setOv(o.overview);
     setActions(o.needs_action);
     setColumns(b.columns);
     setJobs(b.jobs);
+    setProfiles(p.profiles);
+    setActiveProfile(p.active);
   }, []);
+
+  async function switchProfile(id: string) {
+    if (id === activeProfile) return;
+    setActiveProfile(id);            // optimistic
+    await api.switchProfile(id);
+    setSelected(null);               // a job from the old profile shouldn't stay open
+    await load();
+  }
 
   useEffect(() => { load(); }, [load]);
 
@@ -84,6 +96,20 @@ export default function App() {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {profiles.length > 0 && (
+            <select
+              className="btn !py-1.5 cursor-pointer"
+              title="Perfil activo"
+              value={activeProfile}
+              onChange={(e) => switchProfile(e.target.value)}
+            >
+              {profiles.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.label}{p.is_owner ? " ★" : ""}
+                </option>
+              ))}
+            </select>
+          )}
           <button className="btn !py-1.5" onClick={() => setPaletteOpen(true)}>
             <CmdIcon size={14} /> K
           </button>
