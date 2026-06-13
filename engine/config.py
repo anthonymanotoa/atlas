@@ -11,15 +11,13 @@ from typing import Any, Optional
 import yaml
 from pydantic import BaseModel, Field
 
-from engine.paths import (
-    COMPANIES_PATH, CRITERIA_PATH, MASTER_CV_PATH, ONTOLOGY_PATH, SOURCES_PATH,
-    example_fallback,
-)
+import engine.paths as paths
+from engine.paths import example_fallback
 
 
 def load_master_cv() -> dict:
     """Load the private master_cv.yaml, falling back to the committed example."""
-    path = example_fallback(MASTER_CV_PATH)
+    path = example_fallback(paths.MASTER_CV_PATH)
     if not path.exists():
         return {}
     return yaml.safe_load(path.read_text()) or {}
@@ -57,7 +55,7 @@ def _split_frontmatter(text: str) -> tuple[dict[str, Any], str]:
 
 
 def load_criteria() -> Criteria:
-    path = example_fallback(CRITERIA_PATH)
+    path = example_fallback(paths.CRITERIA_PATH)
     if not path.exists():
         return Criteria()
     meta, prose = _split_frontmatter(path.read_text())
@@ -76,7 +74,7 @@ class CompanyTarget(BaseModel):
 
 
 def load_companies() -> list[CompanyTarget]:
-    path = example_fallback(COMPANIES_PATH)
+    path = example_fallback(paths.COMPANIES_PATH)
     if not path.exists():
         return []
     data = yaml.safe_load(path.read_text()) or {}
@@ -85,7 +83,7 @@ def load_companies() -> list[CompanyTarget]:
 
 # ── sources ──────────────────────────────────────────────────────────────────
 def load_sources() -> dict[str, Any]:
-    path = example_fallback(SOURCES_PATH)
+    path = example_fallback(paths.SOURCES_PATH)
     if not path.exists():
         return {}
     return yaml.safe_load(path.read_text()) or {}
@@ -94,7 +92,7 @@ def load_sources() -> dict[str, Any]:
 # ── ontology (skills gazetteer) ──────────────────────────────────────────────
 def load_ontology() -> dict[str, list[str]]:
     """canonical skill -> [aliases/acronyms]. Used by keyword extraction + tailoring."""
-    path = example_fallback(ONTOLOGY_PATH)
+    path = example_fallback(paths.ONTOLOGY_PATH)
     if not path.exists():
         return {}
     data = yaml.safe_load(path.read_text()) or {}

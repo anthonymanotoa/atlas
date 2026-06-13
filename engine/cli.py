@@ -13,7 +13,8 @@ from rich.console import Console
 from rich.table import Table
 
 from engine import __version__
-from engine.paths import DB_PATH, REPO_ROOT
+import engine.paths as paths
+from engine.paths import REPO_ROOT
 
 # Load .env (Adzuna keys etc.) without overriding a real shell env.
 try:
@@ -24,6 +25,29 @@ except Exception:  # noqa: BLE001
 
 app = typer.Typer(add_completion=False, help="Atlas — personal job-search cockpit (local, $0).")
 console = Console()
+
+
+@app.callback()
+def _main(
+    profile: Optional[str] = typer.Option(
+        None, "--profile", help="Profile (account) to act on. Default: the active profile."
+    ),
+) -> None:
+    """Atlas — personal job-search cockpit (local, $0)."""
+    if not profile:
+        return
+    from engine import profiles
+    if not profiles.valid_id(profile):
+        console.print(f"[red]✗[/] id de perfil inválido: {profile!r}")
+        raise typer.Exit(2)
+    # If profiles already exist, an unknown id is almost certainly a typo — don't silently
+    # spawn a junk profile dir.
+    if profiles.list_profiles() and not profiles.exists(profile):
+        console.print(f"[red]✗[/] perfil desconocido: {profile!r}. "
+                      f"Créalo con `atlas profiles create {profile}`.")
+        raise typer.Exit(2)
+    os.environ["ATLAS_PROFILE"] = profile  # agree with any child process / re-import
+    paths.set_profile(profile)
 
 
 def _db():
@@ -58,7 +82,8 @@ def doctor() -> None:
     else:
         console.print("[green]✓[/] ANTHROPIC_BASE_URL is default/unset.")
 
-    console.print(f"[green]✓[/] DB path: {DB_PATH}")
+    console.print(f"[green]✓[/] Active profile: {paths.PROFILE_ID or 'legacy'}")
+    console.print(f"[green]✓[/] DB path: {paths.DB_PATH}")
     console.print("\n[bold]Manual checklist for a true $0 guarantee:[/]")
     console.print("  1. Run the brain as a Claude [bold]Cowork/Desktop scheduled task[/] "
                   "(never `claude -p`).")
@@ -203,10 +228,16 @@ def brain(limit: int = typer.Option(8, help="Max jobs to fully prepare this run.
                                         help="Emit the run summary as JSON (for the orchestrator).")) -> None:
     """Run the full daily pipeline: discover → score → prepare → brief. Sends nothing."""
     import sys
+    from engine import profiles
+    # The auto-run is the owner's, on the owner's Claude subscription. Refuse to run it for
+    # another profile so a stray `--profile alex brain` can't burn the owner's budget.
+    if not profiles.is_owner(paths.PROFILE_ID):
+        console.print("[red]✗[/] El brain (auto-run) solo corre para el perfil del dueño. "
+                      f"Activo: {paths.PROFILE_ID}. Usa `atlas --profile owner brain`.")
+        raise typer.Exit(1)
     if str(REPO_ROOT) not in sys.path:
         sys.path.insert(0, str(REPO_ROOT))
     from brain.run_brain import run
-    from engine.paths import OUTBOX_DIR
     with _db() as db:
         s = run(db, limit=limit, language=language, do_discover=discover)
     if json_out:
@@ -218,7 +249,7 @@ def brain(limit: int = typer.Option(8, help="Max jobs to fully prepare this run.
                   f"follow-ups {s['followups']}.")
     if s.get("downtime_hours"):
         console.print(f"[yellow]⚠️ Was down ~{s['downtime_hours']:.0f}h[/] before this run.")
-    console.print(f"Morning brief: {OUTBOX_DIR / 'MORNING_BRIEF.md'}")
+    console.print(f"Morning brief: {paths.OUTBOX_DIR / 'MORNING_BRIEF.md'}")
 
 
 @app.command()
@@ -267,6 +298,56 @@ def resolve_ats(url: str) -> None:
     from engine.discovery.registry import resolve_ats as resolve
     result = resolve(url)
     console.print(result or "[yellow]No known ATS detected[/]")
+
+
+# ── profiles (accounts) ───────────────────────────────────────────────────────
+profiles_app = typer.Typer(help="Manage Atlas profiles (accounts) — local, no password.")
+app.add_typer(profiles_app, name="profiles")
+
+
+@profiles_app.command("init")
+def profiles_init() -> None:
+    """One-time migration of your current data into the 'owner' profile (idempotent)."""
+    from engine import profiles
+    res = profiles.init_owner()
+    if res["migrated"]:
+        console.print(f"[green]✓[/] Migrado a perfil [bold]owner[/] → {res['root']}")
+    else:
+        console.print("[dim]El perfil owner ya existe; nada que migrar.[/]")
+    console.print(f"Perfiles: {', '.join(p['id'] for p in profiles.list_profiles())}")
+
+
+@profiles_app.command("create")
+def profiles_create(
+    profile_id: str = typer.Argument(..., help="id corto: minúsculas, dígitos, '-' o '_'."),
+    label: Optional[str] = typer.Option(None, "--label", help="Nombre visible en el selector."),
+) -> None:
+    """Create a new profile seeded from the templates, ready to edit."""
+    from engine import profiles
+    try:
+        res = profiles.create_profile(profile_id, label)
+    except ValueError as e:
+        console.print(f"[red]✗[/] {e}")
+        raise typer.Exit(2)
+    verb = "Creado" if res["created"] else "Ya existía"
+    console.print(f"[green]✓[/] {verb} perfil [bold]{profile_id}[/] → {res['root']}")
+    console.print(f"  Edita: profiles/{profile_id}/config/criteria.md · "
+                  f"profiles/{profile_id}/profile/master_cv.yaml")
+
+
+@profiles_app.command("list")
+def profiles_list() -> None:
+    """List profiles and show which one is active."""
+    from engine import profiles
+    active = profiles.get_active()
+    rows = profiles.list_profiles()
+    if not rows:
+        console.print("Sin perfiles todavía. Corre `atlas profiles init`.")
+        return
+    for p in rows:
+        mark = "[green]●[/]" if p["id"] == active else " "
+        owner = " [dim](dueño)[/]" if p.get("is_owner") else ""
+        console.print(f"  {mark} [bold]{p['id']}[/]{owner} — {p.get('label', '')}")
 
 
 if __name__ == "__main__":

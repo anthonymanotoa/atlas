@@ -15,10 +15,11 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from engine import analytics
+from engine import analytics, profiles
 from engine.db.models import DB
 from engine.normalize import STATES, now_iso
-from engine.paths import OUTBOX_DIR, REPO_ROOT
+import engine.paths as paths
+from engine.paths import REPO_ROOT
 
 app = FastAPI(title="Atlas", docs_url="/api/docs")
 app.add_middleware(
@@ -33,6 +34,10 @@ class StateBody(BaseModel):
 
 class PrepBody(BaseModel):
     language: Literal["en", "es"] = "en"  # constrained: never reaches the CV output path as a raw string
+
+
+class ProfileBody(BaseModel):
+    id: str
 
 
 # ── API ──────────────────────────────────────────────────────────────────────
@@ -119,7 +124,7 @@ def api_mark_sent(message_id: int):
 
 @app.get("/api/brief")
 def api_brief():
-    path = OUTBOX_DIR / "MORNING_BRIEF.md"
+    path = paths.OUTBOX_DIR / "MORNING_BRIEF.md"
     return {"markdown": path.read_text() if path.exists() else "# Sin resumen todavía\n\nEjecuta `atlas brain`."}
 
 
@@ -134,7 +139,7 @@ def api_cv_download(job_id: str, version_id: int, fmt: str = "docx"):
         raise HTTPException(404, f"{fmt} file not available")
     p = Path(path).resolve()
     # Confine downloads to the outbox: never serve a file outside data/outbox, whatever the DB row says.
-    if not p.is_relative_to(OUTBOX_DIR.resolve()) or not p.exists():
+    if not p.is_relative_to(paths.OUTBOX_DIR.resolve()) or not p.exists():
         raise HTTPException(404, f"{fmt} file not available")
     media = ("application/pdf" if fmt == "pdf"
              else "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
@@ -144,6 +149,24 @@ def api_cv_download(job_id: str, version_id: int, fmt: str = "docx"):
 @app.get("/api/health")
 def health():
     return {"ok": True}
+
+
+# ── Profiles (selector, no password — profile *selection* on a trusted local box) ─────
+@app.get("/api/profiles")
+def api_profiles():
+    return {"profiles": profiles.list_profiles(), "active": paths.PROFILE_ID or profiles.OWNER_ID}
+
+
+@app.post("/api/profile")
+def api_switch_profile(body: ProfileBody):
+    """Flip the active profile in-process. The next `with DB()` opens that profile's DB."""
+    if not profiles.valid_id(body.id):
+        raise HTTPException(400, "invalid profile id")
+    if not profiles.exists(body.id):
+        raise HTTPException(404, "unknown profile")
+    profiles.set_active(body.id)      # persist registry.json "active"
+    paths.set_profile(body.id)        # re-point the path globals in this worker
+    return {"ok": True, "active": body.id}
 
 
 # ── Serve the built frontend (if present) ────────────────────────────────────

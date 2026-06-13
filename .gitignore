@@ -8,6 +8,9 @@ config/companies.yaml
 config/sources.local.yaml
 data/
 !data/.gitkeep
+# Per-profile runtime state (DB, config, master CV, registry). Committed seeds stay at
+# the repo root (config/*.example.*, config/sources.yaml, profile/master_cv.example.yaml).
+profiles/
 *.db
 *.db-wal
 *.db-shm

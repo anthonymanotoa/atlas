@@ -15,8 +15,9 @@ import sqlite3
 from pathlib import Path
 from typing import Any, Iterable, Optional
 
+import engine.paths as paths
 from engine.normalize import Job, STAGE_TIMESTAMP_COLS, now_iso
-from engine.paths import DB_PATH, ensure_dirs
+from engine.paths import ensure_dirs
 
 _SCHEMA = Path(__file__).with_name("schema.sql")
 
@@ -31,8 +32,15 @@ def _loads(v: Optional[str], default: Any) -> Any:
 
 
 class DB:
-    def __init__(self, path: Path | str = DB_PATH):
-        ensure_dirs()
+    def __init__(self, path: Path | str | None = None):
+        # Read paths.DB_PATH late so DB() follows the active profile; an explicit path
+        # (e.g. in tests) still wins and only its own parent is created — never the
+        # active profile's dirs.
+        if path is None:
+            path = paths.DB_PATH
+            ensure_dirs()
+        else:
+            Path(path).parent.mkdir(parents=True, exist_ok=True)
         self.conn = sqlite3.connect(str(path))
         self.conn.row_factory = sqlite3.Row
         self.conn.execute("PRAGMA journal_mode=WAL")

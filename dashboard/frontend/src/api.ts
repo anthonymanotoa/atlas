@@ -55,6 +55,7 @@ export type CvVersion = {
   keyword_coverage?: number; matched_keywords?: string; missing_keywords?: string; parse_ok?: number;
 };
 export type Referral = { id: number; name: string; company?: string; title?: string; linkedin_url?: string };
+export type Profile = { id: string; label: string; is_owner?: boolean };
 export type JobDetail = {
   job: Job;
   cv_versions: CvVersion[];
@@ -88,4 +89,6 @@ export const api = {
   markSent: (mid: number) => post(`/api/messages/${mid}/sent`),
   brief: () => get<{ markdown: string }>("/api/brief"),
   cvDownload: (jobId: string, vid: number, fmt = "docx") => `/api/cv/${jobId}/${vid}/download?fmt=${fmt}`,
+  profiles: () => get<{ profiles: Profile[]; active: string }>("/api/profiles"),
+  switchProfile: (id: string) => post<{ ok: boolean; active: string }>("/api/profile", { id }),
 };

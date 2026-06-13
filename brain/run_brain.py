@@ -24,7 +24,7 @@ from engine.discovery.runner import discover
 from engine.normalize import now_iso
 from engine.outreach.build import build_outreach, write_package
 from engine.outreach.followups import followup_text
-from engine.paths import OUTBOX_DIR
+import engine.paths as paths
 from engine.referrals.connections import match_referrals
 from engine.scoring.run import score_jobs
 
@@ -105,7 +105,7 @@ def write_morning_brief(db: DB, summary: dict, language: str = "en") -> None:
     if health:
         lines += ["", "## ⚠️ Fuentes con problemas"]
         lines += [f"- {h['source']}: {(h['error'] or '')[:80]}" for h in health]
-    (OUTBOX_DIR / "MORNING_BRIEF.md").write_text("\n".join(lines))
+    (paths.OUTBOX_DIR / "MORNING_BRIEF.md").write_text("\n".join(lines))
 
 
 def main() -> None:
@@ -120,7 +120,7 @@ def main() -> None:
     print(json.dumps(summary, indent=2) if args.json else
           f"Brain done — {summary['shortlisted']} shortlisted, "
           f"{len(summary['prepared'])} prepared, {summary['followups']} follow-ups. "
-          f"Brief: {OUTBOX_DIR / 'MORNING_BRIEF.md'}")
+          f"Brief: {paths.OUTBOX_DIR / 'MORNING_BRIEF.md'}")
 
 
 if __name__ == "__main__":
