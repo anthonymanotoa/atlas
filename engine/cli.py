@@ -387,6 +387,39 @@ def export_csv(
     console.print(f"[green]✓[/] Exporté {len(jobs)} filas → {out}")
 
 
+@app.command()
+def outcome(
+    job_id: str = typer.Argument(..., help="Job id the outcome is for."),
+    state: str = typer.Option(..., help="rejected | responded | interviewed | offer | ghosted"),
+    response_days: int | None = typer.Option(None, help="Days until they responded."),
+    interviews: int = typer.Option(0, help="How many interview rounds happened."),
+    recruiter_source: str | None = typer.Option(
+        None, help="referral | recruiter | cold | inbound | unknown"
+    ),
+    reason: str | None = typer.Option(None, help="Short reason / feedback."),
+) -> None:
+    """Record a CONFIRMED application outcome and refresh this company's learnings (P2-D)."""
+    from engine.learning.runner import auto_learn
+
+    with _db() as db:
+        job = db.get_job(job_id)
+        if not job:
+            console.print(f"[red]✗[/] job desconocido: {job_id}")
+            raise typer.Exit(2)
+        db.record_outcome(
+            job_id,
+            job.get("company", ""),
+            final_state=state,
+            response_days=response_days,
+            interview_count=interviews,
+            offer_made=(state == "offer"),
+            recruiter_source=recruiter_source,
+            reason=reason,
+        )
+        n = auto_learn(db, job.get("company", ""))
+    console.print(f"[green]✓[/] Outcome registrado para {job.get('company')}. Learnings: {n}.")
+
+
 @app.command(name="resolve-ats")
 def resolve_ats(url: str) -> None:
     """Detect which ATS a company careers URL uses (for companies.yaml)."""

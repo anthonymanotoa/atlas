@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+from collections import defaultdict
+
 from engine.config import Criteria
 from engine.db.models import DB
+from engine.normalize import norm_company
 from engine.scoring.fit import score_job
 
 
@@ -17,9 +20,13 @@ def score_jobs(db: DB, criteria: Criteria, *, rescore: bool = False) -> tuple[in
         jobs = db.list_jobs(states=["discovered", "scored", "shortlisted"])
     else:
         jobs = db.list_jobs(state="discovered")
+    # Load per-company learnings once (P2-D) so the scorer can nudge by past outcomes.
+    learn_map: dict[str, list[dict]] = defaultdict(list)
+    for learning in db.all_learnings():
+        learn_map[learning["company"]].append(learning)
     scored = shortlisted = 0
     for j in jobs:
-        res = score_job(j, criteria)
+        res = score_job(j, criteria, learn_map.get(norm_company(j.get("company", ""))))
         db.set_fit(j["id"], res.score, res.reasons, res.knockouts)
         db.set_state(j["id"], "scored")  # always stamp scored_at (funnel accuracy)
         scored += 1

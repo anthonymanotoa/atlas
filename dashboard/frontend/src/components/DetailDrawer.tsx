@@ -1,7 +1,7 @@
 import * as Dialog from "@radix-ui/react-dialog";
 import { Check, Copy, Download, ExternalLink, FileText, Plus, Search, Send, X } from "lucide-react";
 import { useEffect, useState } from "react";
-import { api, type JobDetail, type SocialMention } from "../api";
+import { api, type JobDetail, type Learning, type SocialMention } from "../api";
 import { STATE_ES, copy, fitTone, freshLabel, langLabel, pct, salaryLabel } from "../lib";
 
 const KIND_ES: Record<string, string> = {
@@ -219,6 +219,88 @@ function SocialSearch({ jobId }: { jobId: string }) {
   );
 }
 
+// P2-D: record a HUMAN-confirmed outcome → feeds the per-company learning loop.
+function RecordOutcome({ jobId, onSaved }: { jobId: string; onSaved: () => void }) {
+  const [state, setState] = useState("rejected");
+  const [recruiterSource, setRecruiterSource] = useState("");
+  const [responseDays, setResponseDays] = useState("");
+  const [saved, setSaved] = useState(false);
+  async function save() {
+    await api.recordOutcome(jobId, {
+      final_state: state,
+      recruiter_source: recruiterSource || null,
+      response_days: responseDays ? Number(responseDays) : null,
+      offer_made: state === "offer",
+    });
+    setSaved(true);
+    setTimeout(() => setSaved(false), 1500);
+    onSaved();
+  }
+  return (
+    <div>
+      <div className="mb-2 text-sm font-semibold">Registrar resultado</div>
+      <div className="card space-y-2 p-3 text-sm">
+        <div className="flex flex-wrap gap-2">
+          <select
+            className="btn !py-1 text-xs"
+            value={state}
+            onChange={(e) => setState(e.target.value)}
+          >
+            <option value="rejected">Rechazado</option>
+            <option value="responded">Respondieron</option>
+            <option value="interviewed">Entrevista</option>
+            <option value="offer">Oferta</option>
+            <option value="ghosted">Sin respuesta</option>
+          </select>
+          <select
+            className="btn !py-1 text-xs"
+            value={recruiterSource}
+            onChange={(e) => setRecruiterSource(e.target.value)}
+          >
+            <option value="">Origen…</option>
+            <option value="referral">Referido</option>
+            <option value="recruiter">Reclutador</option>
+            <option value="cold">En frío</option>
+            <option value="inbound">Inbound</option>
+          </select>
+          <input
+            className="btn !justify-start w-24 text-xs"
+            placeholder="Días resp."
+            value={responseDays}
+            onChange={(e) => setResponseDays(e.target.value.replace(/\D/g, ""))}
+          />
+          <button className="btn !py-1 text-xs" onClick={save}>
+            {saved ? "Guardado ✓" : "Guardar"}
+          </button>
+        </div>
+        <div className="text-[0.72rem] text-[var(--color-faint)]">
+          Alimenta la memoria de Atlas (qué empresas convierten y cómo). Tú confirmas; el brain
+          nunca lo inventa.
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CompanyInsights({ learnings }: { learnings?: Learning[] }) {
+  if (!learnings || learnings.length === 0) return null;
+  return (
+    <div>
+      <div className="mb-2 text-sm font-semibold">🧠 Lo aprendido de esta empresa</div>
+      <div className="card space-y-1 p-3 text-sm">
+        {learnings.map((l) => (
+          <div key={l.id}>
+            {l.observation}{" "}
+            <span className="text-[0.72rem] text-[var(--color-faint)]">
+              · confianza {Math.round(l.confidence * 100)}%
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function DetailDrawer({
   jobId,
   onClose,
@@ -366,7 +448,17 @@ export function DetailDrawer({
                 </div>
               </div>
 
+              <CompanyInsights learnings={d.learnings} />
+
               <SocialSearch jobId={d.job.id} />
+
+              <RecordOutcome
+                jobId={d.job.id}
+                onSaved={() => {
+                  api.job(d.job.id).then(setD);
+                  onChanged();
+                }}
+              />
 
               <div className="flex gap-2 pt-2">
                 <button className="btn flex-1 justify-center" onClick={markApplied}>

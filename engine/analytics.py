@@ -167,6 +167,8 @@ def job_detail(db: DB, job_id: str) -> dict | None:
         "cv_versions": db.cv_versions_for(job_id),
         "messages": db.messages_for(job_id),
         "referrals": match_referrals(db, job.get("company", "")),
+        "social_mentions": db.social_mentions_for(job_id),
+        "learnings": db.learnings_for_company(job.get("company", "")),
         "timeline": _timeline(job),
     }
 

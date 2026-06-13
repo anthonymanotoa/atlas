@@ -103,11 +103,21 @@ export type OnboardingStatus = {
   cv_present: boolean;
   audit: { findings: Finding[]; summary: { high: number; med: number; low: number } };
 };
+export type Learning = {
+  id: number;
+  company: string;
+  pattern_type: string;
+  observation: string;
+  confidence: number;
+  evidence_count: number;
+};
 export type JobDetail = {
   job: Job;
   cv_versions: CvVersion[];
   messages: Message[];
   referrals: Referral[];
+  social_mentions?: SocialMention[];
+  learnings?: Learning[];
   timeline: { stage: string; at: string }[];
 };
 
@@ -150,6 +160,21 @@ export const api = {
   csvColumns: () => get<{ available: CsvColumn[]; selected: string[] }>("/api/csv/columns"),
   onboarding: () => get<OnboardingStatus>("/api/onboarding"),
   completeOnboarding: () => post<{ ok: boolean }>("/api/onboarding/complete"),
+  recordOutcome: (
+    id: string,
+    body: {
+      final_state: string;
+      response_days?: number | null;
+      interview_count?: number;
+      offer_made?: boolean;
+      recruiter_source?: string | null;
+      reason?: string | null;
+    },
+  ) => post<{ ok: boolean; learnings: Learning[] }>(`/api/jobs/${id}/outcome`, body),
+  learnings: (company?: string) =>
+    get<{ learnings: Learning[] }>(
+      `/api/learnings${company ? `?company=${encodeURIComponent(company)}` : ""}`,
+    ),
   socialMentions: (id: string) =>
     get<{ mentions: SocialMention[] }>(`/api/jobs/${id}/social_mentions`),
   startSocialSearch: (id: string) =>

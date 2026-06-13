@@ -124,6 +124,21 @@ class SettingBody(BaseModel):
     value: str
 
 
+class OutcomeBody(BaseModel):
+    final_state: str  # rejected | responded | interviewed | offer | ghosted
+    response_days: int | None = None
+    interview_count: int = 0
+    offer_made: bool = False
+    recruiter_source: str | None = None
+    reason: str | None = None
+    notes: str | None = None
+
+
+class FeedbackBody(BaseModel):
+    feedback_type: str  # agree | disagree
+    reasoning: str = ""
+
+
 class SocialMentionBody(BaseModel):
     platform: str = "linkedin"
     source_url: str | None = None
@@ -382,6 +397,43 @@ def api_export(columns: str | None = None, state: str | None = None, db: DB = De
         media_type="text/csv; charset=utf-8",
         headers={"Content-Disposition": 'attachment; filename="atlas_jobs.csv"'},
     )
+
+
+# ── Self-improving learning (P2-D): human-confirmed outcomes → per-company learnings ──
+@app.post("/api/jobs/{job_id}/outcome", dependencies=[Depends(require_trusted_origin)])
+def api_record_outcome(job_id: str, body: OutcomeBody, db: DB = Depends(get_db)):
+    from engine.learning.runner import auto_learn
+
+    job = db.get_job(job_id)
+    if not job:
+        raise HTTPException(404, "job not found")
+    company = job.get("company", "")
+    db.record_outcome(
+        job_id,
+        company,
+        final_state=body.final_state,
+        response_days=body.response_days,
+        interview_count=body.interview_count,
+        offer_made=body.offer_made or body.final_state == "offer",
+        recruiter_source=body.recruiter_source,
+        reason=body.reason,
+        notes=body.notes,
+    )
+    auto_learn(db, company)
+    return {"ok": True, "learnings": db.learnings_for_company(company)}
+
+
+@app.get("/api/learnings")
+def api_learnings(company: str | None = None, db: DB = Depends(get_db)):
+    return {"learnings": db.learnings_for_company(company) if company else db.all_learnings()}
+
+
+@app.post("/api/learnings/{learning_id}/feedback", dependencies=[Depends(require_trusted_origin)])
+def api_learning_feedback(learning_id: int, body: FeedbackBody, db: DB = Depends(get_db)):
+    db.record_learning_feedback(
+        learning_id, feedback_type=body.feedback_type, reasoning=body.reasoning
+    )
+    return {"ok": True}
 
 
 # ── Social signal (P2-C): supervised LinkedIn/X lookup — never auto-contacts ──
