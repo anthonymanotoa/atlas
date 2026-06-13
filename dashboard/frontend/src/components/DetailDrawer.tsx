@@ -156,13 +156,18 @@ export function DetailDrawer({
               )}
 
               {d.cv_versions[0] && (
-                <a
-                  href={api.cvDownload(d.job.id, d.cv_versions[0].id)}
-                  className="btn btn-accent w-full justify-center"
-                >
-                  <FileText size={15} /> Descargar CV adaptado (.docx)
-                  <Download size={14} />
-                </a>
+                <div className="flex gap-2">
+                  {d.cv_versions[0].path_pdf && (
+                    <a href={api.cvDownload(d.job.id, d.cv_versions[0].id, "pdf")}
+                       className="btn btn-accent flex-1 justify-center">
+                      <FileText size={15} /> CV PDF <Download size={14} />
+                    </a>
+                  )}
+                  <a href={api.cvDownload(d.job.id, d.cv_versions[0].id, "docx")}
+                     className="btn flex-1 justify-center">
+                    <FileText size={15} /> CV DOCX <Download size={14} />
+                  </a>
+                </div>
               )}
 
               <div>

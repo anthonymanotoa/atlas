@@ -112,16 +112,18 @@ def api_brief():
 
 
 @app.get("/api/cv/{job_id}/{version_id}/download")
-def api_cv_download(job_id: str, version_id: int):
+def api_cv_download(job_id: str, version_id: int, fmt: str = "docx"):
     with DB() as db:
         version = next((v for v in db.cv_versions_for(job_id) if v["id"] == version_id), None)
-    if not version or not version.get("path_docx"):
+    if not version:
         raise HTTPException(404, "cv version not found")
-    p = Path(version["path_docx"])
-    if not p.exists():
-        raise HTTPException(404, "file missing")
-    return FileResponse(str(p), filename=p.name,
-                        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+    path = version.get("path_pdf") if fmt == "pdf" else version.get("path_docx")
+    if not path or not Path(path).exists():
+        raise HTTPException(404, f"{fmt} file not available")
+    p = Path(path)
+    media = ("application/pdf" if fmt == "pdf"
+             else "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+    return FileResponse(str(p), filename=p.name, media_type=media)
 
 
 @app.get("/api/health")
