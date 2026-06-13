@@ -9,7 +9,7 @@ import httpx
 from engine.config import CompanyTarget
 from engine.discovery.http import get_json
 from engine.normalize import Job
-from engine.util import first, to_float
+from engine.util import canonical_salary_interval, first, to_float
 
 
 def _base(eu: bool) -> str:
@@ -43,7 +43,7 @@ def fetch(target: CompanyTarget, client: httpx.Client) -> list[Job]:
             salary_min=to_float(sal.get("min")),
             salary_max=to_float(sal.get("max")),
             salary_currency=sal.get("currency"),
-            salary_interval=(sal.get("interval") or "").replace("per-", "") or None,
+            salary_interval=canonical_salary_interval(sal.get("interval")),
             date_posted=None,
             raw={"team": cats.get("team"), "country": p.get("country")},
         ))

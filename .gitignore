@@ -1,6 +1,8 @@
 # ── Personal data — NEVER commit (this is the whole point) ───────────────────
 profile/master_cv.yaml
 profile/master_cv.*.yaml
+# Keep the committed template the setup steps tell you to copy (negation must be its own line):
+!profile/master_cv.example.yaml
 config/criteria.md
 config/companies.yaml
 config/sources.local.yaml

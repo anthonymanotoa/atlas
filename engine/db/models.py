@@ -117,7 +117,8 @@ class DB:
         if state:
             clauses.append("state=?"); params.append(state)
         if states:
-            placeholders = ",".join("?" * len(list(states)))
+            states = list(states)  # materialize once: a generator would be consumed by the count below
+            placeholders = ",".join("?" * len(states))
             clauses.append(f"state IN ({placeholders})"); params.extend(states)
         if clauses:
             q += " WHERE " + " AND ".join(clauses)
@@ -195,10 +196,16 @@ class DB:
             "SELECT * FROM messages WHERE job_id=? ORDER BY created_at", (job_id,)).fetchall()
         return [dict(r) for r in rows]
 
-    def has_message(self, job_id: str, kind: str) -> bool:
-        row = self.conn.execute(
-            "SELECT 1 FROM messages WHERE job_id=? AND kind=? LIMIT 1", (job_id, kind)
-        ).fetchone()
+    def has_message(self, job_id: str, kind: str, variant: Optional[str] = None) -> bool:
+        if variant is None:
+            row = self.conn.execute(
+                "SELECT 1 FROM messages WHERE job_id=? AND kind=? LIMIT 1", (job_id, kind)
+            ).fetchone()
+        else:
+            row = self.conn.execute(
+                "SELECT 1 FROM messages WHERE job_id=? AND kind=? AND variant=? LIMIT 1",
+                (job_id, kind, variant),
+            ).fetchone()
         return row is not None
 
     # ── contacts ─────────────────────────────────────────────────────────────
@@ -220,9 +227,14 @@ class DB:
         self.conn.commit()
         return int(cur.lastrowid)
 
-    def contacts_for_company(self, company_norm: str) -> list[dict]:
+    def all_contacts(self) -> list[dict]:
+        """Every contact. Callers that match many jobs load this ONCE and reuse it,
+        instead of re-scanning the table per job (fuzzy matching happens in the referrals layer)."""
         rows = self.conn.execute("SELECT * FROM contacts").fetchall()
-        return [dict(r) for r in rows]  # fuzzy matching happens in referrals layer
+        return [dict(r) for r in rows]
+
+    def contacts_for_company(self, company_norm: str) -> list[dict]:
+        return self.all_contacts()  # fuzzy matching happens in referrals layer
 
     # ── applications ─────────────────────────────────────────────────────────
     def add_application(self, job_id: str, *, method: str, apply_url: Optional[str],
@@ -247,6 +259,16 @@ class DB:
         )
         self.conn.commit()
         return int(cur.lastrowid)
+
+    def followups_for_job(self, job_id: str, channel: Optional[str] = None) -> list[dict]:
+        """ALL follow-up rows for a job (any state) — used by schedule() for idempotency."""
+        if channel is None:
+            rows = self.conn.execute(
+                "SELECT * FROM followups WHERE job_id=?", (job_id,)).fetchall()
+        else:
+            rows = self.conn.execute(
+                "SELECT * FROM followups WHERE job_id=? AND channel=?", (job_id, channel)).fetchall()
+        return [dict(r) for r in rows]
 
     def due_followups(self, as_of_iso: str) -> list[dict]:
         rows = self.conn.execute(

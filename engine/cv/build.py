@@ -10,6 +10,11 @@ from engine.cv import parse_check, render, tailor
 from engine.db.models import DB
 from engine.paths import OUTBOX_DIR
 
+# Languages the renderer supports. Also a hard guard: `language` is interpolated into the
+# output filename (cv_{language}.docx), so anything outside this set is rejected before it
+# can introduce path separators / traversal into the write path.
+ALLOWED_LANGUAGES = {"en", "es"}
+
 
 @dataclass
 class BuildResult:
@@ -30,6 +35,8 @@ def build_for_job(db: DB, job_id: str, *, language: str = "en",
                   cv_override: Optional[dict] = None, make_pdf: bool = True) -> BuildResult:
     """Generate a tailored, parse-safe CV for `job_id`. `cv_override` lets the brain
     pass an LLM-reworded (still truthful) CV dict instead of the deterministic one."""
+    if language not in ALLOWED_LANGUAGES:
+        raise ValueError(f"unsupported language {language!r}; allowed: {sorted(ALLOWED_LANGUAGES)}")
     job = db.get_job(job_id)
     if not job:
         raise ValueError(f"job {job_id} not found")

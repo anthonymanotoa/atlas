@@ -7,6 +7,7 @@ Run:  uv run uvicorn dashboard.backend.main:app --port 8787 --reload
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Literal
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -31,7 +32,7 @@ class StateBody(BaseModel):
 
 
 class PrepBody(BaseModel):
-    language: str = "en"
+    language: Literal["en", "es"] = "en"  # constrained: never reaches the CV output path as a raw string
 
 
 # ── API ──────────────────────────────────────────────────────────────────────
@@ -52,8 +53,11 @@ def api_board():
     """Jobs grouped by the columns shown on the kanban board."""
     columns = ["shortlisted", "tailored", "ready", "applied", "responded", "interview", "offer"]
     with DB() as db:
-        return {"columns": columns,
-                "jobs": {c: db.list_jobs(state=c) for c in columns}}
+        rows = db.list_jobs(states=columns)  # one query; preserves fit_score/discovered_at ordering
+    grouped: dict[str, list] = {c: [] for c in columns}
+    for j in rows:
+        grouped[j["state"]].append(j)
+    return {"columns": columns, "jobs": grouped}
 
 
 @app.get("/api/jobs/{job_id}")
@@ -67,19 +71,27 @@ def api_job(job_id: str):
 
 @app.post("/api/jobs/{job_id}/state")
 def api_set_state(job_id: str, body: StateBody):
+    from engine.outreach import followups
     if body.state not in STATES:
         raise HTTPException(400, f"invalid state; must be one of {STATES}")
     with DB() as db:
         if not db.get_job(job_id):
             raise HTTPException(404, "job not found")
         db.set_state(job_id, body.state, {"via": "dashboard"})
+        # Drive the reply-aware cadence off the same transitions the user makes on the board.
+        if body.state == "applied":
+            followups.schedule(db, job_id, channel="email")
+        elif body.state == "responded":
+            followups.register_reply(db, job_id)  # cancel pending touches — never pester after a reply
     return {"ok": True, "state": body.state}
 
 
 @app.post("/api/jobs/{job_id}/applied")
 def api_mark_applied(job_id: str):
+    from engine.outreach import followups
     with DB() as db:
         db.set_state(job_id, "applied", {"via": "dashboard"})
+        followups.schedule(db, job_id, channel="email")  # start the Day 3/7/14 + breakup cadence
     return {"ok": True}
 
 
@@ -118,9 +130,12 @@ def api_cv_download(job_id: str, version_id: int, fmt: str = "docx"):
     if not version:
         raise HTTPException(404, "cv version not found")
     path = version.get("path_pdf") if fmt == "pdf" else version.get("path_docx")
-    if not path or not Path(path).exists():
+    if not path:
         raise HTTPException(404, f"{fmt} file not available")
-    p = Path(path)
+    p = Path(path).resolve()
+    # Confine downloads to the outbox: never serve a file outside data/outbox, whatever the DB row says.
+    if not p.is_relative_to(OUTBOX_DIR.resolve()) or not p.exists():
+        raise HTTPException(404, f"{fmt} file not available")
     media = ("application/pdf" if fmt == "pdf"
              else "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
     return FileResponse(str(p), filename=p.name, media_type=media)

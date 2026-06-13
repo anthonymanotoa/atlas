@@ -80,7 +80,7 @@ uv run uvicorn dashboard.backend.main:app --port 8787   # → http://127.0.0.1:8
 | `atlas brain [--limit N]` | Full daily pipeline + Spanish morning brief |
 | `atlas referrals` | Jobs where you have a 1st-degree connection |
 | `atlas import-connections <csv>` | Import LinkedIn `Connections.csv` |
-| `atlas advise [--json]` | Audit your CV; pairs with the `cv-linkedin-advisor` skill |
+| `atlas advise [--json]` | Audit your CV; pairs with the `cv-linkedin-advisor` guide (`advisor/cv_linkedin_advisor.md`) |
 | `atlas top [--n] [--state]` · `atlas status` | Inspect the pipeline |
 
 ## Configure it for you
@@ -88,8 +88,8 @@ uv run uvicorn dashboard.backend.main:app --port 8787   # → http://127.0.0.1:8
 - `config/criteria.md` — roles, remote, seniority, salary floor, deal-breakers (YAML frontmatter
   + prose). Copy from `criteria.example.md`.
 - `config/companies.yaml` — target companies + their ATS (`atlas resolve-ats <careers-url>` helps).
-- `profile/master_cv.yaml` — your structured CV (seed it via the `cv-linkedin-advisor` skill /
-  Claude in Chrome). Copy from `master_cv.example.yaml`.
+- `profile/master_cv.yaml` — your structured CV (seed it via the `cv-linkedin-advisor` guide /
+  Claude in Chrome). Copy from `profile/master_cv.example.yaml`.
 - `config/sources.yaml` — search terms + source toggles. `.env` — optional free Adzuna keys.
 
 ## Privacy

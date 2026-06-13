@@ -19,9 +19,10 @@ Desktop is open**, and a missed day collapses to one catch-up run.
       it needs (Bash to the repo, the Gmail connector) so future runs don't stall on prompts.
 
 ## 3. Seed your data
-- [ ] **Master CV:** `cp profile/master_cv.example.yaml profile/master_cv.yaml`, then run the
-      `cv-linkedin-advisor` skill (it reads your LinkedIn via Claude in Chrome + your Claude
-      memories/projects and repositions toward AI/ML — truthfully). Replace every `<placeholder>`.
+- [ ] **Master CV:** `cp profile/master_cv.example.yaml profile/master_cv.yaml`, then use the
+      `cv-linkedin-advisor` guide (`advisor/cv_linkedin_advisor.md`) — it reads your LinkedIn via
+      Claude in Chrome + your Claude memories/projects and repositions toward AI/ML, truthfully.
+      Replace every placeholder value with your own real data.
 - [ ] **Criteria:** `cp config/criteria.example.md config/criteria.md` and adjust.
 - [ ] **Companies:** `cp config/companies.example.yaml config/companies.yaml`; add your targets
       (use `uv run atlas resolve-ats <careers-url>` to find each one's ATS + token).
@@ -29,8 +30,8 @@ Desktop is open**, and a missed day collapses to one catch-up run.
       **Connections** → download `Connections.csv` into `data/inbox/`, then
       `uv run atlas import-connections data/inbox/Connections.csv`. (Account-safe; no scraping.)
 - [ ] **(Optional) Adzuna:** free keys at developer.adzuna.com → put in `.env`.
-- [ ] **(Optional) PDF export:** install LibreOffice so `atlas tailor` can also emit a PDF
-      (DOCX is the ATS-preferred default and always produced).
+- [ ] **PDF export:** nothing to install — `atlas tailor` renders the PDF natively via
+      `reportlab`. (DOCX is the ATS-preferred default and is always produced too.)
 
 ## 4. Daily loop
 1. The brain runs at ~8am and writes `data/outbox/MORNING_BRIEF.md` + per-job `package.md`s.

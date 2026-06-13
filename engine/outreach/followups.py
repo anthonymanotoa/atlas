@@ -25,8 +25,9 @@ def _parse(iso: str) -> datetime:
 def schedule(db: DB, job_id: str, *, channel: str, message_id: int | None = None,
              base_iso: str | None = None) -> int:
     """Create the follow-up schedule for a sent message. Idempotent per job+channel."""
-    existing = {f["touch_number"] for f in db.due_followups("9999")  # all pending
-                if f["job_id"] == job_id and f["channel"] == channel}
+    # Consider ALL existing touches (pending/done/cancelled) so a catch-up re-run never
+    # recreates a completed touch or resurrects one cancelled because the contact replied.
+    existing = {f["touch_number"] for f in db.followups_for_job(job_id, channel)}
     base = _parse(base_iso) if base_iso else datetime.now(timezone.utc)
     created = 0
     for touch, offset, _breakup in CADENCE:

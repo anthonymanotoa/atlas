@@ -24,9 +24,11 @@ def last_success(db: DB) -> Optional[datetime]:
     if not raw:
         return None
     try:
-        return datetime.fromisoformat(raw)
-    except ValueError:
+        dt = datetime.fromisoformat(raw)
+    except (ValueError, TypeError):
         return None
+    # Assume UTC for any naive value so the downtime subtraction below never raises TypeError.
+    return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
 
 
 def downtime_hours(db: DB) -> Optional[float]:

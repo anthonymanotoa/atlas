@@ -124,14 +124,14 @@ def top(n: int = typer.Option(15, help="How many to show."),
 @app.command()
 def tailor(job_id: str,
            language: str = typer.Option("en", help="CV language: en | es"),
-           pdf: bool = typer.Option(True, help="Also render a PDF (needs LibreOffice).")) -> None:
+           pdf: bool = typer.Option(True, help="Also render a PDF (native, via reportlab).")) -> None:
     """Generate a parse-safe, JD-tailored CV for a job (DOCX + optional PDF)."""
     from engine.cv.build import build_for_job
     with _db() as db:
         res = build_for_job(db, job_id, language=language, make_pdf=pdf)
     console.print(f"[bold]CV built[/] for {job_id}  (ATS: {res.ats_target})")
     console.print(f"  DOCX: {res.docx_path}")
-    console.print(f"  PDF:  {res.pdf_path or '[yellow]skipped (LibreOffice not found)[/]'}")
+    console.print(f"  PDF:  {res.pdf_path or '[yellow]not generated[/]'}")
     console.print(f"  Keyword coverage: [bold]{res.coverage:.0%}[/]  "
                   f"({len(res.matched)} matched, {len(res.missing)} missing)")
     parse = "[green]✓ parse-safe[/]" if res.parse_ok else f"[red]✗ {res.parse_issues}[/]"
@@ -198,7 +198,9 @@ def referrals() -> None:
 @app.command()
 def brain(limit: int = typer.Option(8, help="Max jobs to fully prepare this run."),
           language: str = typer.Option("en", help="CV/outreach language: en | es"),
-          discover: bool = typer.Option(True, help="Run discovery first.")) -> None:
+          discover: bool = typer.Option(True, help="Run discovery first."),
+          json_out: bool = typer.Option(False, "--json",
+                                        help="Emit the run summary as JSON (for the orchestrator).")) -> None:
     """Run the full daily pipeline: discover → score → prepare → brief. Sends nothing."""
     import sys
     if str(REPO_ROOT) not in sys.path:
@@ -207,6 +209,10 @@ def brain(limit: int = typer.Option(8, help="Max jobs to fully prepare this run.
     from engine.paths import OUTBOX_DIR
     with _db() as db:
         s = run(db, limit=limit, language=language, do_discover=discover)
+    if json_out:
+        import json as _json
+        print(_json.dumps(s, indent=2, ensure_ascii=False))
+        return
     console.print(f"[bold green]Brain done[/] — new {s['discover'].get('new', 0)}, "
                   f"shortlisted {s['shortlisted']}, prepared {len(s['prepared'])}, "
                   f"follow-ups {s['followups']}.")
@@ -217,7 +223,7 @@ def brain(limit: int = typer.Option(8, help="Max jobs to fully prepare this run.
 
 @app.command()
 def advise(json_out: bool = typer.Option(False, "--json", help="Emit findings as JSON.")) -> None:
-    """Audit your master CV against best practices (feeds the cv-linkedin-advisor skill)."""
+    """Audit your master CV against best practices (feeds the cv-linkedin-advisor guide)."""
     import json as _json
     from engine.advisor import audit_dict
     from engine.config import load_master_cv
@@ -231,7 +237,7 @@ def advise(json_out: bool = typer.Option(False, "--json", help="Emit findings as
     for x in result["findings"]:
         console.print(f"  [{colors[x['severity']]}]●[/] [{x['area']}] {x['message']}")
         console.print(f"     → {x['suggestion']}")
-    console.print("\nPara la mejora completa (IA-forward, LinkedIn), corre el skill "
+    console.print("\nPara la mejora completa (IA-forward, LinkedIn), usa la guía "
                   "[bold]cv-linkedin-advisor[/] (advisor/cv_linkedin_advisor.md).")
 
 
