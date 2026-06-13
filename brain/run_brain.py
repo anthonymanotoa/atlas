@@ -61,7 +61,9 @@ def run(db: DB, *, limit: int = 8, language: str = "en", do_discover: bool = Tru
             db.mark_followup(f["id"], "cancelled")
             continue
         d = followup_text(job, candidate, f["touch_number"], language)
-        if not db.has_message(f["job_id"], d.kind):
+        # Dedup per (job, kind, variant): touches 1-3 share kind 'follow_up' but differ by
+        # variant 'touchN', so guarding on kind alone would drop touches 2 and 3.
+        if not db.has_message(f["job_id"], d.kind, variant=d.variant):
             db.add_message(f["job_id"], channel=d.channel, kind=d.kind, body=d.body,
                            subject=d.subject, variant=d.variant, language=d.language, state="draft")
         db.mark_followup(f["id"], "done")

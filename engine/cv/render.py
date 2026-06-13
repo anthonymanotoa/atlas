@@ -199,6 +199,8 @@ def render_pdf(cv: dict, out_path: Path, language: str = "en") -> Optional[Path]
         story.append(Paragraph(h["projects"].upper(), head_s))
         for pr in projects:
             story.append(Paragraph(f"<b>{_esc(pr.get('name',''))}</b>", body_s))
+            if pr.get("description"):  # parity with render_docx — PDF previously dropped this
+                story.append(Paragraph(_esc(" ".join(pr["description"].split())), body_s))
             if pr.get("highlights"):
                 story.append(bullets(pr["highlights"]))
 

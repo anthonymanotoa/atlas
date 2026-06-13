@@ -18,35 +18,37 @@ FUNNEL = [
 STALE_APPLIED_DAYS = 7
 
 
-def _count_notnull(db: DB, col: str) -> int:
-    return db.conn.execute(f"SELECT COUNT(*) n FROM jobs WHERE {col} IS NOT NULL").fetchone()["n"]
-
-
 def _days_since(iso: Optional[str]) -> Optional[float]:
     if not iso:
         return None
     try:
         return round((datetime.now(timezone.utc) - datetime.fromisoformat(iso)).total_seconds() / 86400, 1)
-    except ValueError:
+    except (ValueError, TypeError):  # TypeError = naive-vs-aware subtraction; degrade to None, don't crash
         return None
 
 
 def overview(db: DB) -> dict[str, Any]:
-    funnel = [{"stage": name, "count": _count_notnull(db, col)} for name, col in FUNNEL]
-    total = db.conn.execute("SELECT COUNT(*) n FROM jobs").fetchone()["n"]
-    applied = _count_notnull(db, "applied_at")
-    responded = _count_notnull(db, "responded_at")
-    interview = _count_notnull(db, "interview_at")
+    # One aggregate pass for the whole funnel: COUNT(col) already skips NULLs. The FUNNEL
+    # column names are module constants (not user input), so interpolation here is safe.
+    cols = [col for _, col in FUNNEL]
+    select = ", ".join([f"COUNT({c}) AS {c}" for c in cols] + ["COUNT(*) AS total"])
+    row = db.conn.execute(f"SELECT {select} FROM jobs").fetchone()
+    funnel = [{"stage": name, "count": row[col]} for name, col in FUNNEL]
+    total = row["total"]
+    applied = row["applied_at"]
+    responded = row["responded_at"]
+    interview = row["interview_at"]
     response_rate = round(responded / applied, 3) if applied else None
     interview_rate = round(interview / applied, 3) if applied else None
+    counts = db.counts_by_state()  # one GROUP BY scan, reused for both `counts` and `ready`
     return {
         "total_jobs": total,
-        "counts": db.counts_by_state(),
+        "counts": counts,
         "funnel": funnel,
         "response_rate": response_rate,        # benchmark bands (frontend): 0.02–0.05 typical, 0.10–0.18 strong
         "interview_rate": interview_rate,
         "applied": applied,
-        "ready": db.counts_by_state().get("ready", 0),
+        "ready": counts.get("ready", 0),
         "last_run": db.meta_get("last_run"),
         "last_success": db.meta_get("last_success_ts"),
         "downtime_hours": heartbeat.downtime_hours(db),
@@ -59,10 +61,11 @@ def needs_action(db: DB) -> list[dict]:
     actions: list[dict] = []
 
     # 1. Ready to send (referrals first — highest conversion).
+    contacts = db.all_contacts()  # load once; match_referrals would otherwise full-scan per job
     ready = db.list_jobs(state="ready")
     ready_ref, ready_cold = [], []
     for j in ready:
-        refs = match_referrals(db, j.get("company", ""))
+        refs = match_referrals(db, j.get("company", ""), contacts=contacts)
         (ready_ref if refs else ready_cold).append((j, refs))
     for j, refs in ready_ref:
         actions.append({"type": "ask_referral", "priority": 1, "job_id": j["id"],

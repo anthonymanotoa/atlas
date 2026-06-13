@@ -86,7 +86,7 @@ def write_package(db: DB, job_id: str, language: str = "en") -> Path:
         f"**Cómo aplicar:** {method}",
         f"**Link para postular:** {job.get('apply_url') or job.get('url') or '—'}",
         f"**CV (DOCX):** {cv.get('path_docx') or '—'}",
-        f"**CV (PDF):** {cv.get('path_pdf') or '— (genera con LibreOffice)'}",
+        f"**CV (PDF):** {cv.get('path_pdf') or '—'}",
         "",
     ]
     if job.get("knockout_flags") and json.loads(job["knockout_flags"]):

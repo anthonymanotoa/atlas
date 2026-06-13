@@ -77,9 +77,18 @@ def discover(db: DB, *, sources_cfg: Optional[dict] = None,
             store(f"{t.ats}:{t.company}", lambda t=t, fn=fn: fn(t, client))
 
     # 2. JobSpy — Indeed + LinkedIn guest (health-logged per site).
-    if want("jobspy") and cfg.get("jobspy", {}).get("enabled", True):
+    # `--only` accepts the umbrella `jobspy` OR the per-site labels `indeed`/`linkedin`
+    # (both advertised in the CLI help); honor either, narrowing the sites when a specific
+    # one is requested without the umbrella.
+    jobspy_cfg = dict(cfg.get("jobspy", {}))
+    if only is not None and "jobspy" not in only:
+        jobspy_cfg["sites"] = [s for s in jobspy_cfg.get("sites", ["indeed", "linkedin"])
+                               if s in only]
+    jobspy_selected = want("jobspy") or want("indeed") or want("linkedin")
+    if jobspy_selected and jobspy_cfg.get("enabled", True) \
+            and jobspy_cfg.get("sites", ["indeed", "linkedin"]):
         try:
-            per_site = jobspy_source.fetch(cfg["jobspy"], terms)
+            per_site = jobspy_source.fetch(jobspy_cfg, terms)
         except Exception as e:  # noqa: BLE001
             per_site = {}
             db.log_source_health("jobspy", False, 0, str(e)[:300], 0)
