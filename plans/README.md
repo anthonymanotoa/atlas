@@ -34,7 +34,7 @@ dependency says otherwise; honor each plan's STOP conditions; update your row wh
 | 014 | Reuse one SQLite connection across requests | P2 | M | — | DONE — approach A: one shared conn (check_same_thread=False) + module Lock via FastAPI lifespan/Depends; schema init once at startup |
 | 015 | Add ruff + eslint/prettier + .editorconfig + pre-commit | P3 | M | 007 | TODO — first run reformats ~3k lines; land as a mechanical-only commit |
 | 016 | Frontend test harness (vitest + testing-library) | P3 | M | — | DONE — vitest+jsdom+testing-library; `npm test` runs api.test.ts (8) + NeedsAction.test.tsx (3); typecheck/build/audit:prod unaffected |
-| 018 | [DIRECTION] Workday/Taleo/iCIMS direct-feed source (spike) | P3 | M | — | TODO — design spike; `CompanyTarget.instance` hook already reserved |
+| 018 | [DIRECTION] Workday/Taleo/iCIMS direct-feed source (spike) | P3 | M | — | DONE (spike) — keyless CXS path CONFIRMED live (nvidia tenant: total=2000, real jobs mapped); workday.fetch wired into ATS_DISPATCH + resolver pattern + post_json helper. Open Qs below. Taleo/iCIMS deferred until needed. |
 | 019 | [DIRECTION] Dashboard-triggered discover/score (spike) | P3 | M | 014 | DONE — `POST /api/discover` (BackgroundTasks, own conn) + `/api/discover/status` poll; "Buscar" button + palette item; deterministic/$0; origin-guarded |
 
 Status values: TODO | IN PROGRESS | DONE | PARTIAL | BLOCKED | REJECTED.
