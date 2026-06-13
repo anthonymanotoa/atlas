@@ -255,6 +255,10 @@ class DB:
         ).fetchall()
         return [dict(r) for r in rows]
 
+    def mark_followup(self, followup_id: int, state: str = "done") -> None:
+        self.conn.execute("UPDATE followups SET state=? WHERE id=?", (state, followup_id))
+        self.conn.commit()
+
     def cancel_followups_for_job(self, job_id: str) -> None:
         """Called when a reply lands — never pester after a response."""
         self.conn.execute(

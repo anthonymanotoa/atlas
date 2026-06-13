@@ -97,20 +97,10 @@ def score(
 ) -> None:
     """Score fit for discovered jobs; shortlist those above the threshold."""
     from engine.config import load_criteria
-    from engine.scoring.fit import score_job
+    from engine.scoring.run import score_jobs
     criteria = load_criteria()
     with _db() as db:
-        jobs = db.list_jobs() if rescore else db.list_jobs(state="discovered")
-        shortlisted = scored = 0
-        for j in jobs:
-            res = score_job(j, criteria)
-            db.set_fit(j["id"], res.score, res.reasons, res.knockouts)
-            scored += 1
-            if res.score >= criteria.shortlist_threshold and not res.disqualified:
-                db.set_state(j["id"], "shortlisted")
-                shortlisted += 1
-            else:
-                db.set_state(j["id"], "scored")
+        scored, shortlisted = score_jobs(db, criteria, rescore=rescore)
     console.print(f"Scored [bold]{scored}[/], shortlisted [green]{shortlisted}[/] "
                   f"(threshold {criteria.shortlist_threshold}).")
 
@@ -203,6 +193,26 @@ def referrals() -> None:
         c = r[0]
         table.add_row(j["company"], (j["title"] or "")[:32], c["name"], (c.get("title") or "")[:30])
     console.print(table)
+
+
+@app.command()
+def brain(limit: int = typer.Option(8, help="Max jobs to fully prepare this run."),
+          language: str = typer.Option("en", help="CV/outreach language: en | es"),
+          discover: bool = typer.Option(True, help="Run discovery first.")) -> None:
+    """Run the full daily pipeline: discover → score → prepare → brief. Sends nothing."""
+    import sys
+    if str(REPO_ROOT) not in sys.path:
+        sys.path.insert(0, str(REPO_ROOT))
+    from brain.run_brain import run
+    from engine.paths import OUTBOX_DIR
+    with _db() as db:
+        s = run(db, limit=limit, language=language, do_discover=discover)
+    console.print(f"[bold green]Brain done[/] — new {s['discover'].get('new', 0)}, "
+                  f"shortlisted {s['shortlisted']}, prepared {len(s['prepared'])}, "
+                  f"follow-ups {s['followups']}.")
+    if s.get("downtime_hours"):
+        console.print(f"[yellow]⚠️ Was down ~{s['downtime_hours']:.0f}h[/] before this run.")
+    console.print(f"Morning brief: {OUTBOX_DIR / 'MORNING_BRIEF.md'}")
 
 
 @app.command()
