@@ -81,3 +81,28 @@ def test_schema_init_runs_once_across_requests(atlas_app, monkeypatch):
             assert client.get("/api/overview").status_code == 200
             assert client.get("/api/board").status_code == 200
     assert calls["n"] == 1   # not 8 (was once per request before the shared connection)
+
+
+# ── Plan 020: state-mutating POSTs enforce a trusted Origin server-side ────────
+def test_mutating_post_rejects_foreign_origin(atlas_app):
+    # The dependency fires before the handler, so no seed/DB state is needed.
+    with TestClient(atlas_app) as client:
+        resp = client.post("/api/jobs/anyjob/applied",
+                           headers={"origin": "https://evil.example.com"})
+    assert resp.status_code == 403
+
+
+def test_mutating_post_allows_no_origin(atlas_app):
+    # No Origin header → same-origin / non-browser → allowed past the check (handler runs).
+    with TestClient(atlas_app) as client:
+        jid = _seed_job()
+        resp = client.post(f"/api/jobs/{jid}/applied")
+    assert resp.status_code != 403
+
+
+def test_mutating_post_allows_allowlisted_origin(atlas_app):
+    with TestClient(atlas_app) as client:
+        jid = _seed_job()
+        resp = client.post(f"/api/jobs/{jid}/applied",
+                           headers={"origin": "http://localhost:8787"})
+    assert resp.status_code != 403
