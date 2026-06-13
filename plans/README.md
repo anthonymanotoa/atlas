@@ -33,7 +33,7 @@ dependency says otherwise; honor each plan's STOP conditions; update your row wh
 | 020 | Server-side Origin/Referer checks on POST routes | P3 | S | — | DONE — Variant A: `require_trusted_origin` dep on the mutating POSTs; config-driven `ATLAS_ALLOWED_ORIGINS`; same-origin/no-Origin allowed (production mode safe) |
 | 014 | Reuse one SQLite connection across requests | P2 | M | — | DONE — approach A: one shared conn (check_same_thread=False) + module Lock via FastAPI lifespan/Depends; schema init once at startup |
 | 015 | Add ruff + eslint/prettier + .editorconfig + pre-commit | P3 | M | 007 | TODO — first run reformats ~3k lines; land as a mechanical-only commit |
-| 016 | Frontend test harness (vitest + testing-library) | P3 | M | — | TODO |
+| 016 | Frontend test harness (vitest + testing-library) | P3 | M | — | DONE — vitest+jsdom+testing-library; `npm test` runs api.test.ts (8) + NeedsAction.test.tsx (3); typecheck/build/audit:prod unaffected |
 | 018 | [DIRECTION] Workday/Taleo/iCIMS direct-feed source (spike) | P3 | M | — | TODO — design spike; `CompanyTarget.instance` hook already reserved |
 | 019 | [DIRECTION] Dashboard-triggered discover/score (spike) | P3 | M | 014 | DONE — `POST /api/discover` (BackgroundTasks, own conn) + `/api/discover/status` poll; "Buscar" button + palette item; deterministic/$0; origin-guarded |
 
