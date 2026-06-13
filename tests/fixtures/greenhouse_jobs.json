@@ -1,0 +1,13 @@
+{
+  "jobs": [
+    {
+      "id": 4012345,
+      "title": "  Senior Data Scientist  ",
+      "location": { "name": "Remote - US" },
+      "absolute_url": "https://boards.greenhouse.io/acme/jobs/4012345",
+      "content": "<p>We need <strong>Python</strong> and SQL.</p><ul><li>Build models</li><li>Ship dashboards</li></ul>",
+      "updated_at": "2026-06-01T12:30:00-04:00",
+      "departments": [{ "name": "Data" }, { "name": "Engineering" }]
+    }
+  ]
+}

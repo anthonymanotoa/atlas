@@ -24,7 +24,7 @@ dependencies = [
 # Dev tooling lives in a PEP 735 dependency group so a plain `uv sync` installs it by default,
 # making `uv run pytest` reproducibly green (a bare `pytest` would pick up a global interpreter).
 [dependency-groups]
-dev = ["pytest>=8.2", "pytest-asyncio>=0.23"]
+dev = ["pytest>=8.2", "pytest-asyncio>=0.23", "ruff>=0.6"]
 
 [project.scripts]
 atlas = "engine.cli:app"
@@ -39,3 +39,19 @@ packages = ["engine"]
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+extend-exclude = ["dashboard/frontend"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "BLE", "C4", "SIM"]
+ignore = ["E501"]  # line length is the formatter's job, not a lint error
+
+[tool.ruff.lint.flake8-bugbear]
+# FastAPI/typer use call-expressions as parameter defaults by design; not a B008 smell.
+extend-immutable-calls = ["fastapi.Depends", "fastapi.Query", "typer.Option", "typer.Argument"]
+
+[tool.ruff.format]
+quote-style = "double"
