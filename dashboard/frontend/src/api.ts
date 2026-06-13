@@ -84,6 +84,13 @@ export type Referral = {
 };
 export type Profile = { id: string; label: string; is_owner?: boolean };
 export type CsvColumn = { id: string; label: string };
+export type Finding = { severity: string; area: string; message: string; suggestion: string };
+export type OnboardingStatus = {
+  complete: boolean;
+  profile: string;
+  cv_present: boolean;
+  audit: { findings: Finding[]; summary: { high: number; med: number; low: number } };
+};
 export type JobDetail = {
   job: Job;
   cv_versions: CvVersion[];
@@ -129,6 +136,8 @@ export const api = {
   setSetting: (key: string, value: string) =>
     post<{ ok: boolean; key: string; value: string }>("/api/settings", { key, value }),
   csvColumns: () => get<{ available: CsvColumn[]; selected: string[] }>("/api/csv/columns"),
+  onboarding: () => get<OnboardingStatus>("/api/onboarding"),
+  completeOnboarding: () => post<{ ok: boolean }>("/api/onboarding/complete"),
   exportUrl: (columns?: string[], state?: string) => {
     const p = new URLSearchParams();
     if (columns?.length) p.set("columns", columns.join(","));

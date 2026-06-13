@@ -148,6 +148,16 @@ def test_csv_columns_lists_catalog(atlas_app):
     assert r["selected"]
 
 
+# ── P1-G: onboarding gate ───────────────────────────────────────────────────────
+def test_onboarding_status_and_complete(atlas_app):
+    with TestClient(atlas_app) as client:
+        st = client.get("/api/onboarding").json()
+        assert st["complete"] is False
+        assert "summary" in st["audit"] and "findings" in st["audit"]
+        assert client.post("/api/onboarding/complete").status_code == 200
+        assert client.get("/api/onboarding").json()["complete"] is True
+
+
 # ── Plan 019: dashboard-triggered discover→score (deterministic, keyless) ──────
 def test_discover_endpoint_runs_deterministic_pipeline(atlas_app, monkeypatch):
     import engine.discovery.runner as runner_mod

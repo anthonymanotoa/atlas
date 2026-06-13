@@ -10,13 +10,21 @@ import {
   X,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { api, type Action, type Job, type Overview, type Profile } from "./api";
+import {
+  api,
+  type Action,
+  type Job,
+  type OnboardingStatus,
+  type Overview,
+  type Profile,
+} from "./api";
 import { AnalyticsStrip } from "./components/AnalyticsStrip";
 import { Board } from "./components/Board";
 import { CommandPalette } from "./components/CommandPalette";
 import { DetailDrawer } from "./components/DetailDrawer";
 import { FilterBar, type Filters } from "./components/FilterBar";
 import { NeedsAction } from "./components/NeedsAction";
+import { OnboardingGate } from "./components/OnboardingGate";
 import { SettingsModal } from "./components/SettingsModal";
 
 export default function App() {
@@ -27,6 +35,7 @@ export default function App() {
   const [selected, setSelected] = useState<string | null>(null);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [activeProfile, setActiveProfile] = useState<string>("");
+  const [onboarding, setOnboarding] = useState<OnboardingStatus | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [briefOpen, setBriefOpen] = useState(false);
   const [brief, setBrief] = useState("");
@@ -45,13 +54,20 @@ export default function App() {
   }, [theme]);
 
   const load = useCallback(async () => {
-    const [o, b, p] = await Promise.all([api.overview(), api.board(), api.profiles()]);
+    const [p, ob] = await Promise.all([api.profiles(), api.onboarding()]);
+    setProfiles(p.profiles);
+    setActiveProfile(p.active);
+    setOnboarding(ob);
+    if (!ob.complete) return; // onboarding gate: don't load the board until CV+LinkedIn are done
+    const [o, b] = await Promise.all([api.overview(), api.board()]);
     setOv(o.overview);
     setActions(o.needs_action);
     setColumns(b.columns);
     setJobs(b.jobs);
-    setProfiles(p.profiles);
-    setActiveProfile(p.active);
+  }, []);
+
+  const refreshOnboarding = useCallback(async () => {
+    setOnboarding(await api.onboarding());
   }, []);
 
   async function switchProfile(id: string) {
@@ -212,26 +228,32 @@ export default function App() {
         </div>
       </header>
 
-      {ov?.downtime_hours ? (
-        <div className="card p-3 mb-4 text-sm" style={{ borderColor: "var(--color-pending)" }}>
-          ⚠️ Estuve sin correr ~{Math.round(ov.downtime_hours)}h. Revisa que el Mac esté despierto y
-          Claude Desktop abierto.
-        </div>
-      ) : null}
+      {onboarding && !onboarding.complete ? (
+        <OnboardingGate status={onboarding} onComplete={load} onRefresh={refreshOnboarding} />
+      ) : (
+        <>
+          {ov?.downtime_hours ? (
+            <div className="card p-3 mb-4 text-sm" style={{ borderColor: "var(--color-pending)" }}>
+              ⚠️ Estuve sin correr ~{Math.round(ov.downtime_hours)}h. Revisa que el Mac esté
+              despierto y Claude Desktop abierto.
+            </div>
+          ) : null}
 
-      {ov && (
-        <div className="mb-5">
-          <AnalyticsStrip ov={ov} />
-        </div>
+          {ov && (
+            <div className="mb-5">
+              <AnalyticsStrip ov={ov} />
+            </div>
+          )}
+
+          <div className="mb-6">
+            <NeedsAction actions={actions} onOpen={setSelected} />
+          </div>
+
+          <h2 className="text-sm font-semibold tracking-wide mb-2">Pipeline</h2>
+          <FilterBar filters={filters} setFilters={setFilters} languages={languages} />
+          <Board columns={columns} jobs={filteredJobs} onOpen={setSelected} onMove={move} />
+        </>
       )}
-
-      <div className="mb-6">
-        <NeedsAction actions={actions} onOpen={setSelected} />
-      </div>
-
-      <h2 className="text-sm font-semibold tracking-wide mb-2">Pipeline</h2>
-      <FilterBar filters={filters} setFilters={setFilters} languages={languages} />
-      <Board columns={columns} jobs={filteredJobs} onOpen={setSelected} onMove={move} />
 
       <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
       <DetailDrawer jobId={selected} onClose={() => setSelected(null)} onChanged={load} />
