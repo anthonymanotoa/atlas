@@ -360,6 +360,15 @@ export function DetailDrawer({
                 <span className="chip font-semibold" style={{ color: fitTone(d.job.fit_score) }}>
                   fit {d.job.fit_score ?? "—"}
                 </span>
+                {d.job.match_score != null && (
+                  <span
+                    className="chip font-semibold"
+                    title="Match CV↔oferta: cobertura ponderada de las keywords de la vacante"
+                    style={{ color: fitTone(d.job.match_score) }}
+                  >
+                    match {d.job.match_score}%
+                  </span>
+                )}
                 <span className="chip">{STATE_ES[d.job.state] || d.job.state}</span>
                 {d.job.is_remote === 1 && <span className="chip">Remoto</span>}
                 {salaryLabel(d.job) && (
@@ -388,6 +397,24 @@ export function DetailDrawer({
               {d.job.knockout_flags && d.job.knockout_flags.length > 0 && (
                 <div className="card p-3 text-sm" style={{ borderColor: "var(--color-pending)" }}>
                   ⚑ <b>Filtros del puesto:</b> {d.job.knockout_flags.join(", ")}
+                </div>
+              )}
+
+              {d.job.missing_keywords && d.job.missing_keywords.length > 0 && (
+                <div className="card p-3 text-sm">
+                  <div className="font-medium mb-1">
+                    🎯 Keywords de la oferta que tu CV no evidencia
+                  </div>
+                  <div className="flex flex-wrap gap-1">
+                    {d.job.missing_keywords.slice(0, 12).map((k) => (
+                      <span key={k} className="chip text-xs">
+                        {k}
+                      </span>
+                    ))}
+                  </div>
+                  <div className="text-xs text-[var(--color-muted)] mt-1">
+                    Agrégalas a tu CV solo si realmente las tienes (nunca inventes).
+                  </div>
                 </div>
               )}
 

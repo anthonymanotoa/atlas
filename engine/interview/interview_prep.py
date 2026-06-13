@@ -10,7 +10,8 @@ from __future__ import annotations
 from pathlib import Path
 
 import engine.paths as paths
-from engine.config import load_master_cv
+from engine.config import load_master_cv, load_ontology
+from engine.cv.match import match_score
 from engine.db.models import DB
 
 _BEHAVIORAL = {
@@ -88,6 +89,7 @@ _HEAD = {
         "interviewers": "Interviewers",
         "behavioral": "Likely behavioral questions",
         "role": "Likely role/technical questions",
+        "topics": "Topics to review (JD keywords your CV doesn't yet evidence)",
         "company": "What we've learned about this company",
         "star": "Your STAR evidence (real, from your CV — adapt, don't invent)",
         "research": "Research each interviewer (supervised, in your own browser)",
@@ -98,6 +100,7 @@ _HEAD = {
         "interviewers": "Entrevistadores",
         "behavioral": "Preguntas conductuales probables",
         "role": "Preguntas de rol/técnicas probables",
+        "topics": "Temas a repasar (keywords de la vacante que tu CV aún no evidencia)",
         "company": "Lo que aprendimos de esta empresa",
         "star": "Tu evidencia STAR (real, de tu CV — adáptala, no inventes)",
         "research": "Investiga a cada entrevistador (supervisado, en tu propio navegador)",
@@ -113,6 +116,13 @@ def _role_questions(title: str, desc: str, lang: str) -> list[str]:
         if any(k in hay for k in keywords):
             out.extend(en_q if lang == "en" else es_q)
     return out or _DEFAULT_TECH[lang]
+
+
+def _topics_to_review(job: dict, cv: dict, ontology: dict[str, list[str]]) -> list[str]:
+    """The JD's important keywords the CV doesn't evidence — the highest-value things to
+    brush up on. Derived from this specific posting (not a fixed taxonomy) via the same
+    CV↔JD match the dashboard shows, so it stays grounded and degrades to [] if nothing matches."""
+    return match_score(job, cv, ontology).missing[:8]
 
 
 def _star_evidence(cv: dict, lang: str) -> list[str]:
@@ -134,6 +144,7 @@ def gen_prep_doc(db: DB, interview_id: int, language: str = "en") -> Path:
     job = db.get_job(iv["job_id"]) or {}
     interviewers = db.interviewers_for(interview_id)
     cv = load_master_cv()
+    ontology = load_ontology()
     learnings = db.learnings_for_company(job.get("company", ""))
 
     title, desc = job.get("title", ""), job.get("description", "") or ""
@@ -162,6 +173,11 @@ def gen_prep_doc(db: DB, interview_id: int, language: str = "en") -> Path:
     lines += [f"- {q}" for q in _BEHAVIORAL[lang]]
     lines += ["", f"## {h['role']}"]
     lines += [f"- {q}" for q in _role_questions(title, desc, lang)]
+
+    topics = _topics_to_review(job, cv, ontology)
+    if topics:
+        lines += ["", f"## {h['topics']}"]
+        lines += [f"- {t}" for t in topics]
 
     if learnings:
         lines += ["", f"## {h['company']}"]

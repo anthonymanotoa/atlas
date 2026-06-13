@@ -65,6 +65,14 @@ function JobCard({
             <Banknote size={11} /> {sal}
           </span>
         )}
+        {job.match_score != null && (
+          <span
+            title="Match CV↔oferta (cobertura de keywords)"
+            style={{ color: fitTone(job.match_score) }}
+          >
+            🎯 {job.match_score}%
+          </span>
+        )}
         {job.knockout_flags && job.knockout_flags.length > 0 && (
           <span
             title="Filtros del puesto (clearance/ciudadanía)"

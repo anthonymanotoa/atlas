@@ -167,12 +167,14 @@ def top(
     with _db() as db:
         jobs = db.list_jobs(state=state, limit=n)
     table = Table(title=f"Top {state}")
-    for col in ("score", "title", "company", "remote", "id"):
+    for col in ("fit", "match", "title", "company", "remote", "id"):
         table.add_column(col)
     for j in jobs:
         rem = {1: "✓", 0: "✗"}.get(j["is_remote"], "?")
+        match = j.get("match_score")
         table.add_row(
             str(j.get("fit_score")),
+            f"{match}%" if match is not None else "—",
             (j["title"] or "")[:42],
             (j["company"] or "")[:22],
             rem,
@@ -188,10 +190,14 @@ def tailor(
     pdf: bool = typer.Option(True, help="Also render a PDF (native, via reportlab)."),
 ) -> None:
     """Generate a parse-safe, JD-tailored CV for a job (DOCX + optional PDF)."""
+    from engine.config import load_master_cv, load_ontology
     from engine.cv.build import build_for_job
+    from engine.cv.match import match_score
 
     with _db() as db:
         res = build_for_job(db, job_id, language=language, make_pdf=pdf)
+        job = db.get_job(job_id) or {}
+    m = match_score(job, load_master_cv(), load_ontology())
     console.print(f"[bold]CV built[/] for {job_id}  (ATS: {res.ats_target})")
     console.print(f"  DOCX: {res.docx_path}")
     console.print(f"  PDF:  {res.pdf_path or '[yellow]not generated[/]'}")
@@ -199,12 +205,62 @@ def tailor(
         f"  Keyword coverage: [bold]{res.coverage:.0%}[/]  "
         f"({len(res.matched)} matched, {len(res.missing)} missing)"
     )
+    console.print(f"  CV↔JD match: [bold]{m.score}/100[/] (distinto del fit puesto↔criterios)")
     parse = "[green]✓ parse-safe[/]" if res.parse_ok else f"[red]✗ {res.parse_issues}[/]"
     console.print(f"  Parse check: {parse}")
     if res.missing:
         console.print(
             f"  [yellow]Missing JD keywords[/] (add only if true): {', '.join(res.missing[:10])}"
         )
+
+
+@app.command(name="import-cv")
+def import_cv(
+    path: str,
+    force: bool = typer.Option(
+        False, "--force", help="Overwrite an existing master_cv.draft.yaml."
+    ),
+) -> None:
+    """Extract an existing CV (PDF/DOCX) into a reviewable master_cv DRAFT.
+
+    Deterministic text extraction only — never invents structure and NEVER touches your
+    master_cv.yaml. Next step: ask Claude (Cowork) to map the draft into the schema, review it,
+    then save it as master_cv.yaml yourself.
+    """
+    from pathlib import Path
+
+    from engine.cv.import_cv import build_draft, extract_text
+
+    src = Path(path).expanduser()
+    if not src.exists():
+        console.print(f"[red]File not found:[/] {src}")
+        raise typer.Exit(1)
+    try:
+        text = extract_text(src)
+    except ValueError as e:
+        console.print(f"[red]{e}[/]")
+        raise typer.Exit(1) from e
+    if not text.strip():
+        console.print(
+            "[yellow]No text extracted[/] (scanned/image-only PDF?). Try a text-based file."
+        )
+        raise typer.Exit(1)
+
+    draft_path = (
+        paths.MASTER_CV_PATH.parent / "master_cv.draft.yaml"
+    )  # late-path-read (per profile)
+    if draft_path.exists() and not force:
+        console.print(
+            f"[yellow]Draft already exists:[/] {draft_path}\n  Re-run with --force to overwrite."
+        )
+        raise typer.Exit(1)
+    draft_path.parent.mkdir(parents=True, exist_ok=True)
+    draft_path.write_text(build_draft(text))
+    console.print(f"[green]✓[/] Draft written: {draft_path}")
+    console.print(
+        "  Next: ask Claude (Cowork) to map `_source_text` into the schema, review, then save as master_cv.yaml."
+    )
+    console.print("  [dim]Your existing master_cv.yaml was NOT touched.[/]")
 
 
 @app.command()
