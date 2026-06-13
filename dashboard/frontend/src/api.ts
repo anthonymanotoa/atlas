@@ -84,6 +84,18 @@ export type Referral = {
 };
 export type Profile = { id: string; label: string; is_owner?: boolean };
 export type CsvColumn = { id: string; label: string };
+export type SocialMention = {
+  id: number;
+  platform: string;
+  source_url?: string;
+  recruiter_name?: string;
+  recruiter_linkedin?: string;
+  recruiter_email?: string;
+  post_title?: string;
+  post_excerpt?: string;
+  context_type?: string;
+  found_at?: string;
+};
 export type Finding = { severity: string; area: string; message: string; suggestion: string };
 export type OnboardingStatus = {
   complete: boolean;
@@ -138,6 +150,12 @@ export const api = {
   csvColumns: () => get<{ available: CsvColumn[]; selected: string[] }>("/api/csv/columns"),
   onboarding: () => get<OnboardingStatus>("/api/onboarding"),
   completeOnboarding: () => post<{ ok: boolean }>("/api/onboarding/complete"),
+  socialMentions: (id: string) =>
+    get<{ mentions: SocialMention[] }>(`/api/jobs/${id}/social_mentions`),
+  startSocialSearch: (id: string) =>
+    post<{ ok: boolean; queries: Record<string, string> }>(`/api/jobs/${id}/start-social-search`),
+  addSocialMention: (id: string, body: Partial<SocialMention>) =>
+    post<{ ok: boolean; id: number }>(`/api/jobs/${id}/social_mentions`, body),
   exportUrl: (columns?: string[], state?: string) => {
     const p = new URLSearchParams();
     if (columns?.length) p.set("columns", columns.join(","));

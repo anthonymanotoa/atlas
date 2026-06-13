@@ -459,6 +459,47 @@ class DB:
         )
         self.conn.commit()
 
+    # ── social mentions (P2-C) ─────────────────────────────────────────────────
+    def add_social_mention(
+        self,
+        job_id: str,
+        *,
+        platform: str,
+        source_url: str | None = None,
+        recruiter_name: str | None = None,
+        recruiter_linkedin: str | None = None,
+        recruiter_email: str | None = None,
+        post_title: str | None = None,
+        post_excerpt: str | None = None,
+        context_type: str | None = None,
+    ) -> int:
+        cur = self.conn.execute(
+            """INSERT INTO social_mentions
+               (job_id, platform, source_url, recruiter_name, recruiter_linkedin,
+                recruiter_email, post_title, post_excerpt, context_type, found_at)
+               VALUES (?,?,?,?,?,?,?,?,?,?)""",
+            (
+                job_id,
+                platform,
+                source_url,
+                recruiter_name,
+                recruiter_linkedin,
+                recruiter_email,
+                post_title,
+                post_excerpt,
+                context_type,
+                now_iso(),
+            ),
+        )
+        self.conn.commit()
+        return int(cur.lastrowid)
+
+    def social_mentions_for(self, job_id: str) -> list[dict]:
+        rows = self.conn.execute(
+            "SELECT * FROM social_mentions WHERE job_id=? ORDER BY found_at DESC", (job_id,)
+        ).fetchall()
+        return [dict(r) for r in rows]
+
 
 def _b(v: bool | None) -> int | None:
     return None if v is None else int(bool(v))

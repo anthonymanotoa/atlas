@@ -144,3 +144,20 @@ CREATE TABLE IF NOT EXISTS meta (
     value      TEXT,
     updated_at TEXT
 );
+
+-- Social signal (P2-C): recruiter/posts found about a vacancy on LinkedIn/X via a
+-- SUPERVISED Claude-in-Chrome session. Captured after the human confirms — never auto-contacted.
+CREATE TABLE IF NOT EXISTS social_mentions (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    job_id            TEXT REFERENCES jobs(id) ON DELETE CASCADE,
+    platform          TEXT,                    -- linkedin | x | other
+    source_url        TEXT,
+    recruiter_name    TEXT,
+    recruiter_linkedin TEXT,
+    recruiter_email   TEXT,
+    post_title        TEXT,
+    post_excerpt      TEXT,
+    context_type      TEXT,                    -- hiring_post | recruiter_profile | mention | other
+    found_at          TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_social_job ON social_mentions(job_id);

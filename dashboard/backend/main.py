@@ -124,6 +124,17 @@ class SettingBody(BaseModel):
     value: str
 
 
+class SocialMentionBody(BaseModel):
+    platform: str = "linkedin"
+    source_url: str | None = None
+    recruiter_name: str | None = None
+    recruiter_linkedin: str | None = None
+    recruiter_email: str | None = None
+    post_title: str | None = None
+    post_excerpt: str | None = None
+    context_type: str | None = None
+
+
 # ── API ──────────────────────────────────────────────────────────────────────
 @app.get("/api/overview")
 def api_overview(db: DB = Depends(get_db)):
@@ -371,6 +382,46 @@ def api_export(columns: str | None = None, state: str | None = None, db: DB = De
         media_type="text/csv; charset=utf-8",
         headers={"Content-Disposition": 'attachment; filename="atlas_jobs.csv"'},
     )
+
+
+# ── Social signal (P2-C): supervised LinkedIn/X lookup — never auto-contacts ──
+@app.get("/api/jobs/{job_id}/social_mentions")
+def api_social_mentions(job_id: str, db: DB = Depends(get_db)):
+    return {"mentions": db.social_mentions_for(job_id)}
+
+
+@app.post("/api/jobs/{job_id}/start-social-search", dependencies=[Depends(require_trusted_origin)])
+def api_start_social_search(job_id: str, db: DB = Depends(get_db)):
+    """Queue a (human-run) social search and return ready-to-paste queries for Chrome."""
+    from engine.social import search
+
+    job = db.get_job(job_id)
+    if not job:
+        raise HTTPException(404, "job not found")
+    search.queue_search(db, job_id, job.get("company", ""), job.get("title", ""))
+    return {
+        "ok": True,
+        "queries": search.search_queries(job.get("company", ""), job.get("title", "")),
+    }
+
+
+@app.post("/api/jobs/{job_id}/social_mentions", dependencies=[Depends(require_trusted_origin)])
+def api_add_social_mention(job_id: str, body: SocialMentionBody, db: DB = Depends(get_db)):
+    """Save a mention the human confirmed in the supervised Chrome session."""
+    from engine.social import search
+
+    if not db.get_job(job_id):
+        raise HTTPException(404, "job not found")
+    mid = db.add_social_mention(job_id, **body.model_dump())
+    search.clear_search(db, job_id)
+    return {"ok": True, "id": mid}
+
+
+@app.get("/api/pending-searches")
+def api_pending_searches(db: DB = Depends(get_db)):
+    from engine.social import search
+
+    return {"pending": search.pending_searches(db)}
 
 
 # ── Onboarding (P1-G): first adapt the CV + LinkedIn, then start ──────────────

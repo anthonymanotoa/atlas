@@ -1,7 +1,7 @@
 import * as Dialog from "@radix-ui/react-dialog";
-import { Check, Copy, Download, ExternalLink, FileText, Send, X } from "lucide-react";
+import { Check, Copy, Download, ExternalLink, FileText, Plus, Search, Send, X } from "lucide-react";
 import { useEffect, useState } from "react";
-import { api, type JobDetail } from "../api";
+import { api, type JobDetail, type SocialMention } from "../api";
 import { STATE_ES, copy, fitTone, freshLabel, langLabel, pct, salaryLabel } from "../lib";
 
 const KIND_ES: Record<string, string> = {
@@ -100,6 +100,120 @@ function MessageCard({ m }: { m: JobDetail["messages"][number] }) {
         >
           <Send size={13} /> {sent ? "Enviado" : "Marcar enviado"}
         </button>
+      </div>
+    </div>
+  );
+}
+
+// P2-C: supervised social signal. Atlas queues a search + prepares queries; the human
+// runs the LinkedIn/X lookup in their own Chrome and saves what they confirm. No auto-contact.
+function SocialSearch({ jobId }: { jobId: string }) {
+  const [mentions, setMentions] = useState<SocialMention[]>([]);
+  const [queries, setQueries] = useState<Record<string, string> | null>(null);
+  const [form, setForm] = useState({ recruiter_name: "", recruiter_linkedin: "", source_url: "" });
+  const refresh = () => api.socialMentions(jobId).then((r) => setMentions(r.mentions));
+  useEffect(() => {
+    refresh();
+  }, [jobId]); // eslint-disable-line react-hooks/exhaustive-deps
+  const g = (q: string) => `https://www.google.com/search?q=${encodeURIComponent(q)}`;
+  async function start() {
+    setQueries((await api.startSocialSearch(jobId)).queries);
+  }
+  async function save() {
+    if (!form.recruiter_name && !form.source_url) return;
+    await api.addSocialMention(jobId, { platform: "linkedin", ...form });
+    setForm({ recruiter_name: "", recruiter_linkedin: "", source_url: "" });
+    refresh();
+  }
+  return (
+    <div>
+      <div className="mb-2 text-sm font-semibold">Señal social (LinkedIn / X)</div>
+      <div className="card space-y-2 p-3 text-sm">
+        <div className="text-[0.78rem] text-[var(--color-muted)]">
+          Búsqueda supervisada en tu navegador — Atlas no contacta a nadie por ti.
+        </div>
+        <button className="btn !py-1 text-xs" onClick={start}>
+          <Search size={13} /> Buscar reclutador
+        </button>
+        {queries && (
+          <div className="flex flex-col gap-1 text-xs">
+            <a
+              className="text-[var(--color-accent)]"
+              target="_blank"
+              rel="noreferrer"
+              href={g(queries.linkedin_recruiters)}
+            >
+              · LinkedIn — reclutadores ↗
+            </a>
+            <a
+              className="text-[var(--color-accent)]"
+              target="_blank"
+              rel="noreferrer"
+              href={g(queries.linkedin_posts)}
+            >
+              · LinkedIn — posts de la vacante ↗
+            </a>
+            <a
+              className="text-[var(--color-accent)]"
+              target="_blank"
+              rel="noreferrer"
+              href={g(queries.x)}
+            >
+              · X / Twitter ↗
+            </a>
+          </div>
+        )}
+        {mentions.map((m) => (
+          <div key={m.id} className="border-t border-[var(--color-border)] pt-2">
+            <b>{m.recruiter_name || m.post_title || "Mención"}</b>{" "}
+            {m.platform && <span className="chip !px-1.5">{m.platform}</span>}
+            {m.recruiter_linkedin && (
+              <a
+                className="ml-2 text-xs text-[var(--color-accent)]"
+                target="_blank"
+                rel="noreferrer"
+                href={m.recruiter_linkedin}
+              >
+                LinkedIn ↗
+              </a>
+            )}
+            {m.source_url && (
+              <a
+                className="ml-2 text-xs text-[var(--color-accent)]"
+                target="_blank"
+                rel="noreferrer"
+                href={m.source_url}
+              >
+                fuente ↗
+              </a>
+            )}
+          </div>
+        ))}
+        <div className="flex flex-col gap-1 pt-1">
+          <input
+            className="btn !justify-start text-xs"
+            placeholder="Nombre del reclutador"
+            value={form.recruiter_name}
+            onChange={(e) => setForm({ ...form, recruiter_name: e.target.value })}
+          />
+          <input
+            className="btn !justify-start text-xs"
+            placeholder="URL de LinkedIn del reclutador"
+            value={form.recruiter_linkedin}
+            onChange={(e) => setForm({ ...form, recruiter_linkedin: e.target.value })}
+          />
+          <div className="flex gap-2">
+            <input
+              className="btn !justify-start flex-1 text-xs"
+              placeholder="URL fuente (post)"
+              value={form.source_url}
+              onChange={(e) => setForm({ ...form, source_url: e.target.value })}
+            />
+            <button className="btn !py-1 text-xs" onClick={save}>
+              <Plus size={13} /> Guardar
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -251,6 +365,8 @@ export function DetailDrawer({
                   ))}
                 </div>
               </div>
+
+              <SocialSearch jobId={d.job.id} />
 
               <div className="flex gap-2 pt-2">
                 <button className="btn flex-1 justify-center" onClick={markApplied}>
