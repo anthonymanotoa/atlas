@@ -148,6 +148,21 @@ def test_csv_columns_lists_catalog(atlas_app):
     assert r["selected"]
 
 
+# ── P3-F: portfolio + peers ──────────────────────────────────────────────────────
+def test_portfolio_generate_and_peers(atlas_app):
+    with TestClient(atlas_app) as client:
+        gen = client.post("/api/portfolio/generate", json={"include_github": False})
+        assert gen.status_code == 200
+        pid = gen.json()["id"]
+        latest = client.get("/api/portfolio/latest").json()["portfolio"]
+        assert latest and latest["id"] == pid
+        prev = client.get(f"/api/portfolio/{pid}/preview")
+        assert prev.status_code == 200 and "text/html" in prev.headers["content-type"]
+        client.post("/api/peers", json={"peer_name": "Grace", "peer_portfolio_url": "https://x"})
+        peers = client.get("/api/peers").json()["peers"]
+        assert peers and peers[0]["peer_name"] == "Grace"
+
+
 # ── P3-E: interview prep ─────────────────────────────────────────────────────────
 def test_interview_flow(atlas_app):
     with TestClient(atlas_app) as client:

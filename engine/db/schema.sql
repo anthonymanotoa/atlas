@@ -226,3 +226,27 @@ CREATE TABLE IF NOT EXISTS interviewers (
     created_at     TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_interviewers_iv ON interviewers(interview_id);
+
+-- Portfolio (P3-F): generated artifacts (local-only, never auto-published) + peer references
+-- studied via SUPERVISED Claude-in-Chrome (links + notes only — no scraping/hoarding).
+CREATE TABLE IF NOT EXISTS portfolios (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    version       TEXT,
+    output_format TEXT DEFAULT 'html',
+    path_html     TEXT,
+    metadata_json TEXT,
+    generated_at  TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS peer_portfolios (
+    id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+    role_match         TEXT,
+    peer_name          TEXT,
+    peer_profile_url   TEXT,
+    peer_portfolio_url TEXT,
+    key_strengths_json TEXT,
+    how_to_emulate_json TEXT,
+    source_url         TEXT,
+    notes              TEXT,
+    reviewed_at        TEXT
+);

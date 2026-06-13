@@ -158,6 +158,21 @@ class PrepLangBody(BaseModel):
     language: Literal["en", "es"] = "en"
 
 
+class PortfolioBody(BaseModel):
+    include_github: bool = False
+
+
+class PeerBody(BaseModel):
+    peer_name: str
+    role_match: str | None = None
+    peer_profile_url: str | None = None
+    peer_portfolio_url: str | None = None
+    key_strengths: list[str] | None = None
+    how_to_emulate: list[str] | None = None
+    source_url: str | None = None
+    notes: str | None = None
+
+
 class SocialMentionBody(BaseModel):
     platform: str = "linkedin"
     source_url: str | None = None
@@ -453,6 +468,48 @@ def api_learning_feedback(learning_id: int, body: FeedbackBody, db: DB = Depends
         learning_id, feedback_type=body.feedback_type, reasoning=body.reasoning
     )
     return {"ok": True}
+
+
+# ── Portfolio + peers (P3-F): local generation, never auto-published ──────────
+@app.get("/api/portfolio/latest")
+def api_portfolio_latest(db: DB = Depends(get_db)):
+    return {"portfolio": db.latest_portfolio()}
+
+
+@app.post("/api/portfolio/generate", dependencies=[Depends(require_trusted_origin)])
+def api_portfolio_generate(body: PortfolioBody, db: DB = Depends(get_db)):
+    from datetime import UTC, datetime
+
+    from engine.config import load_master_cv
+    from engine.portfolio.builder import generate_portfolio
+
+    version = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
+    path = generate_portfolio(load_master_cv(), version=version, include_github=body.include_github)
+    pid = db.add_portfolio(version=version, path_html=str(path))
+    return {"ok": True, "id": pid, "version": version, "path": str(path)}
+
+
+@app.get("/api/portfolio/{portfolio_id}/preview")
+def api_portfolio_preview(portfolio_id: int, db: DB = Depends(get_db)):
+    row = next((p for p in db.list_portfolios() if p["id"] == portfolio_id), None)
+    if not row or not row.get("path_html"):
+        raise HTTPException(404, "portfolio not found")
+    p = Path(row["path_html"]).resolve()
+    # Confine to the outbox: never serve a file outside data/outbox, whatever the row says.
+    if not p.is_relative_to(paths.OUTBOX_DIR.resolve()) or not p.exists():
+        raise HTTPException(404, "portfolio file not available")
+    return FileResponse(str(p), media_type="text/html")
+
+
+@app.get("/api/peers")
+def api_peers(db: DB = Depends(get_db)):
+    return {"peers": db.list_peer_portfolios()}
+
+
+@app.post("/api/peers", dependencies=[Depends(require_trusted_origin)])
+def api_add_peer(body: PeerBody, db: DB = Depends(get_db)):
+    pid = db.add_peer_portfolio(**body.model_dump())
+    return {"ok": True, "id": pid}
 
 
 # ── Interview prep (P3-E): manual entry + deterministic prep-doc generation ───

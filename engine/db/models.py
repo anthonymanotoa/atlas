@@ -637,6 +637,77 @@ class DB:
         ).fetchall()
         return [dict(r) for r in rows]
 
+    # ── portfolio + peers (P3-F) ───────────────────────────────────────────────
+    def add_portfolio(
+        self,
+        *,
+        version: str,
+        path_html: str,
+        metadata_json: str = "{}",
+        output_format: str = "html",
+    ) -> int:
+        cur = self.conn.execute(
+            """INSERT INTO portfolios (version, output_format, path_html, metadata_json, generated_at)
+               VALUES (?,?,?,?,?)""",
+            (version, output_format, path_html, metadata_json, now_iso()),
+        )
+        self.conn.commit()
+        return int(cur.lastrowid)
+
+    def list_portfolios(self) -> list[dict]:
+        rows = self.conn.execute("SELECT * FROM portfolios ORDER BY generated_at DESC").fetchall()
+        return [dict(r) for r in rows]
+
+    def latest_portfolio(self) -> dict | None:
+        row = self.conn.execute(
+            "SELECT * FROM portfolios ORDER BY generated_at DESC LIMIT 1"
+        ).fetchone()
+        return dict(row) if row else None
+
+    def add_peer_portfolio(
+        self,
+        *,
+        peer_name: str,
+        role_match: str | None = None,
+        peer_profile_url: str | None = None,
+        peer_portfolio_url: str | None = None,
+        key_strengths: list[str] | None = None,
+        how_to_emulate: list[str] | None = None,
+        source_url: str | None = None,
+        notes: str | None = None,
+    ) -> int:
+        cur = self.conn.execute(
+            """INSERT INTO peer_portfolios
+               (role_match, peer_name, peer_profile_url, peer_portfolio_url,
+                key_strengths_json, how_to_emulate_json, source_url, notes, reviewed_at)
+               VALUES (?,?,?,?,?,?,?,?,?)""",
+            (
+                role_match,
+                peer_name,
+                peer_profile_url,
+                peer_portfolio_url,
+                json.dumps(key_strengths or []),
+                json.dumps(how_to_emulate or []),
+                source_url,
+                notes,
+                now_iso(),
+            ),
+        )
+        self.conn.commit()
+        return int(cur.lastrowid)
+
+    def list_peer_portfolios(self) -> list[dict]:
+        rows = self.conn.execute(
+            "SELECT * FROM peer_portfolios ORDER BY reviewed_at DESC"
+        ).fetchall()
+        out = []
+        for r in rows:
+            d = dict(r)
+            d["key_strengths"] = _loads(d.get("key_strengths_json"), [])
+            d["how_to_emulate"] = _loads(d.get("how_to_emulate_json"), [])
+            out.append(d)
+        return out
+
     def record_learning_feedback(
         self,
         learning_id: int,

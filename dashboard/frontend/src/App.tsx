@@ -25,6 +25,7 @@ import { DetailDrawer } from "./components/DetailDrawer";
 import { FilterBar, type Filters } from "./components/FilterBar";
 import { NeedsAction } from "./components/NeedsAction";
 import { OnboardingGate } from "./components/OnboardingGate";
+import { PortfolioViewer } from "./components/PortfolioViewer";
 import { SettingsModal } from "./components/SettingsModal";
 
 export default function App() {
@@ -40,6 +41,7 @@ export default function App() {
   const [briefOpen, setBriefOpen] = useState(false);
   const [brief, setBrief] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [view, setView] = useState<"pipeline" | "portfolio">("pipeline");
   const [searching, setSearching] = useState(false);
   const [filters, setFilters] = useState<Filters>({
     onlySalary: false,
@@ -232,26 +234,47 @@ export default function App() {
         <OnboardingGate status={onboarding} onComplete={load} onRefresh={refreshOnboarding} />
       ) : (
         <>
-          {ov?.downtime_hours ? (
-            <div className="card p-3 mb-4 text-sm" style={{ borderColor: "var(--color-pending)" }}>
-              ⚠️ Estuve sin correr ~{Math.round(ov.downtime_hours)}h. Revisa que el Mac esté
-              despierto y Claude Desktop abierto.
-            </div>
-          ) : null}
+          <nav className="mb-4 flex gap-2">
+            {(["pipeline", "portfolio"] as const).map((v) => (
+              <button
+                key={v}
+                className="btn !py-1.5"
+                style={view === v ? { borderColor: "var(--color-accent)" } : undefined}
+                onClick={() => setView(v)}
+              >
+                {v === "pipeline" ? "Pipeline" : "Portafolio"}
+              </button>
+            ))}
+          </nav>
 
-          {ov && (
-            <div className="mb-5">
-              <AnalyticsStrip ov={ov} />
-            </div>
+          {view === "portfolio" ? (
+            <PortfolioViewer />
+          ) : (
+            <>
+              {ov?.downtime_hours ? (
+                <div
+                  className="card p-3 mb-4 text-sm"
+                  style={{ borderColor: "var(--color-pending)" }}
+                >
+                  ⚠️ Estuve sin correr ~{Math.round(ov.downtime_hours)}h. Revisa que el Mac esté
+                  despierto y Claude Desktop abierto.
+                </div>
+              ) : null}
+
+              {ov && (
+                <div className="mb-5">
+                  <AnalyticsStrip ov={ov} />
+                </div>
+              )}
+
+              <div className="mb-6">
+                <NeedsAction actions={actions} onOpen={setSelected} />
+              </div>
+
+              <FilterBar filters={filters} setFilters={setFilters} languages={languages} />
+              <Board columns={columns} jobs={filteredJobs} onOpen={setSelected} onMove={move} />
+            </>
           )}
-
-          <div className="mb-6">
-            <NeedsAction actions={actions} onOpen={setSelected} />
-          </div>
-
-          <h2 className="text-sm font-semibold tracking-wide mb-2">Pipeline</h2>
-          <FilterBar filters={filters} setFilters={setFilters} languages={languages} />
-          <Board columns={columns} jobs={filteredJobs} onOpen={setSelected} onMove={move} />
         </>
       )}
 
