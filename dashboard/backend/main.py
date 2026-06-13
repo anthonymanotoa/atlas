@@ -311,16 +311,26 @@ _DISCOVER_LOCK = Lock()
 _discovering = False
 
 
-def _run_discover_and_score(only: set[str] | None) -> None:
+def _run_discover_and_score(only: set[str] | None, profile_id: str | None) -> None:
     global _discovering
     try:
         from engine.config import load_criteria
         from engine.discovery.runner import discover as run_discover
         from engine.scoring.run import score_jobs
 
+        # Re-pin the profile captured at enqueue time so a concurrent dashboard switch
+        # can't make this run land in another profile's DB/criteria.
+        if profile_id is not None:
+            paths.set_profile(profile_id)
         with DB() as db:  # own connection — see note above
             run_discover(db, only=only)
             score_jobs(db, load_criteria())
+    except Exception as e:  # noqa: BLE001 — record the failure instead of dropping it silently
+        try:
+            with DB() as db:
+                db.log_event(None, "error", {"stage": "discover_bg", "error": str(e)[:200]})
+        except Exception:  # noqa: BLE001
+            pass
     finally:
         with _DISCOVER_LOCK:
             _discovering = False
@@ -335,7 +345,7 @@ def api_discover(background: BackgroundTasks, only: str | None = None):
             return {"started": False, "running": True}  # one run at a time
         _discovering = True
     only_set = {s.strip() for s in only.split(",")} if only else None
-    background.add_task(_run_discover_and_score, only_set)
+    background.add_task(_run_discover_and_score, only_set, paths.PROFILE_ID)
     return {"started": True}
 
 
