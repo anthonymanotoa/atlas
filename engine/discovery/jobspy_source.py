@@ -8,6 +8,8 @@ worst case is a temporary IP 429, never a LinkedIn *account* ban.
 from __future__ import annotations
 
 import math
+import random
+import time
 
 from engine.normalize import Job
 from engine.util import to_float
@@ -99,12 +101,18 @@ def fetch(cfg: dict, search_terms: list[str]) -> dict[str, list[Job]]:
     linkedin_cap = int(cfg.get("linkedin_cap", 200))
     fetch_desc = bool(cfg.get("linkedin_fetch_description", False))
 
+    # LinkedIn guest pacing: space out scrape calls (with jitter) so a multi-term run
+    # never hammers LinkedIn into an IP throttle. Slower is fine — account-safe by design.
+    linkedin_delay_ms = int(cfg.get("linkedin_delay_ms", 2500))
+
     out: dict[str, list[Job]] = {}
     for site in sites:
         jobs: list[Job] = []
-        for term in search_terms:
+        for i, term in enumerate(search_terms):
             if site == "linkedin" and len(jobs) >= linkedin_cap:
                 break
+            if site == "linkedin" and linkedin_delay_ms and i > 0:
+                time.sleep(linkedin_delay_ms / 1000 * (0.8 + 0.4 * random.random()))
             try:
                 records = _scrape(
                     site,

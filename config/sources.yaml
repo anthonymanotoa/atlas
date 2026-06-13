@@ -24,6 +24,7 @@ jobspy:
   country_indeed: USA          # Indeed requires a country; remote filter does the rest
   linkedin_fetch_description: false   # only hydrate full descriptions for shortlisted
   linkedin_cap: 200            # stop well before the ~250 wall
+  linkedin_delay_ms: 2500      # pace between LinkedIn scrape calls (±20% jitter); slower = safer
   google_search_term: ""       # left empty; Google Jobs is currently unreliable
 
 # Himalayas — free, no-auth, remote-first JSON API. Excellent fit for a remote seeker.
@@ -42,3 +43,16 @@ adzuna:
 limits:
   per_source_timeout_s: 45
   max_jobs_per_run: 1500
+
+# Per-domain httpx pacing (ATS feeds + free APIs via engine/discovery/http.py).
+# min_delay_ms = minimum spacing between requests to the same domain (±20% jitter).
+# Keys are matched as substrings of the request host. "Slower is fine, never banned."
+# NOTE: this does NOT cover the logged-in LinkedIn browsing done via Claude-in-Chrome —
+# that path is paced by the supervised skill's human-speed guardrails (docs/RATE_LIMITING.md).
+rate_limits:
+  greenhouse.io: { min_delay_ms: 400 }
+  lever.co: { min_delay_ms: 400 }
+  ashbyhq.com: { min_delay_ms: 400 }
+  smartrecruiters.com: { min_delay_ms: 400 }
+  himalayas.app: { min_delay_ms: 300 }
+  adzuna.com: { min_delay_ms: 500 }

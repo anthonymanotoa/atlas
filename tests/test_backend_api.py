@@ -148,6 +148,28 @@ def test_csv_columns_lists_catalog(atlas_app):
     assert r["selected"]
 
 
+# ── P2-C: supervised social search ──────────────────────────────────────────────
+def test_social_search_flow(atlas_app):
+    with TestClient(atlas_app) as client:
+        jid = _seed_job("shortlisted")
+        r = client.post(f"/api/jobs/{jid}/start-social-search")
+        assert r.status_code == 200 and "queries" in r.json()
+        assert any(
+            p["job_id"] == jid for p in client.get("/api/pending-searches").json()["pending"]
+        )
+        add = client.post(
+            f"/api/jobs/{jid}/social_mentions",
+            json={"platform": "linkedin", "recruiter_name": "Jane"},
+        )
+        assert add.status_code == 200
+        ms = client.get(f"/api/jobs/{jid}/social_mentions").json()["mentions"]
+        assert ms and ms[0]["recruiter_name"] == "Jane"
+        # capturing a mention clears the pending search
+        assert all(
+            p["job_id"] != jid for p in client.get("/api/pending-searches").json()["pending"]
+        )
+
+
 # ── P1-G: onboarding gate ───────────────────────────────────────────────────────
 def test_onboarding_status_and_complete(atlas_app):
     with TestClient(atlas_app) as client:

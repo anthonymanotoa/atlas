@@ -11,10 +11,29 @@ from typing import Any
 
 import httpx
 
+from engine.discovery.rate_limiter import RateLimiter
+
 _UA = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/126.0 Safari/537.36"
 )
+
+# Lazily-built, process-wide pacer. Config from sources.yaml `rate_limits` (per-domain
+# min_delay_ms). Keeps us account/IP-safe on the httpx path; see rate_limiter.py.
+_LIMITER: RateLimiter | None = None
+
+
+def _limiter() -> RateLimiter:
+    global _LIMITER
+    if _LIMITER is None:
+        try:
+            from engine.config import load_sources
+
+            limits = load_sources().get("rate_limits") or {}
+        except Exception:  # noqa: BLE001 — pacing is best-effort; never block discovery on config
+            limits = {}
+        _LIMITER = RateLimiter(limits)
+    return _LIMITER
 
 
 def make_client(timeout: float = 45.0) -> httpx.Client:
@@ -34,6 +53,7 @@ def get_json(client: httpx.Client, url: str, params: dict | None = None, retries
     last: Exception | None = None
     for attempt in range(retries + 1):
         try:
+            _limiter().wait(url)
             r = client.get(url, params=params)
             if r.status_code == 429:
                 wait = float(r.headers.get("Retry-After", 2**attempt * 3))
@@ -61,6 +81,7 @@ def post_json(client: httpx.Client, url: str, json: dict | None = None, retries:
     last: Exception | None = None
     for attempt in range(retries + 1):
         try:
+            _limiter().wait(url)
             r = client.post(url, json=json)
             if r.status_code == 429:
                 wait = float(r.headers.get("Retry-After", 2**attempt * 3))
