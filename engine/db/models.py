@@ -576,6 +576,67 @@ class DB:
         ).fetchall()
         return [dict(r) for r in rows]
 
+    # ── interviews (P3-E) ──────────────────────────────────────────────────────
+    def add_interview(
+        self,
+        job_id: str,
+        *,
+        scheduled_at: str | None = None,
+        round: str | None = None,
+        mode: str | None = None,
+        notes: str | None = None,
+    ) -> int:
+        cur = self.conn.execute(
+            """INSERT INTO interviews (job_id, scheduled_at, round, mode, notes, created_at)
+               VALUES (?,?,?,?,?,?)""",
+            (job_id, scheduled_at, round, mode, notes, now_iso()),
+        )
+        self.conn.commit()
+        return int(cur.lastrowid)
+
+    def get_interview(self, interview_id: int) -> dict | None:
+        row = self.conn.execute("SELECT * FROM interviews WHERE id=?", (interview_id,)).fetchone()
+        return dict(row) if row else None
+
+    def interviews_for_job(self, job_id: str) -> list[dict]:
+        rows = self.conn.execute(
+            "SELECT * FROM interviews WHERE job_id=? ORDER BY scheduled_at", (job_id,)
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    def list_interviews(self) -> list[dict]:
+        rows = self.conn.execute("SELECT * FROM interviews ORDER BY scheduled_at").fetchall()
+        return [dict(r) for r in rows]
+
+    def set_interview_prep_path(self, interview_id: int, path: str) -> None:
+        self.conn.execute("UPDATE interviews SET prep_path=? WHERE id=?", (path, interview_id))
+        self.conn.commit()
+
+    def add_interviewer(
+        self,
+        interview_id: int,
+        *,
+        name: str,
+        title: str | None = None,
+        company: str | None = None,
+        linkedin_url: str | None = None,
+        research_notes: str | None = None,
+    ) -> int:
+        cur = self.conn.execute(
+            """INSERT INTO interviewers
+               (interview_id, name, title, company, linkedin_url, research_notes, created_at)
+               VALUES (?,?,?,?,?,?,?)""",
+            (interview_id, name, title, company, linkedin_url, research_notes, now_iso()),
+        )
+        self.conn.commit()
+        return int(cur.lastrowid)
+
+    def interviewers_for(self, interview_id: int) -> list[dict]:
+        rows = self.conn.execute(
+            "SELECT * FROM interviewers WHERE interview_id=? ORDER BY id", (interview_id,)
+        ).fetchall()
+        return [dict(r) for r in rows]
+
     def record_learning_feedback(
         self,
         learning_id: int,

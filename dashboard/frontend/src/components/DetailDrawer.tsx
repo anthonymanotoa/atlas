@@ -3,6 +3,7 @@ import { Check, Copy, Download, ExternalLink, FileText, Plus, Search, Send, X } 
 import { useEffect, useState } from "react";
 import { api, type JobDetail, type Learning, type SocialMention } from "../api";
 import { STATE_ES, copy, fitTone, freshLabel, langLabel, pct, salaryLabel } from "../lib";
+import { InterviewPanel } from "./InterviewPanel";
 
 const KIND_ES: Record<string, string> = {
   cover_letter: "Carta de presentación",
@@ -451,6 +452,8 @@ export function DetailDrawer({
               <CompanyInsights learnings={d.learnings} />
 
               <SocialSearch jobId={d.job.id} />
+
+              <InterviewPanel jobId={d.job.id} />
 
               <RecordOutcome
                 jobId={d.job.id}

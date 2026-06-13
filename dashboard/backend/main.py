@@ -139,6 +139,25 @@ class FeedbackBody(BaseModel):
     reasoning: str = ""
 
 
+class InterviewBody(BaseModel):
+    scheduled_at: str | None = None
+    round: str | None = None
+    mode: str | None = None
+    notes: str | None = None
+
+
+class InterviewerBody(BaseModel):
+    name: str
+    title: str | None = None
+    company: str | None = None
+    linkedin_url: str | None = None
+    research_notes: str | None = None
+
+
+class PrepLangBody(BaseModel):
+    language: Literal["en", "es"] = "en"
+
+
 class SocialMentionBody(BaseModel):
     platform: str = "linkedin"
     source_url: str | None = None
@@ -434,6 +453,46 @@ def api_learning_feedback(learning_id: int, body: FeedbackBody, db: DB = Depends
         learning_id, feedback_type=body.feedback_type, reasoning=body.reasoning
     )
     return {"ok": True}
+
+
+# ── Interview prep (P3-E): manual entry + deterministic prep-doc generation ───
+@app.get("/api/jobs/{job_id}/interviews")
+def api_interviews_for_job(job_id: str, db: DB = Depends(get_db)):
+    out = []
+    for iv in db.interviews_for_job(job_id):
+        iv["interviewers"] = db.interviewers_for(iv["id"])
+        out.append(iv)
+    return {"interviews": out}
+
+
+@app.post("/api/jobs/{job_id}/interview", dependencies=[Depends(require_trusted_origin)])
+def api_add_interview(job_id: str, body: InterviewBody, db: DB = Depends(get_db)):
+    if not db.get_job(job_id):
+        raise HTTPException(404, "job not found")
+    iid = db.add_interview(
+        job_id, scheduled_at=body.scheduled_at, round=body.round, mode=body.mode, notes=body.notes
+    )
+    return {"ok": True, "id": iid}
+
+
+@app.post(
+    "/api/interview/{interview_id}/interviewer", dependencies=[Depends(require_trusted_origin)]
+)
+def api_add_interviewer(interview_id: int, body: InterviewerBody, db: DB = Depends(get_db)):
+    if not db.get_interview(interview_id):
+        raise HTTPException(404, "interview not found")
+    iid = db.add_interviewer(interview_id, **body.model_dump())
+    return {"ok": True, "id": iid}
+
+
+@app.post("/api/interview/{interview_id}/prep", dependencies=[Depends(require_trusted_origin)])
+def api_interview_prep(interview_id: int, body: PrepLangBody, db: DB = Depends(get_db)):
+    from engine.interview.interview_prep import gen_prep_doc
+
+    if not db.get_interview(interview_id):
+        raise HTTPException(404, "interview not found")
+    path = gen_prep_doc(db, interview_id, language=body.language)
+    return {"ok": True, "path": str(path), "markdown": path.read_text()}
 
 
 # ── Social signal (P2-C): supervised LinkedIn/X lookup — never auto-contacts ──

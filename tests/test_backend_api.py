@@ -148,6 +148,22 @@ def test_csv_columns_lists_catalog(atlas_app):
     assert r["selected"]
 
 
+# ── P3-E: interview prep ─────────────────────────────────────────────────────────
+def test_interview_flow(atlas_app):
+    with TestClient(atlas_app) as client:
+        jid = _seed_job("interview")
+        iid = client.post(
+            f"/api/jobs/{jid}/interview", json={"scheduled_at": "2026-07-15", "round": "technical"}
+        ).json()["id"]
+        client.post(
+            f"/api/interview/{iid}/interviewer", json={"name": "Jane", "linkedin_url": "https://x"}
+        )
+        prep = client.post(f"/api/interview/{iid}/prep", json={"language": "en"})
+        assert prep.status_code == 200 and "Interview prep" in prep.json()["markdown"]
+        ivs = client.get(f"/api/jobs/{jid}/interviews").json()["interviews"]
+        assert ivs and ivs[0]["interviewers"][0]["name"] == "Jane"
+
+
 # ── P2-D: learning loop ─────────────────────────────────────────────────────────
 def test_record_outcome_creates_learnings(atlas_app):
     with TestClient(atlas_app) as client:
