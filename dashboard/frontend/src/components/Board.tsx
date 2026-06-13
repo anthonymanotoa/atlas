@@ -1,12 +1,25 @@
 import {
-  DndContext, PointerSensor, useSensor, useSensors, useDraggable, useDroppable,
+  DndContext,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  useDraggable,
+  useDroppable,
   type DragEndEvent,
 } from "@dnd-kit/core";
 import { MapPin, Users } from "lucide-react";
 import type { Job } from "../api";
 import { COLUMN_ES, ageLabel, cn, fitTone } from "../lib";
 
-function JobCard({ job, column, onOpen }: { job: Job; column: string; onOpen: (id: string) => void }) {
+function JobCard({
+  job,
+  column,
+  onOpen,
+}: {
+  job: Job;
+  column: string;
+  onOpen: (id: string) => void;
+}) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: job.id,
     data: { from: column },
@@ -38,13 +51,23 @@ function JobCard({ job, column, onOpen }: { job: Job; column: string; onOpen: (i
       </div>
       <div className="text-[0.8rem] text-[var(--color-muted)] mt-1 truncate">{job.company}</div>
       <div className="flex items-center gap-2 mt-2 text-[0.7rem] text-[var(--color-faint)]">
-        <span className="inline-flex items-center gap-1"><MapPin size={11} /> {remote}</span>
+        <span className="inline-flex items-center gap-1">
+          <MapPin size={11} /> {remote}
+        </span>
         {job.age_days != null && <span>· {ageLabel(job.age_days)}</span>}
         {job.knockout_flags && job.knockout_flags.length > 0 && (
-          <span title="Filtros del puesto (clearance/ciudadanía)" className="text-[var(--color-pending)]">⚑</span>
+          <span
+            title="Filtros del puesto (clearance/ciudadanía)"
+            className="text-[var(--color-pending)]"
+          >
+            ⚑
+          </span>
         )}
         {job.sources && job.sources.length > 1 && (
-          <span className="inline-flex items-center gap-1"><Users size={11} />{job.sources.length}</span>
+          <span className="inline-flex items-center gap-1">
+            <Users size={11} />
+            {job.sources.length}
+          </span>
         )}
       </div>
     </div>
@@ -69,7 +92,9 @@ function Column({ id, jobs, onOpen }: { id: string; jobs: Job[]; onOpen: (id: st
         )}
       >
         {jobs.length === 0 ? (
-          <div className="text-[0.75rem] text-[var(--color-faint)] px-2 py-6 text-center">vacío</div>
+          <div className="text-[0.75rem] text-[var(--color-faint)] px-2 py-6 text-center">
+            vacío
+          </div>
         ) : (
           jobs.map((j) => <JobCard key={j.id} job={j} column={id} onOpen={onOpen} />)
         )}
@@ -79,7 +104,10 @@ function Column({ id, jobs, onOpen }: { id: string; jobs: Job[]; onOpen: (id: st
 }
 
 export function Board({
-  columns, jobs, onOpen, onMove,
+  columns,
+  jobs,
+  onOpen,
+  onMove,
 }: {
   columns: string[];
   jobs: Record<string, Job[]>;
