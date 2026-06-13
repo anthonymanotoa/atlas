@@ -216,6 +216,26 @@ def brain(limit: int = typer.Option(8, help="Max jobs to fully prepare this run.
 
 
 @app.command()
+def advise(json_out: bool = typer.Option(False, "--json", help="Emit findings as JSON.")) -> None:
+    """Audit your master CV against best practices (feeds the cv-linkedin-advisor skill)."""
+    import json as _json
+    from engine.advisor import audit_dict
+    from engine.config import load_master_cv
+    result = audit_dict(load_master_cv())
+    if json_out:
+        print(_json.dumps(result, indent=2, ensure_ascii=False))
+        return
+    s = result["summary"]
+    console.print(f"[bold]Auditoría del CV[/] — {s['high']} altas · {s['med']} medias · {s['low']} bajas")
+    colors = {"high": "red", "med": "yellow", "low": "cyan"}
+    for x in result["findings"]:
+        console.print(f"  [{colors[x['severity']]}]●[/] [{x['area']}] {x['message']}")
+        console.print(f"     → {x['suggestion']}")
+    console.print("\nPara la mejora completa (IA-forward, LinkedIn), corre el skill "
+                  "[bold]cv-linkedin-advisor[/] (advisor/cv_linkedin_advisor.md).")
+
+
+@app.command()
 def status() -> None:
     """Show pipeline counts and the latest health of each source."""
     with _db() as db:
