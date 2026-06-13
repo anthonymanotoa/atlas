@@ -13,7 +13,7 @@ from engine.config import CompanyTarget, load_companies, load_sources
 from engine.db.models import DB
 from engine.discovery import jobspy_source
 from engine.discovery.apis import adzuna, himalayas
-from engine.discovery.ats import ashby, greenhouse, lever, smartrecruiters
+from engine.discovery.ats import ashby, greenhouse, lever, smartrecruiters, workday
 from engine.discovery.http import make_client
 from engine.normalize import Job, now_iso
 
@@ -22,6 +22,7 @@ ATS_DISPATCH: dict[str, Callable] = {
     "lever": lever.fetch,
     "ashby": ashby.fetch,
     "smartrecruiters": smartrecruiters.fetch,
+    "workday": workday.fetch,
 }
 
 

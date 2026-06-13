@@ -70,7 +70,7 @@ class CompanyTarget(BaseModel):
     company: str
     ats: str                                  # greenhouse | lever | ashby | smartrecruiters
     token: Optional[str] = None               # board token / site slug / job_board_name / companyIdentifier
-    instance: Optional[str] = None            # workday tenant (unused in v1)
+    instance: Optional[str] = None            # workday tenant (e.g. "nvidia" in nvidia.wd5.myworkdayjobs.com)
     eu: bool = False                          # lever EU host
     careers_url: Optional[str] = None         # for re-resolution
 

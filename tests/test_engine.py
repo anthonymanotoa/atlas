@@ -246,6 +246,33 @@ def test_overview_and_needs_action(db: DB):
     assert acts and acts[0]["priority"] == 0                       # the reply sorts first
 
 
+# ── Plan 018: Workday CXS parser + resolver host pattern (keyless path) ──────────
+def test_workday_parses_fixture_payload(monkeypatch):
+    from engine.config import CompanyTarget
+    from engine.discovery.ats import workday
+    payload = {"total": 1, "jobPostings": [
+        {"title": "Senior Data Scientist", "externalPath": "/job/US-CA/Senior-DS_JR1",
+         "locationsText": "Remote, US", "bulletFields": ["JR1"], "postedOn": "Posted Today"}]}
+    monkeypatch.setattr(workday, "post_json", lambda client, url, json=None: payload)
+    t = CompanyTarget(company="Acme", ats="workday", instance="acme", token="AcmeCareers",
+                      careers_url="https://acme.wd5.myworkdayjobs.com/AcmeCareers")
+    jobs = workday.fetch(t, client=None)   # client unused (post_json is stubbed) — no network
+    assert len(jobs) == 1
+    j = jobs[0]
+    assert j.source == "workday"
+    assert j.title == "Senior Data Scientist"
+    assert j.source_job_id == "JR1"            # bulletFields[0]
+    assert "acme.wd5.myworkdayjobs.com" in j.url and "/job/US-CA/Senior-DS_JR1" in j.url
+
+
+def test_resolve_ats_detects_workday_host():
+    from engine.discovery.registry import PATTERNS, _workday_site
+    host = "https://acme.wd5.myworkdayjobs.com/en-US/AcmeCareers"
+    m = next((rx.search(host) for ats, rx in PATTERNS if ats == "workday"), None)
+    assert m and m.group(1) == "acme"          # the gap this closes: no longer "No known ATS detected"
+    assert _workday_site(host) == "AcmeCareers"  # locale segment skipped
+
+
 # ── Plan 012: PDF parity — project descriptions are rendered (were dropped) ──────
 def test_pdf_renders_project_description(tmp_path: Path):
     from engine.cv import render
