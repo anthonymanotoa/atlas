@@ -88,7 +88,7 @@ def _required_years(text: str) -> int | None:
     return max(yrs) if yrs else None
 
 
-def score_job(job: dict, criteria: Criteria) -> ScoreResult:
+def score_job(job: dict, criteria: Criteria, learnings: list[dict] | None = None) -> ScoreResult:
     title = job.get("title") or ""
     title_l = title.lower()
     desc = job.get("description") or ""
@@ -204,6 +204,20 @@ def score_job(job: dict, criteria: Criteria) -> ScoreResult:
             knockouts.append(f"requires {req}+ years")
             score -= 8
             reasons.append(f"requires {req}+ years (> your {criteria.max_years_required})")
+
+    # 11. Company learnings (P2-D): confidence-gated nudges from past outcomes.
+    for learning in learnings or []:
+        if (learning.get("confidence") or 0) < 0.6:
+            continue
+        pt, obs = learning.get("pattern_type"), learning.get("observation", "")
+        if pt == "offer_rate":
+            score += 4
+            reasons.append(f"learning: {obs}")
+        elif pt == "rejection_rate":
+            score -= 4
+            reasons.append(f"learning: {obs}")
+        elif pt in ("referral_conversion", "process_speed"):
+            reasons.append(f"learning: {obs}")
 
     score = max(0.0, min(100.0, score))
     if disq:

@@ -145,6 +145,44 @@ CREATE TABLE IF NOT EXISTS meta (
     updated_at TEXT
 );
 
+-- Self-improving memory (P2-D). Outcomes are HUMAN-confirmed (form/CLI), never fabricated
+-- by the brain. auto_learn() rolls them into per-company `learnings` the scorer/outreach read.
+CREATE TABLE IF NOT EXISTS application_outcomes (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    job_id          TEXT REFERENCES jobs(id) ON DELETE CASCADE,
+    company         TEXT NOT NULL,             -- normalized (normalize.norm_company)
+    final_state     TEXT NOT NULL,             -- rejected | responded | interviewed | offer | ghosted
+    response_days   INTEGER,
+    interview_count INTEGER DEFAULT 0,
+    offer_made      INTEGER DEFAULT 0,         -- 1/0
+    recruiter_source TEXT,                      -- referral | recruiter | cold | inbound | unknown
+    reason          TEXT,
+    notes           TEXT,
+    captured_at     TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_outcomes_company ON application_outcomes(company);
+
+CREATE TABLE IF NOT EXISTS learnings (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    company        TEXT NOT NULL,              -- normalized
+    pattern_type   TEXT NOT NULL,              -- process_speed | referral_conversion | rejection_rate | offer_rate | process
+    observation    TEXT NOT NULL,
+    confidence     REAL DEFAULT 0,             -- 0..1, grows with evidence
+    evidence_count INTEGER DEFAULT 0,
+    last_updated   TEXT NOT NULL,
+    UNIQUE(company, pattern_type)
+);
+CREATE INDEX IF NOT EXISTS idx_learnings_company ON learnings(company);
+
+CREATE TABLE IF NOT EXISTS learning_feedback (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    learning_id   INTEGER REFERENCES learnings(id) ON DELETE CASCADE,
+    job_id        TEXT,
+    feedback_type TEXT,                        -- agree | disagree
+    reasoning     TEXT,
+    created_at    TEXT NOT NULL
+);
+
 -- Social signal (P2-C): recruiter/posts found about a vacancy on LinkedIn/X via a
 -- SUPERVISED Claude-in-Chrome session. Captured after the human confirms — never auto-contacted.
 CREATE TABLE IF NOT EXISTS social_mentions (

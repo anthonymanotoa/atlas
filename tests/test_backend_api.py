@@ -148,6 +148,19 @@ def test_csv_columns_lists_catalog(atlas_app):
     assert r["selected"]
 
 
+# ── P2-D: learning loop ─────────────────────────────────────────────────────────
+def test_record_outcome_creates_learnings(atlas_app):
+    with TestClient(atlas_app) as client:
+        jid = _seed_job("applied")
+        r = client.post(
+            f"/api/jobs/{jid}/outcome",
+            json={"final_state": "offer", "recruiter_source": "referral", "interview_count": 2},
+        )
+        assert r.status_code == 200
+        assert any(learning["pattern_type"] == "offer_rate" for learning in r.json()["learnings"])
+        assert client.get("/api/learnings").json()["learnings"]
+
+
 # ── P2-C: supervised social search ──────────────────────────────────────────────
 def test_social_search_flow(atlas_app):
     with TestClient(atlas_app) as client:

@@ -116,6 +116,12 @@ def write_package(db: DB, job_id: str, language: str = "en") -> Path:
             f"  {c.get('linkedin_url') or ''}",
             "",
         ]
+    insights = db.learnings_for_company(job.get("company", ""))
+    if insights:
+        lines.append("## 🧠 Lo aprendido de esta empresa")
+        for learning in insights:
+            lines.append(f"- {learning['observation']} (confianza {learning['confidence']:.0%})")
+        lines.append("")
     lines.append("## Mensajes (borradores — edítalos a tu voz antes de enviar)")
     for m in msgs:
         lines += [

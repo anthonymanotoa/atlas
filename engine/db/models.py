@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Any
 
 import engine.paths as paths
-from engine.normalize import STAGE_TIMESTAMP_COLS, Job, now_iso
+from engine.normalize import STAGE_TIMESTAMP_COLS, Job, norm_company, now_iso
 from engine.paths import ensure_dirs
 
 _SCHEMA = Path(__file__).with_name("schema.sql")
@@ -499,6 +499,103 @@ class DB:
             "SELECT * FROM social_mentions WHERE job_id=? ORDER BY found_at DESC", (job_id,)
         ).fetchall()
         return [dict(r) for r in rows]
+
+    # ── learning loop (P2-D) ───────────────────────────────────────────────────
+    def record_outcome(
+        self,
+        job_id: str | None,
+        company: str,
+        *,
+        final_state: str,
+        response_days: int | None = None,
+        interview_count: int = 0,
+        offer_made: bool = False,
+        recruiter_source: str | None = None,
+        reason: str | None = None,
+        notes: str | None = None,
+    ) -> int:
+        """Record a HUMAN-confirmed application outcome (company stored normalized)."""
+        cur = self.conn.execute(
+            """INSERT INTO application_outcomes
+               (job_id, company, final_state, response_days, interview_count, offer_made,
+                recruiter_source, reason, notes, captured_at)
+               VALUES (?,?,?,?,?,?,?,?,?,?)""",
+            (
+                job_id,
+                norm_company(company),
+                final_state,
+                response_days,
+                interview_count,
+                _b(offer_made),
+                recruiter_source,
+                reason,
+                notes,
+                now_iso(),
+            ),
+        )
+        self.conn.commit()
+        return int(cur.lastrowid)
+
+    def outcomes_for_company(self, company: str) -> list[dict]:
+        rows = self.conn.execute(
+            "SELECT * FROM application_outcomes WHERE company=? ORDER BY captured_at",
+            (norm_company(company),),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    def companies_with_outcomes(self) -> list[str]:
+        rows = self.conn.execute("SELECT DISTINCT company FROM application_outcomes").fetchall()
+        return [r["company"] for r in rows]
+
+    def upsert_learning(
+        self, company: str, pattern_type: str, observation: str, confidence: float, evidence: int
+    ) -> None:
+        self.conn.execute(
+            """INSERT INTO learnings
+                 (company, pattern_type, observation, confidence, evidence_count, last_updated)
+               VALUES (?,?,?,?,?,?)
+               ON CONFLICT(company, pattern_type) DO UPDATE SET
+                 observation=excluded.observation,
+                 confidence=excluded.confidence,
+                 evidence_count=excluded.evidence_count,
+                 last_updated=excluded.last_updated""",
+            (norm_company(company), pattern_type, observation, confidence, evidence, now_iso()),
+        )
+        self.conn.commit()
+
+    def learnings_for_company(self, company: str) -> list[dict]:
+        rows = self.conn.execute(
+            "SELECT * FROM learnings WHERE company=? ORDER BY confidence DESC",
+            (norm_company(company),),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    def all_learnings(self) -> list[dict]:
+        rows = self.conn.execute(
+            "SELECT * FROM learnings ORDER BY company, confidence DESC"
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    def record_learning_feedback(
+        self,
+        learning_id: int,
+        *,
+        feedback_type: str,
+        job_id: str | None = None,
+        reasoning: str = "",
+    ) -> int:
+        cur = self.conn.execute(
+            """INSERT INTO learning_feedback (learning_id, job_id, feedback_type, reasoning, created_at)
+               VALUES (?,?,?,?,?)""",
+            (learning_id, job_id, feedback_type, reasoning, now_iso()),
+        )
+        # A 'disagree' halves the pattern's confidence so the scorer trusts it less.
+        if feedback_type == "disagree":
+            self.conn.execute(
+                "UPDATE learnings SET confidence = confidence * 0.5 WHERE id=?", (learning_id,)
+            )
+        self.conn.commit()
+        return int(cur.lastrowid)
 
 
 def _b(v: bool | None) -> int | None:
