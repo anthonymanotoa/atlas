@@ -6,11 +6,11 @@ drops Connections.csv into data/inbox/, and Atlas matches connections' companies
 companies. No scraping, no login, zero account risk. 2nd-degree is handled separately
 via Claude-in-Chrome on the user's own session, on demand.
 """
+
 from __future__ import annotations
 
 import csv
 from pathlib import Path
-from typing import Optional
 
 from rapidfuzz import fuzz
 
@@ -35,18 +35,23 @@ def import_connections_csv(db: DB, csv_path: Path) -> int:
         if not name or not company:
             continue
         db.add_contact(
-            name=name, company=company, title=(row.get("Position") or "").strip() or None,
+            name=name,
+            company=company,
+            title=(row.get("Position") or "").strip() or None,
             linkedin_url=(row.get("URL") or "").strip() or None,
             email=(row.get("Email Address") or "").strip() or None,
-            degree=1, role="connection", source="connections_csv",
+            degree=1,
+            role="connection",
+            source="connections_csv",
         )
         imported += 1
     db.log_event(None, "note", {"connections_imported": imported, "file": str(csv_path)})
     return imported
 
 
-def match_referrals(db: DB, company: str, threshold: int = MATCH_THRESHOLD,
-                    contacts: Optional[list[dict]] = None) -> list[dict]:
+def match_referrals(
+    db: DB, company: str, threshold: int = MATCH_THRESHOLD, contacts: list[dict] | None = None
+) -> list[dict]:
     """Return 1st-degree contacts whose company fuzzy-matches `company`, best first.
 
     Pass a preloaded `contacts` list (from db.all_contacts()) when matching many jobs in a

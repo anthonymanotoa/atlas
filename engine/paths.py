@@ -13,6 +13,7 @@ Pre-migration / legacy: if no registry exists yet, paths resolve to the original
 repo-root ``config/``, ``profile/``, ``data/`` so Atlas behaves exactly as before until
 ``atlas profiles init`` runs.
 """
+
 from __future__ import annotations
 
 import json

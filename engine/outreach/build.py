@@ -3,24 +3,28 @@
 Idempotent: re-runs skip message kinds already drafted, so a Cowork catch-up run never
 creates duplicate Gmail drafts. Nothing is ever sent here — the package is the handoff.
 """
+
 from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Optional
 
+import engine.paths as paths
 from engine.config import load_master_cv
 from engine.cv.tailor import detect_ats
 from engine.db.models import DB
 from engine.outreach.templates import Draft, build_package
-import engine.paths as paths
 from engine.referrals.connections import match_referrals
 
 
 def _candidate(master: dict) -> dict:
     b = master.get("basics", {}) or {}
-    return {"name": b.get("name", ""), "headline": b.get("label", ""),
-            "linkedin": b.get("linkedin", ""), "one_liner": b.get("summary", "")}
+    return {
+        "name": b.get("name", ""),
+        "headline": b.get("label", ""),
+        "linkedin": b.get("linkedin", ""),
+        "one_liner": b.get("summary", ""),
+    }
 
 
 def _matched(db: DB, job_id: str) -> list[str]:
@@ -54,8 +58,13 @@ def build_outreach(db: DB, job_id: str, language: str = "en") -> list[Draft]:
         if db.has_message(job_id, d.kind):
             continue
         db.add_message(
-            job_id, channel=d.channel, kind=d.kind, body=d.body, subject=d.subject,
-            variant=d.variant, language=d.language,
+            job_id,
+            channel=d.channel,
+            kind=d.kind,
+            body=d.body,
+            subject=d.subject,
+            variant=d.variant,
+            language=d.language,
             contact_id=(contact["id"] if contact and d.kind in contact_kinds else None),
         )
     db.set_state(job_id, "drafted", {"referral": bool(contact)})
@@ -71,16 +80,20 @@ def write_package(db: DB, job_id: str, language: str = "en") -> Path:
     msgs = db.messages_for(job_id)
     refs = match_referrals(db, job.get("company", ""))
 
-    db.add_application(job_id, method=method,
-                       apply_url=job.get("apply_url") or job.get("url"),
-                       cv_version_id=cv.get("id"), status="ready")
+    db.add_application(
+        job_id,
+        method=method,
+        apply_url=job.get("apply_url") or job.get("url"),
+        cv_version_id=cv.get("id"),
+        status="ready",
+    )
 
     out = paths.OUTBOX_DIR / job_id
     out.mkdir(parents=True, exist_ok=True)
     lines = [
-        f"# {job.get('title','')} — {job.get('company','')}",
+        f"# {job.get('title', '')} — {job.get('company', '')}",
         "",
-        f"**Estado:** listo para enviar (revisa y envía tú).",
+        "**Estado:** listo para enviar (revisa y envía tú).",
         f"**Fit score:** {job.get('fit_score')}   **Cobertura ATS:** "
         f"{(cv.get('keyword_coverage') or 0):.0%}",
         f"**Cómo aplicar:** {method}",
@@ -90,18 +103,28 @@ def write_package(db: DB, job_id: str, language: str = "en") -> Path:
         "",
     ]
     if job.get("knockout_flags") and json.loads(job["knockout_flags"]):
-        lines.append(f"> ⚠️ **Revisa estos filtros del puesto:** "
-                     f"{', '.join(json.loads(job['knockout_flags']))}")
+        lines.append(
+            f"> ⚠️ **Revisa estos filtros del puesto:** "
+            f"{', '.join(json.loads(job['knockout_flags']))}"
+        )
         lines.append("")
     if refs:
         c = refs[0]
-        lines += ["## 🤝 Referido disponible (prioriza esto sobre aplicar en frío)",
-                  f"- **{c['name']}** — {c.get('title') or ''} @ {c.get('company')}",
-                  f"  {c.get('linkedin_url') or ''}", ""]
+        lines += [
+            "## 🤝 Referido disponible (prioriza esto sobre aplicar en frío)",
+            f"- **{c['name']}** — {c.get('title') or ''} @ {c.get('company')}",
+            f"  {c.get('linkedin_url') or ''}",
+            "",
+        ]
     lines.append("## Mensajes (borradores — edítalos a tu voz antes de enviar)")
     for m in msgs:
-        lines += [f"\n### {m['kind']} · {m['channel']} · {m['language']}",
-                  f"**Asunto:** {m.get('subject') or '—'}", "", m["body"], ""]
+        lines += [
+            f"\n### {m['kind']} · {m['channel']} · {m['language']}",
+            f"**Asunto:** {m.get('subject') or '—'}",
+            "",
+            m["body"],
+            "",
+        ]
     path = out / "package.md"
     path.write_text("\n".join(lines))
     db.set_state(job_id, "ready", {"package": str(path), "method": method})

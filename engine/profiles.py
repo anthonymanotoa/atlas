@@ -6,13 +6,13 @@ The registry (``profiles/registry.json``) lists the profiles and records the act
 There is NO authentication here — this is profile *selection* and data *isolation*, not
 security. Atlas binds to 127.0.0.1 and is meant for a few trusted users on one Mac.
 """
+
 from __future__ import annotations
 
 import json
 import re
 import shutil
 from pathlib import Path
-from typing import Optional
 
 from engine.paths import PROFILES_DIR, REGISTRY_PATH, REPO_ROOT
 
@@ -68,7 +68,7 @@ def exists(profile_id: str) -> bool:
     return any(p["id"] == profile_id for p in list_profiles())
 
 
-def is_owner(profile_id: Optional[str]) -> bool:
+def is_owner(profile_id: str | None) -> bool:
     """True for the owner profile — and for the legacy/pre-migration single user (None)."""
     if profile_id is None:
         return True
@@ -116,7 +116,7 @@ def _seed_missing(root: Path) -> None:
             shutil.copy2(str(seed), str(dest))
 
 
-def create_profile(profile_id: str, label: Optional[str] = None) -> dict:
+def create_profile(profile_id: str, label: str | None = None) -> dict:
     """Create a new, ready-to-edit profile seeded from the committed templates."""
     _require_valid(profile_id)
     root = _profile_root(profile_id)

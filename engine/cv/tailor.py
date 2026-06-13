@@ -8,6 +8,7 @@ The deterministic engine NEVER invents skills or metrics. It only:
   • prepares dual-form acronym displays ("Machine Learning (ML)").
 The Cowork LLM may then reword bullets (still truthfully) before rendering.
 """
+
 from __future__ import annotations
 
 import copy
@@ -35,10 +36,17 @@ class TailorResult:
 
 def detect_ats(apply_url: str | None) -> str:
     u = (apply_url or "").lower()
-    for needle, name in [("greenhouse", "greenhouse"), ("lever.co", "lever"),
-                         ("ashbyhq", "ashby"), ("myworkdayjobs", "workday"),
-                         ("taleo", "taleo"), ("smartrecruiters", "smartrecruiters"),
-                         ("icims", "icims"), ("linkedin", "linkedin"), ("indeed", "indeed")]:
+    for needle, name in [
+        ("greenhouse", "greenhouse"),
+        ("lever.co", "lever"),
+        ("ashbyhq", "ashby"),
+        ("myworkdayjobs", "workday"),
+        ("taleo", "taleo"),
+        ("smartrecruiters", "smartrecruiters"),
+        ("icims", "icims"),
+        ("linkedin", "linkedin"),
+        ("indeed", "indeed"),
+    ]:
         if needle in u:
             return name
     return "unknown"
@@ -68,8 +76,9 @@ def _dual_form(skill: str, alias_index: dict[str, str], ontology: dict[str, list
     return skill
 
 
-def _highlight_relevance(text: str, tags: list[str], jd_canon: set[str],
-                         alias_index: dict[str, str]) -> int:
+def _highlight_relevance(
+    text: str, tags: list[str], jd_canon: set[str], alias_index: dict[str, str]
+) -> int:
     score = 0
     low = text.lower()
     for canon in jd_canon:
@@ -95,11 +104,13 @@ def tailor(master: dict, job: dict, ontology: dict[str, list[str]]) -> TailorRes
     user_canon = {_canon_of(s, alias_index): s for s in user_skills}
 
     # Also treat skills mentioned in highlights/summary as "covered" for the report.
-    corpus = " ".join([
-        cv.get("basics", {}).get("summary", "") or "",
-        *[h for exp in cv.get("experience", []) for h in (exp.get("highlights") or [])],
-        *[" ".join(exp.get("skills", []) or []) for exp in cv.get("experience", [])],
-    ]).lower()
+    corpus = " ".join(
+        [
+            cv.get("basics", {}).get("summary", "") or "",
+            *[h for exp in cv.get("experience", []) for h in (exp.get("highlights") or [])],
+            *[" ".join(exp.get("skills", []) or []) for exp in cv.get("experience", [])],
+        ]
+    ).lower()
 
     matched, missing = [], []
     for h in hits:
@@ -119,9 +130,12 @@ def tailor(master: dict, job: dict, ontology: dict[str, list[str]]) -> TailorRes
     # Select most relevant real highlights per role (keep >=2, top-N).
     for exp in cv.get("experience", []):
         hl = exp.get("highlights") or []
-        scored = sorted(hl, key=lambda t: _highlight_relevance(t, exp.get("skills", []),
-                                                               jd_canon, alias_index), reverse=True)
-        exp["highlights"] = scored[:max(MAX_HIGHLIGHTS_PER_ROLE, 2)] if len(hl) > 2 else hl
+        scored = sorted(
+            hl,
+            key=lambda t: _highlight_relevance(t, exp.get("skills", []), jd_canon, alias_index),
+            reverse=True,
+        )
+        exp["highlights"] = scored[: max(MAX_HIGHLIGHTS_PER_ROLE, 2)] if len(hl) > 2 else hl
 
     # Target-title line (truthful objective; exact posting title is high-ROI).
     target_title = re.sub(r"\s+", " ", title).strip()
@@ -131,8 +145,17 @@ def tailor(master: dict, job: dict, ontology: dict[str, list[str]]) -> TailorRes
     ats_target = detect_ats(job.get("apply_url") or job.get("url"))
     notes = []
     if missing:
-        notes.append("Missing JD keywords you may genuinely have — confirm before adding: "
-                     + ", ".join(missing[:8]))
-    return TailorResult(cv=cv, matched=matched, missing=missing, coverage=coverage,
-                        target_title=target_title, ats_target=ats_target,
-                        jd_keywords=jd_order, notes=notes)
+        notes.append(
+            "Missing JD keywords you may genuinely have — confirm before adding: "
+            + ", ".join(missing[:8])
+        )
+    return TailorResult(
+        cv=cv,
+        matched=matched,
+        missing=missing,
+        coverage=coverage,
+        target_title=target_title,
+        ats_target=ats_target,
+        jd_keywords=jd_order,
+        notes=notes,
+    )

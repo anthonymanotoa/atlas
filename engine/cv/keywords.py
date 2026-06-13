@@ -4,6 +4,7 @@ Not naive frequency: we match each ontology skill's surface forms (canonical +
 aliases/acronyms) with word boundaries, and rank by importance (title hits weigh more).
 This high-precision gazetteer approach is what the tailoring + coverage report use.
 """
+
 from __future__ import annotations
 
 import re
@@ -14,7 +15,7 @@ from functools import lru_cache
 @dataclass
 class KeywordHit:
     canonical: str
-    surface: str          # the exact surface form found in the JD
+    surface: str  # the exact surface form found in the JD
     in_title: bool
     count: int
 

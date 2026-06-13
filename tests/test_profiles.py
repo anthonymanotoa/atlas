@@ -3,6 +3,7 @@
 Network-free and side-effect-free: profile-tree tests run against a tmp dir, and the
 process-global path state is snapshotted/restored so nothing leaks into other tests.
 """
+
 from __future__ import annotations
 
 import pytest
@@ -54,6 +55,7 @@ def test_db_without_arg_follows_active_profile(tmp_path, monkeypatch, restore_pa
     monkeypatch.setattr(paths, "PROFILES_DIR", tmp_path / "profiles")
     paths.set_profile("tester")
     from engine.db.models import DB
+
     with DB() as db:  # no explicit path → must follow the active profile
         db.conn.execute("SELECT 1")
     assert paths.DB_PATH.exists()
@@ -63,6 +65,7 @@ def test_db_without_arg_follows_active_profile(tmp_path, monkeypatch, restore_pa
 def test_explicit_db_path_still_wins(tmp_path, restore_paths):
     """The tests/app contract: DB(path) ignores the active profile."""
     from engine.db.models import DB
+
     paths.set_profile("whatever")
     target = tmp_path / "explicit.db"
     with DB(target) as db:
