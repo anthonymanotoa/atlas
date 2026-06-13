@@ -373,6 +373,30 @@ def api_export(columns: str | None = None, state: str | None = None, db: DB = De
     )
 
 
+# ── Onboarding (P1-G): first adapt the CV + LinkedIn, then start ──────────────
+# Per-profile flag in the profile's own `meta` KV. The gate is a workflow guide (the
+# frontend hides the board until it's done), not a security lock — this is a local,
+# single-user, passwordless app, so a hard per-route 403 would only add coupling.
+@app.get("/api/onboarding")
+def api_onboarding(db: DB = Depends(get_db)):
+    from engine.advisor import audit_dict
+    from engine.config import load_master_cv
+
+    cv = load_master_cv()
+    return {
+        "complete": db.meta_get("onboarding_complete") == "1",
+        "profile": paths.PROFILE_ID or profiles.OWNER_ID,
+        "cv_present": bool(cv),
+        "audit": audit_dict(cv),
+    }
+
+
+@app.post("/api/onboarding/complete", dependencies=[Depends(require_trusted_origin)])
+def api_onboarding_complete(db: DB = Depends(get_db)):
+    db.meta_set("onboarding_complete", "1")
+    return {"ok": True}
+
+
 # ── Profiles (selector, no password — profile *selection* on a trusted local box) ─────
 @app.get("/api/profiles")
 def api_profiles():
