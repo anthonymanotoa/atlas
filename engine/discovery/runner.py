@@ -1,0 +1,104 @@
+"""Discovery orchestrator.
+
+Runs each source in isolation (try/except + timing + health log) so one broken
+source (a stale ATS token, a LinkedIn 429, a Google outage) never empties the whole
+run. Everything is upserted, so re-runs/catch-ups never duplicate.
+"""
+from __future__ import annotations
+
+import time
+from typing import Callable, Optional
+
+from engine.config import CompanyTarget, load_companies, load_sources
+from engine.db.models import DB
+from engine.discovery import jobspy_source
+from engine.discovery.apis import adzuna, himalayas
+from engine.discovery.ats import ashby, greenhouse, lever, smartrecruiters
+from engine.discovery.http import make_client
+from engine.normalize import Job, now_iso
+
+ATS_DISPATCH: dict[str, Callable] = {
+    "greenhouse": greenhouse.fetch,
+    "lever": lever.fetch,
+    "ashby": ashby.fetch,
+    "smartrecruiters": smartrecruiters.fetch,
+}
+
+
+def discover(db: DB, *, sources_cfg: Optional[dict] = None,
+             companies: Optional[list[CompanyTarget]] = None,
+             terms: Optional[list[str]] = None,
+             only: Optional[set[str]] = None) -> dict:
+    cfg = sources_cfg or load_sources()
+    companies = companies if companies is not None else load_companies()
+    terms = terms or cfg.get("search_terms", [])
+    limits = cfg.get("limits", {})
+    cap = int(limits.get("max_jobs_per_run", 400))
+    client = make_client(timeout=float(limits.get("per_source_timeout_s", 45)))
+
+    summary: dict = {"sources": {}, "new": 0, "seen": 0, "fetched": 0, "errors": []}
+    stored_total = 0
+
+    def store(label: str, fetch_fn: Callable[[], list[Job]]) -> None:
+        nonlocal stored_total
+        start = time.monotonic()
+        jobs: list[Job] = []
+        ok, err = True, None
+        try:
+            jobs = fetch_fn() or []
+        except Exception as e:  # noqa: BLE001
+            ok, err = False, f"{type(e).__name__}: {e}"[:300]
+        dur_ms = int((time.monotonic() - start) * 1000)
+        new = seen = 0
+        for j in jobs:
+            if stored_total >= cap:
+                break
+            created = db.upsert_job(j)
+            stored_total += 1
+            new += int(created)
+            seen += int(not created)
+        db.log_source_health(label, ok, len(jobs), err, dur_ms)
+        summary["sources"][label] = {"ok": ok, "fetched": len(jobs), "new": new,
+                                     "seen": seen, "ms": dur_ms, "error": err}
+        summary["new"] += new
+        summary["seen"] += seen
+        summary["fetched"] += len(jobs)
+        if err:
+            summary["errors"].append(f"{label}: {err}")
+
+    want = lambda name: (only is None) or (name in only)
+
+    # 1. Direct ATS feeds (the reliable spine).
+    if want("ats") and cfg.get("ats", {}).get("enabled", True):
+        for t in companies:
+            fn = ATS_DISPATCH.get(t.ats)
+            if not fn:
+                continue
+            store(f"{t.ats}:{t.company}", lambda t=t, fn=fn: fn(t, client))
+
+    # 2. JobSpy — Indeed + LinkedIn guest (health-logged per site).
+    if want("jobspy") and cfg.get("jobspy", {}).get("enabled", True):
+        try:
+            per_site = jobspy_source.fetch(cfg["jobspy"], terms)
+        except Exception as e:  # noqa: BLE001
+            per_site = {}
+            db.log_source_health("jobspy", False, 0, str(e)[:300], 0)
+            summary["errors"].append(f"jobspy: {e}")
+        for site, jobs in per_site.items():
+            store(site, lambda jobs=jobs: jobs)
+
+    # 3. Himalayas (remote-first, free).
+    if want("himalayas") and cfg.get("himalayas", {}).get("enabled", True):
+        store("himalayas", lambda: himalayas.fetch(cfg["himalayas"], terms, client))
+
+    # 4. Adzuna (free, optional keys; skips silently if unconfigured).
+    if want("adzuna") and cfg.get("adzuna", {}).get("enabled", True):
+        store("adzuna", lambda: adzuna.fetch(cfg["adzuna"], terms, client))
+
+    client.close()
+    db.meta_set("last_run", now_iso())
+    db.meta_set("last_discover", str(summary["new"]))
+    if summary["fetched"] > 0 and summary["new"] + summary["seen"] >= 0:
+        db.meta_set("last_success_ts", now_iso())
+    db.log_event(None, "source_run", {k: v for k, v in summary.items() if k != "sources"})
+    return summary
