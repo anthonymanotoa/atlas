@@ -12,8 +12,17 @@ import yaml
 from pydantic import BaseModel, Field
 
 from engine.paths import (
-    COMPANIES_PATH, CRITERIA_PATH, ONTOLOGY_PATH, SOURCES_PATH, example_fallback,
+    COMPANIES_PATH, CRITERIA_PATH, MASTER_CV_PATH, ONTOLOGY_PATH, SOURCES_PATH,
+    example_fallback,
 )
+
+
+def load_master_cv() -> dict:
+    """Load the private master_cv.yaml, falling back to the committed example."""
+    path = example_fallback(MASTER_CV_PATH)
+    if not path.exists():
+        return {}
+    return yaml.safe_load(path.read_text()) or {}
 
 
 # ── criteria ────────────────────────────────────────────────────────────────
