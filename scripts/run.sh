@@ -7,6 +7,11 @@ cd "$(dirname "$0")/.."
 
 PORT="${1:-8787}"
 
+# One-time, idempotent migration of the legacy single-user layout into profiles/owner/.
+# No-op once it has run. Keep a SINGLE uvicorn worker below — the active-profile pointer
+# is process-global state, so multiple workers would diverge.
+uv run atlas profiles init
+
 if [ ! -f dashboard/frontend/dist/index.html ]; then
   echo "Building dashboard frontend..."
   npm --prefix dashboard/frontend install

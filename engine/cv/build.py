@@ -5,10 +5,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+import engine.paths as paths
 from engine.config import load_master_cv, load_ontology
 from engine.cv import parse_check, render, tailor
 from engine.db.models import DB
-from engine.paths import OUTBOX_DIR
 
 # Languages the renderer supports. Also a hard guard: `language` is interpolated into the
 # output filename (cv_{language}.docx), so anything outside this set is rejected before it
@@ -51,7 +51,7 @@ def build_for_job(
     result = tailor.tailor(master, job, ontology)
     cv = cv_override or result.cv
 
-    out_dir = OUTBOX_DIR / job_id
+    out_dir = paths.OUTBOX_DIR / job_id
     docx_path = out_dir / f"cv_{language}.docx"
     render.render_docx(cv, docx_path, language=language)
     pdf_path = (

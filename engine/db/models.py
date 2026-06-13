@@ -17,8 +17,9 @@ from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
+import engine.paths as paths
 from engine.normalize import STAGE_TIMESTAMP_COLS, Job, now_iso
-from engine.paths import DB_PATH, ensure_dirs
+from engine.paths import ensure_dirs
 
 _SCHEMA = Path(__file__).with_name("schema.sql")
 
@@ -33,8 +34,15 @@ def _loads(v: str | None, default: Any) -> Any:
 
 
 class DB:
-    def __init__(self, path: Path | str = DB_PATH, *, check_same_thread: bool = True):
-        ensure_dirs()
+    def __init__(self, path: Path | str | None = None, *, check_same_thread: bool = True):
+        # Read paths.DB_PATH late so DB() follows the active profile; an explicit path
+        # (e.g. in tests) still wins and only its own parent is created — never the
+        # active profile's dirs.
+        if path is None:
+            path = paths.DB_PATH
+            ensure_dirs()
+        else:
+            Path(path).parent.mkdir(parents=True, exist_ok=True)
         # check_same_thread defaults to True (CLI/short-lived `with DB()` callers are
         # single-threaded). The FastAPI layer opts into False to share one connection
         # across uvicorn's worker threads — see dashboard/backend/main.py (plan 014).
