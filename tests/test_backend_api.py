@@ -62,3 +62,22 @@ def test_mark_sent_unknown_message_is_ok(atlas_app):
     with TestClient(atlas_app) as client:
         resp = client.post("/api/messages/999999/sent")
     assert resp.status_code == 200 and resp.json() == {"ok": True}
+
+
+# ── Plan 014: the schema is initialized once at startup, not once per request ──
+def test_schema_init_runs_once_across_requests(atlas_app, monkeypatch):
+    from engine.db.models import DB
+    calls = {"n": 0}
+    original = DB.init_schema
+
+    def counting(self):
+        calls["n"] += 1
+        return original(self)
+
+    monkeypatch.setattr(DB, "init_schema", counting)
+    # Entering the context triggers the lifespan startup → one shared DB → one init.
+    with TestClient(atlas_app) as client:
+        for _ in range(4):
+            assert client.get("/api/overview").status_code == 200
+            assert client.get("/api/board").status_code == 200
+    assert calls["n"] == 1   # not 8 (was once per request before the shared connection)

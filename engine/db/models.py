@@ -31,9 +31,12 @@ def _loads(v: Optional[str], default: Any) -> Any:
 
 
 class DB:
-    def __init__(self, path: Path | str = DB_PATH):
+    def __init__(self, path: Path | str = DB_PATH, *, check_same_thread: bool = True):
         ensure_dirs()
-        self.conn = sqlite3.connect(str(path))
+        # check_same_thread defaults to True (CLI/short-lived `with DB()` callers are
+        # single-threaded). The FastAPI layer opts into False to share one connection
+        # across uvicorn's worker threads — see dashboard/backend/main.py (plan 014).
+        self.conn = sqlite3.connect(str(path), check_same_thread=check_same_thread)
         self.conn.row_factory = sqlite3.Row
         self.conn.execute("PRAGMA journal_mode=WAL")
         self.conn.execute("PRAGMA foreign_keys=ON")
