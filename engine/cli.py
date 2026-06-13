@@ -92,6 +92,65 @@ def discover(
 
 
 @app.command()
+def score(
+    rescore: bool = typer.Option(False, help="Re-score every job, not just newly discovered ones."),
+) -> None:
+    """Score fit for discovered jobs; shortlist those above the threshold."""
+    from engine.config import load_criteria
+    from engine.scoring.fit import score_job
+    criteria = load_criteria()
+    with _db() as db:
+        jobs = db.list_jobs() if rescore else db.list_jobs(state="discovered")
+        shortlisted = scored = 0
+        for j in jobs:
+            res = score_job(j, criteria)
+            db.set_fit(j["id"], res.score, res.reasons, res.knockouts)
+            scored += 1
+            if res.score >= criteria.shortlist_threshold and not res.disqualified:
+                db.set_state(j["id"], "shortlisted")
+                shortlisted += 1
+            else:
+                db.set_state(j["id"], "scored")
+    console.print(f"Scored [bold]{scored}[/], shortlisted [green]{shortlisted}[/] "
+                  f"(threshold {criteria.shortlist_threshold}).")
+
+
+@app.command()
+def top(n: int = typer.Option(15, help="How many to show."),
+        state: str = typer.Option("shortlisted", help="Pipeline state to list.")) -> None:
+    """List the highest-fit jobs in a given state."""
+    with _db() as db:
+        jobs = db.list_jobs(state=state, limit=n)
+    table = Table(title=f"Top {state}")
+    for col in ("score", "title", "company", "remote", "id"):
+        table.add_column(col)
+    for j in jobs:
+        rem = {1: "✓", 0: "✗"}.get(j["is_remote"], "?")
+        table.add_row(str(j.get("fit_score")), (j["title"] or "")[:42],
+                      (j["company"] or "")[:22], rem, j["id"])
+    console.print(table)
+
+
+@app.command()
+def tailor(job_id: str,
+           language: str = typer.Option("en", help="CV language: en | es"),
+           pdf: bool = typer.Option(True, help="Also render a PDF (needs LibreOffice).")) -> None:
+    """Generate a parse-safe, JD-tailored CV for a job (DOCX + optional PDF)."""
+    from engine.cv.build import build_for_job
+    with _db() as db:
+        res = build_for_job(db, job_id, language=language, make_pdf=pdf)
+    console.print(f"[bold]CV built[/] for {job_id}  (ATS: {res.ats_target})")
+    console.print(f"  DOCX: {res.docx_path}")
+    console.print(f"  PDF:  {res.pdf_path or '[yellow]skipped (LibreOffice not found)[/]'}")
+    console.print(f"  Keyword coverage: [bold]{res.coverage:.0%}[/]  "
+                  f"({len(res.matched)} matched, {len(res.missing)} missing)")
+    parse = "[green]✓ parse-safe[/]" if res.parse_ok else f"[red]✗ {res.parse_issues}[/]"
+    console.print(f"  Parse check: {parse}")
+    if res.missing:
+        console.print(f"  [yellow]Missing JD keywords[/] (add only if true): {', '.join(res.missing[:10])}")
+
+
+@app.command()
 def status() -> None:
     """Show pipeline counts and the latest health of each source."""
     with _db() as db:
