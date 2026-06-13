@@ -7,16 +7,22 @@ from engine.scoring.fit import score_job
 
 
 def score_jobs(db: DB, criteria: Criteria, *, rescore: bool = False) -> tuple[int, int]:
-    """Score jobs and shortlist those above threshold. Returns (scored, shortlisted)."""
-    jobs = db.list_jobs() if rescore else db.list_jobs(state="discovered")
+    """Score jobs and shortlist those above threshold. Returns (scored, shortlisted).
+
+    rescore re-evaluates only EARLY-stage jobs (discovered/scored/shortlisted) so it never
+    regresses a job that has already been tailored, made ready, applied to, etc.
+    """
+    if rescore:
+        jobs = db.list_jobs(states=["discovered", "scored", "shortlisted"])
+    else:
+        jobs = db.list_jobs(state="discovered")
     scored = shortlisted = 0
     for j in jobs:
         res = score_job(j, criteria)
         db.set_fit(j["id"], res.score, res.reasons, res.knockouts)
+        db.set_state(j["id"], "scored")          # always stamp scored_at (funnel accuracy)
         scored += 1
         if res.score >= criteria.shortlist_threshold and not res.disqualified:
             db.set_state(j["id"], "shortlisted")
             shortlisted += 1
-        else:
-            db.set_state(j["id"], "scored")
     return scored, shortlisted
