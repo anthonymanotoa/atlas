@@ -1,0 +1,30 @@
+[
+  {
+    "id": "abc-111",
+    "text": "Staff ML Engineer",
+    "workplaceType": "remote",
+    "categories": {
+      "location": ["Remote", "US"],
+      "commitment": "Full-time",
+      "team": "ML"
+    },
+    "salaryRange": { "min": 180000, "max": 220000, "currency": "USD", "interval": "per-year-salary" },
+    "hostedUrl": "https://jobs.lever.co/acme/abc-111",
+    "applyUrl": "https://jobs.lever.co/acme/abc-111/apply",
+    "descriptionPlain": "Build ML systems.",
+    "country": "US"
+  },
+  {
+    "id": "def-222",
+    "text": "Data Analyst",
+    "workplaceType": "on-site",
+    "categories": { "location": "New York, NY", "commitment": "Full-time" },
+    "hostedUrl": "https://jobs.lever.co/acme/def-222"
+  },
+  {
+    "id": "ghi-333",
+    "text": "Research Scientist",
+    "categories": { "location": "London, UK" },
+    "hostedUrl": "https://jobs.lever.co/acme/ghi-333"
+  }
+]

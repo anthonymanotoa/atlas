@@ -8,6 +8,10 @@
 #   ats: lever           token = slug in jobs.lever.co/<token>   (eu: true for EU tenants)
 #   ats: ashby           token = name in jobs.ashbyhq.com/<token>  (CASE-SENSITIVE)
 #   ats: smartrecruiters token = slug in jobs.smartrecruiters.com/<token>
+#   ats: workday         instance = tenant in <tenant>.<wdN>.myworkdayjobs.com;
+#                        token = site slug after the tenant; careers_url carries the wd-cluster
+#                        e.g. instance: nvidia, token: NVIDIAExternalCareerSite,
+#                             careers_url: https://nvidia.wd5.myworkdayjobs.com/NVIDIAExternalCareerSite
 #
 # The starter rows below are real public boards used to validate the pipeline.
 # Replace them with your own targets — `atlas discover` logs per-source health so

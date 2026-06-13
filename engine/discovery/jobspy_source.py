@@ -4,10 +4,10 @@ IP-throttle only, hard-capped). Google/ZipRecruiter intentionally excluded (brok
 LinkedIn is scraped as a logged-OUT guest — JobSpy never receives credentials — so the
 worst case is a temporary IP 429, never a LinkedIn *account* ban.
 """
+
 from __future__ import annotations
 
 import math
-from typing import Optional
 
 from engine.normalize import Job
 from engine.util import to_float
@@ -17,6 +17,7 @@ def _df_records(df) -> list[dict]:
     if df is None or len(df) == 0:
         return []
     import pandas as pd
+
     return df.astype(object).where(pd.notnull(df), None).to_dict("records")
 
 
@@ -28,7 +29,7 @@ def _clean(v):
     return v
 
 
-def _to_job(r: dict, site: str) -> Optional[Job]:
+def _to_job(r: dict, site: str) -> Job | None:
     title = _clean(r.get("title"))
     company = _clean(r.get("company"))
     if not title or not company:
@@ -48,18 +49,38 @@ def _to_job(r: dict, site: str) -> Optional[Job]:
         salary_min=to_float(_clean(r.get("min_amount"))),
         salary_max=to_float(_clean(r.get("max_amount"))),
         salary_currency=_clean(r.get("currency")),
-        salary_interval={"yearly": "yearly", "annually": "yearly", "monthly": "monthly",
-                         "hourly": "hourly"}.get(str(interval).lower()) if interval else None,
+        salary_interval={
+            "yearly": "yearly",
+            "annually": "yearly",
+            "monthly": "monthly",
+            "hourly": "hourly",
+        }.get(str(interval).lower())
+        if interval
+        else None,
         date_posted=str(_clean(r.get("date_posted")) or "")[:10] or None,
         raw={"company_url": _clean(r.get("company_url"))},
     )
 
 
-def _scrape(site: str, term: str, *, results_wanted: int, is_remote: bool,
-            hours_old: int, country_indeed: str, fetch_desc: bool) -> list[dict]:
+def _scrape(
+    site: str,
+    term: str,
+    *,
+    results_wanted: int,
+    is_remote: bool,
+    hours_old: int,
+    country_indeed: str,
+    fetch_desc: bool,
+) -> list[dict]:
     from jobspy import scrape_jobs
-    kwargs = dict(site_name=[site], search_term=term, results_wanted=results_wanted,
-                  is_remote=is_remote, hours_old=hours_old)
+
+    kwargs = dict(  # noqa: C408
+        site_name=[site],
+        search_term=term,
+        results_wanted=results_wanted,
+        is_remote=is_remote,
+        hours_old=hours_old,
+    )
     if site == "indeed":
         kwargs["country_indeed"] = country_indeed
     if site == "linkedin":
@@ -85,9 +106,15 @@ def fetch(cfg: dict, search_terms: list[str]) -> dict[str, list[Job]]:
             if site == "linkedin" and len(jobs) >= linkedin_cap:
                 break
             try:
-                records = _scrape(site, term, results_wanted=results_wanted,
-                                  is_remote=is_remote, hours_old=hours_old,
-                                  country_indeed=country_indeed, fetch_desc=fetch_desc)
+                records = _scrape(
+                    site,
+                    term,
+                    results_wanted=results_wanted,
+                    is_remote=is_remote,
+                    hours_old=hours_old,
+                    country_indeed=country_indeed,
+                    fetch_desc=fetch_desc,
+                )
             except Exception:  # noqa: BLE001 — one bad term must not kill the site
                 records = []
             for r in records:

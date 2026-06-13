@@ -1,8 +1,9 @@
 """SmartRecruiters public Posting API (keyless, two-tier list + detail).
 
-  list:   GET https://api.smartrecruiters.com/v1/companies/{id}/postings?limit=100
-  detail: GET https://api.smartrecruiters.com/v1/companies/{id}/postings/{postingId}
+list:   GET https://api.smartrecruiters.com/v1/companies/{id}/postings?limit=100
+detail: GET https://api.smartrecruiters.com/v1/companies/{id}/postings/{postingId}
 """
+
 from __future__ import annotations
 
 import httpx
@@ -47,18 +48,20 @@ def fetch(target: CompanyTarget, client: httpx.Client) -> list[Job]:
                 description = _description(detail)
             except httpx.HTTPError:
                 description = ""
-        jobs.append(Job(
-            source="smartrecruiters",
-            source_job_id=pid,
-            title=(p.get("name") or "").strip(),
-            company=target.company,
-            location=_location_str(loc),
-            is_remote=bool(loc.get("remote")) if "remote" in loc else None,
-            url=f"https://jobs.smartrecruiters.com/{target.token}/{pid}",
-            apply_url=f"https://jobs.smartrecruiters.com/{target.token}/{pid}",
-            description=description,
-            employment_type=(p.get("typeOfEmployment") or {}).get("label"),
-            date_posted=(p.get("releasedDate") or "")[:10] or None,
-            raw={"department": (p.get("department") or {}).get("label")},
-        ))
+        jobs.append(
+            Job(
+                source="smartrecruiters",
+                source_job_id=pid,
+                title=(p.get("name") or "").strip(),
+                company=target.company,
+                location=_location_str(loc),
+                is_remote=bool(loc.get("remote")) if "remote" in loc else None,
+                url=f"https://jobs.smartrecruiters.com/{target.token}/{pid}",
+                apply_url=f"https://jobs.smartrecruiters.com/{target.token}/{pid}",
+                description=description,
+                employment_type=(p.get("typeOfEmployment") or {}).get("label"),
+                date_posted=(p.get("releasedDate") or "")[:10] or None,
+                raw={"department": (p.get("department") or {}).get("label")},
+            )
+        )
     return jobs

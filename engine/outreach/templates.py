@@ -8,23 +8,23 @@ this module produces the actual short, specific, on-voice drafts:
   • referral ask = forward-ready package + explicit easy-out
 These are baselines; the Cowork LLM sharpens them in the user's voice before drafting.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
 
 
 @dataclass
 class Draft:
-    kind: str        # cover_letter | recruiter | hiring_manager | referral_ask | cold_email | linkedin_note | follow_up | breakup
-    channel: str     # email | linkedin_note | linkedin_inmail | referral
+    kind: str  # cover_letter | recruiter | hiring_manager | referral_ask | cold_email | linkedin_note | follow_up | breakup
+    channel: str  # email | linkedin_note | linkedin_inmail | referral
     body: str
-    subject: Optional[str] = None
-    variant: Optional[str] = None
+    subject: str | None = None
+    variant: str | None = None
     language: str = "en"
 
 
-def _first_name(name: Optional[str]) -> str:
+def _first_name(name: str | None) -> str:
     return (name or "").split()[0] if name else ""
 
 
@@ -33,8 +33,23 @@ def _word_cap(text: str, max_words: int = 125) -> str:
     return text if len(words) <= max_words else " ".join(words[:max_words]).rstrip(",.;") + "…"
 
 
-_ACRONYMS = {"ml", "ai", "llm", "llms", "sql", "aws", "gcp", "nlp", "rag", "etl",
-             "bi", "api", "dl", "gpu", "mlops"}
+_ACRONYMS = {
+    "ml",
+    "ai",
+    "llm",
+    "llms",
+    "sql",
+    "aws",
+    "gcp",
+    "nlp",
+    "rag",
+    "etl",
+    "bi",
+    "api",
+    "dl",
+    "gpu",
+    "mlops",
+}
 
 
 def _pretty(skill: str) -> str:
@@ -43,7 +58,7 @@ def _pretty(skill: str) -> str:
         if w.lower() in _ACRONYMS:
             out.append(w.upper())
         elif "/" in w:
-            out.append(w.upper())          # a/b -> A/B
+            out.append(w.upper())  # a/b -> A/B
         else:
             out.append(w.capitalize())
     return " ".join(out)
@@ -58,8 +73,13 @@ def _skills_phrase(matched: list[str], n: int = 3) -> str:
     return ", ".join(top[:-1]) + f" and {top[-1]}"
 
 
-def build_package(job: dict, candidate: dict, matched: list[str],
-                  contact: Optional[dict] = None, language: str = "en") -> list[Draft]:
+def build_package(
+    job: dict,
+    candidate: dict,
+    matched: list[str],
+    contact: dict | None = None,
+    language: str = "en",
+) -> list[Draft]:
     """candidate = {name, headline, linkedin, one_liner}. Returns all draft variants."""
     company = job.get("company", "")
     role = job.get("title", "")
@@ -115,10 +135,27 @@ def _en(company, role, me, mine, skills, greet, li, contact) -> list[Draft]:
     note = _linkedin_note(company, role, "en")
     return [
         Draft("cover_letter", "email", cover, subject=f"Application — {role}", language="en"),
-        Draft("cold_email", "email", cold, subject=f"{role} at {company}", variant="recruiter", language="en"),
-        Draft("recruiter", "linkedin_inmail", recruiter, subject=f"{role} — quick fit", language="en"),
-        Draft("hiring_manager", "linkedin_inmail", hm, subject=f"{role} on your team", language="en"),
-        Draft("referral_ask", "referral", referral, subject=f"Referral for {role} at {company}?", language="en"),
+        Draft(
+            "cold_email",
+            "email",
+            cold,
+            subject=f"{role} at {company}",
+            variant="recruiter",
+            language="en",
+        ),
+        Draft(
+            "recruiter", "linkedin_inmail", recruiter, subject=f"{role} — quick fit", language="en"
+        ),
+        Draft(
+            "hiring_manager", "linkedin_inmail", hm, subject=f"{role} on your team", language="en"
+        ),
+        Draft(
+            "referral_ask",
+            "referral",
+            referral,
+            subject=f"Referral for {role} at {company}?",
+            language="en",
+        ),
         Draft("linkedin_note", "linkedin_note", note, language="en"),
     ]
 
@@ -162,10 +199,27 @@ def _es(company, role, me, mine, skills, greet, li, contact) -> list[Draft]:
     note = _linkedin_note(company, role, "es")
     return [
         Draft("cover_letter", "email", cover, subject=f"Postulación — {role}", language="es"),
-        Draft("cold_email", "email", cold, subject=f"{role} en {company}", variant="recruiter", language="es"),
-        Draft("recruiter", "linkedin_inmail", recruiter, subject=f"{role} — fit rápido", language="es"),
-        Draft("hiring_manager", "linkedin_inmail", hm, subject=f"{role} en tu equipo", language="es"),
-        Draft("referral_ask", "referral", referral, subject=f"¿Referido para {role} en {company}?", language="es"),
+        Draft(
+            "cold_email",
+            "email",
+            cold,
+            subject=f"{role} en {company}",
+            variant="recruiter",
+            language="es",
+        ),
+        Draft(
+            "recruiter", "linkedin_inmail", recruiter, subject=f"{role} — fit rápido", language="es"
+        ),
+        Draft(
+            "hiring_manager", "linkedin_inmail", hm, subject=f"{role} en tu equipo", language="es"
+        ),
+        Draft(
+            "referral_ask",
+            "referral",
+            referral,
+            subject=f"¿Referido para {role} en {company}?",
+            language="es",
+        ),
         Draft("linkedin_note", "linkedin_note", note, language="es"),
     ]
 

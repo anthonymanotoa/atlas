@@ -2,12 +2,20 @@ import { ExternalLink } from "lucide-react";
 import type { Action } from "../api";
 import { ACTION_META } from "../lib";
 
-export function NeedsAction({ actions, onOpen }: { actions: Action[]; onOpen: (id: string) => void }) {
+export function NeedsAction({
+  actions,
+  onOpen,
+}: {
+  actions: Action[];
+  onOpen: (id: string) => void;
+}) {
   if (actions.length === 0) {
     return (
       <div className="card px-5 py-6 text-center fade-up">
         <div className="text-lg">🎉 Todo al día</div>
-        <div className="text-[var(--color-muted)] text-sm mt-1">No hay nada pendiente ahora mismo.</div>
+        <div className="text-[var(--color-muted)] text-sm mt-1">
+          No hay nada pendiente ahora mismo.
+        </div>
       </div>
     );
   }
@@ -27,7 +35,10 @@ export function NeedsAction({ actions, onOpen }: { actions: Action[]; onOpen: (i
               style={{ borderLeft: `3px solid ${meta.tone}` }}
               onClick={() => onOpen(a.job_id)}
             >
-              <div className="flex items-center gap-2 text-sm font-medium" style={{ color: meta.tone }}>
+              <div
+                className="flex items-center gap-2 text-sm font-medium"
+                style={{ color: meta.tone }}
+              >
                 <span>{meta.icon}</span>
                 <span>{a.label}</span>
               </div>

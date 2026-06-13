@@ -4,16 +4,17 @@ Runs each source in isolation (try/except + timing + health log) so one broken
 source (a stale ATS token, a LinkedIn 429, a Google outage) never empties the whole
 run. Everything is upserted, so re-runs/catch-ups never duplicate.
 """
+
 from __future__ import annotations
 
 import time
-from typing import Callable, Optional
+from collections.abc import Callable
 
 from engine.config import CompanyTarget, load_companies, load_sources
 from engine.db.models import DB
 from engine.discovery import jobspy_source
 from engine.discovery.apis import adzuna, himalayas
-from engine.discovery.ats import ashby, greenhouse, lever, smartrecruiters
+from engine.discovery.ats import ashby, greenhouse, lever, smartrecruiters, workday
 from engine.discovery.http import make_client
 from engine.normalize import Job, now_iso
 
@@ -22,13 +23,18 @@ ATS_DISPATCH: dict[str, Callable] = {
     "lever": lever.fetch,
     "ashby": ashby.fetch,
     "smartrecruiters": smartrecruiters.fetch,
+    "workday": workday.fetch,
 }
 
 
-def discover(db: DB, *, sources_cfg: Optional[dict] = None,
-             companies: Optional[list[CompanyTarget]] = None,
-             terms: Optional[list[str]] = None,
-             only: Optional[set[str]] = None) -> dict:
+def discover(
+    db: DB,
+    *,
+    sources_cfg: dict | None = None,
+    companies: list[CompanyTarget] | None = None,
+    terms: list[str] | None = None,
+    only: set[str] | None = None,
+) -> dict:
     cfg = sources_cfg or load_sources()
     companies = companies if companies is not None else load_companies()
     terms = terms or cfg.get("search_terms", [])
@@ -58,15 +64,21 @@ def discover(db: DB, *, sources_cfg: Optional[dict] = None,
             new += int(created)
             seen += int(not created)
         db.log_source_health(label, ok, len(jobs), err, dur_ms)
-        summary["sources"][label] = {"ok": ok, "fetched": len(jobs), "new": new,
-                                     "seen": seen, "ms": dur_ms, "error": err}
+        summary["sources"][label] = {
+            "ok": ok,
+            "fetched": len(jobs),
+            "new": new,
+            "seen": seen,
+            "ms": dur_ms,
+            "error": err,
+        }
         summary["new"] += new
         summary["seen"] += seen
         summary["fetched"] += len(jobs)
         if err:
             summary["errors"].append(f"{label}: {err}")
 
-    want = lambda name: (only is None) or (name in only)
+    want = lambda name: (only is None) or (name in only)  # noqa: E731
 
     # 1. Direct ATS feeds (the reliable spine).
     if want("ats") and cfg.get("ats", {}).get("enabled", True):
@@ -82,11 +94,15 @@ def discover(db: DB, *, sources_cfg: Optional[dict] = None,
     # one is requested without the umbrella.
     jobspy_cfg = dict(cfg.get("jobspy", {}))
     if only is not None and "jobspy" not in only:
-        jobspy_cfg["sites"] = [s for s in jobspy_cfg.get("sites", ["indeed", "linkedin"])
-                               if s in only]
+        jobspy_cfg["sites"] = [
+            s for s in jobspy_cfg.get("sites", ["indeed", "linkedin"]) if s in only
+        ]
     jobspy_selected = want("jobspy") or want("indeed") or want("linkedin")
-    if jobspy_selected and jobspy_cfg.get("enabled", True) \
-            and jobspy_cfg.get("sites", ["indeed", "linkedin"]):
+    if (
+        jobspy_selected
+        and jobspy_cfg.get("enabled", True)
+        and jobspy_cfg.get("sites", ["indeed", "linkedin"])
+    ):
         try:
             per_site = jobspy_source.fetch(jobspy_cfg, terms)
         except Exception as e:  # noqa: BLE001

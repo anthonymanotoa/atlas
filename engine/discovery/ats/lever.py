@@ -1,7 +1,8 @@
 """Lever public Postings API (keyless).
 
-  GET https://api.lever.co/v0/postings/{site}?mode=json        (EU: api.eu.lever.co)
+GET https://api.lever.co/v0/postings/{site}?mode=json        (EU: api.eu.lever.co)
 """
+
 from __future__ import annotations
 
 import httpx
@@ -28,23 +29,27 @@ def fetch(target: CompanyTarget, client: httpx.Client) -> list[Job]:
         location = first(cats.get("location"), cats.get("allLocations"))
         if isinstance(location, list):
             location = ", ".join(location)
-        jobs.append(Job(
-            source="lever",
-            source_job_id=p.get("id"),
-            title=(p.get("text") or "").strip(),
-            company=target.company,
-            location=location,
-            workplace_type=wt or "unknown",
-            is_remote=True if wt == "remote" else (False if wt in ("on-site", "hybrid") else None),
-            url=p.get("hostedUrl"),
-            apply_url=first(p.get("applyUrl"), p.get("hostedUrl")),
-            description=p.get("descriptionPlain") or "",
-            employment_type=cats.get("commitment"),
-            salary_min=to_float(sal.get("min")),
-            salary_max=to_float(sal.get("max")),
-            salary_currency=sal.get("currency"),
-            salary_interval=canonical_salary_interval(sal.get("interval")),
-            date_posted=None,
-            raw={"team": cats.get("team"), "country": p.get("country")},
-        ))
+        jobs.append(
+            Job(
+                source="lever",
+                source_job_id=p.get("id"),
+                title=(p.get("text") or "").strip(),
+                company=target.company,
+                location=location,
+                workplace_type=wt or "unknown",
+                is_remote=True
+                if wt == "remote"
+                else (False if wt in ("on-site", "hybrid") else None),
+                url=p.get("hostedUrl"),
+                apply_url=first(p.get("applyUrl"), p.get("hostedUrl")),
+                description=p.get("descriptionPlain") or "",
+                employment_type=cats.get("commitment"),
+                salary_min=to_float(sal.get("min")),
+                salary_max=to_float(sal.get("max")),
+                salary_currency=sal.get("currency"),
+                salary_interval=canonical_salary_interval(sal.get("interval")),
+                date_posted=None,
+                raw={"team": cats.get("team"), "country": p.get("country")},
+            )
+        )
     return jobs

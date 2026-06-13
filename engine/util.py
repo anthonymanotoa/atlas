@@ -1,9 +1,10 @@
 """Small shared utilities (HTML→text, salary coercion)."""
+
 from __future__ import annotations
 
 import html
 import re
-from typing import Any, Optional
+from typing import Any
 
 _TAG = re.compile(r"<[^>]+>")
 _BLOCK = re.compile(r"</(p|div|li|h[1-6]|br|tr)\s*>", re.I)
@@ -11,7 +12,7 @@ _WS = re.compile(r"[ \t]+")
 _NL = re.compile(r"\n\s*\n\s*\n+")
 
 
-def html_to_text(s: Optional[str]) -> str:
+def html_to_text(s: str | None) -> str:
     """Convert HTML (as returned by ATS feeds) to readable plain text."""
     if not s:
         return ""
@@ -24,7 +25,7 @@ def html_to_text(s: Optional[str]) -> str:
     return s.strip()
 
 
-def to_float(v: Any) -> Optional[float]:
+def to_float(v: Any) -> float | None:
     if v is None:
         return None
     try:
@@ -33,7 +34,7 @@ def to_float(v: Any) -> Optional[float]:
         return None
 
 
-def canonical_salary_interval(raw: Optional[str]) -> Optional[str]:
+def canonical_salary_interval(raw: str | None) -> str | None:
     """Normalize a source's salary-interval string to a canonical token.
 
     Sources are inconsistent: Lever emits 'per-year-salary'/'per-month-salary'/'per-hour-wage',
