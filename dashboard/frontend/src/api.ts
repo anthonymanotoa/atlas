@@ -19,6 +19,14 @@ export type Job = {
   age_days?: number | null;
   applied_days?: number | null;
   description?: string;
+  // P1-A quality-gate fields (additive; backend may omit on older rows)
+  salary_min?: number | null;
+  salary_max?: number | null;
+  salary_currency?: string | null;
+  salary_interval?: string | null;
+  language?: string | null;
+  posted_days?: number | null;
+  salary_visible?: boolean;
 };
 
 export type Action = {
@@ -75,11 +83,71 @@ export type Referral = {
   linkedin_url?: string;
 };
 export type Profile = { id: string; label: string; is_owner?: boolean };
+export type CsvColumn = { id: string; label: string };
+export type SocialMention = {
+  id: number;
+  platform: string;
+  source_url?: string;
+  recruiter_name?: string;
+  recruiter_linkedin?: string;
+  recruiter_email?: string;
+  post_title?: string;
+  post_excerpt?: string;
+  context_type?: string;
+  found_at?: string;
+};
+export type Finding = { severity: string; area: string; message: string; suggestion: string };
+export type OnboardingStatus = {
+  complete: boolean;
+  profile: string;
+  cv_present: boolean;
+  audit: { findings: Finding[]; summary: { high: number; med: number; low: number } };
+};
+export type Interviewer = {
+  id: number;
+  name: string;
+  title?: string;
+  company?: string;
+  linkedin_url?: string;
+  research_notes?: string;
+};
+export type Interview = {
+  id: number;
+  job_id: string;
+  scheduled_at?: string;
+  round?: string;
+  mode?: string;
+  status?: string;
+  prep_path?: string;
+  interviewers?: Interviewer[];
+};
+export type Learning = {
+  id: number;
+  company: string;
+  pattern_type: string;
+  observation: string;
+  confidence: number;
+  evidence_count: number;
+};
+export type Portfolio = { id: number; version: string; path_html?: string; generated_at?: string };
+export type Peer = {
+  id: number;
+  peer_name: string;
+  role_match?: string;
+  peer_profile_url?: string;
+  peer_portfolio_url?: string;
+  key_strengths?: string[];
+  how_to_emulate?: string[];
+  source_url?: string;
+  notes?: string;
+};
 export type JobDetail = {
   job: Job;
   cv_versions: CvVersion[];
   messages: Message[];
   referrals: Referral[];
+  social_mentions?: SocialMention[];
+  learnings?: Learning[];
   timeline: { stage: string; at: string }[];
 };
 
@@ -104,7 +172,9 @@ export const api = {
   job: (id: string) => get<JobDetail>(`/api/jobs/${id}`),
   setState: (id: string, state: string) => post(`/api/jobs/${id}/state`, { state }),
   markApplied: (id: string) => post(`/api/jobs/${id}/applied`),
-  prep: (id: string, language = "en") => post(`/api/jobs/${id}/prep`, { language }),
+  // language omitted → backend auto-picks the posting's language (es offers → ES CV, else EN)
+  prep: (id: string, language?: string) =>
+    post(`/api/jobs/${id}/prep`, language ? { language } : {}),
   markSent: (mid: number) => post(`/api/messages/${mid}/sent`),
   discover: () => post<{ started: boolean; running?: boolean }>("/api/discover"),
   discoverStatus: () => get<{ running: boolean }>("/api/discover/status"),
@@ -113,4 +183,58 @@ export const api = {
     `/api/cv/${jobId}/${vid}/download?fmt=${fmt}`,
   profiles: () => get<{ profiles: Profile[]; active: string }>("/api/profiles"),
   switchProfile: (id: string) => post<{ ok: boolean; active: string }>("/api/profile", { id }),
+  // settings + CSV export (P1-B)
+  settings: () => get<Record<string, string | null>>("/api/settings"),
+  setSetting: (key: string, value: string) =>
+    post<{ ok: boolean; key: string; value: string }>("/api/settings", { key, value }),
+  csvColumns: () => get<{ available: CsvColumn[]; selected: string[] }>("/api/csv/columns"),
+  onboarding: () => get<OnboardingStatus>("/api/onboarding"),
+  completeOnboarding: () => post<{ ok: boolean }>("/api/onboarding/complete"),
+  recordOutcome: (
+    id: string,
+    body: {
+      final_state: string;
+      response_days?: number | null;
+      interview_count?: number;
+      offer_made?: boolean;
+      recruiter_source?: string | null;
+      reason?: string | null;
+    },
+  ) => post<{ ok: boolean; learnings: Learning[] }>(`/api/jobs/${id}/outcome`, body),
+  learnings: (company?: string) =>
+    get<{ learnings: Learning[] }>(
+      `/api/learnings${company ? `?company=${encodeURIComponent(company)}` : ""}`,
+    ),
+  interviews: (jobId: string) => get<{ interviews: Interview[] }>(`/api/jobs/${jobId}/interviews`),
+  addInterview: (
+    jobId: string,
+    body: { scheduled_at?: string; round?: string; mode?: string; notes?: string },
+  ) => post<{ ok: boolean; id: number }>(`/api/jobs/${jobId}/interview`, body),
+  addInterviewer: (interviewId: number, body: Partial<Interviewer>) =>
+    post<{ ok: boolean; id: number }>(`/api/interview/${interviewId}/interviewer`, body),
+  genPrep: (interviewId: number, language = "en") =>
+    post<{ ok: boolean; path: string; markdown: string }>(`/api/interview/${interviewId}/prep`, {
+      language,
+    }),
+  socialMentions: (id: string) =>
+    get<{ mentions: SocialMention[] }>(`/api/jobs/${id}/social_mentions`),
+  startSocialSearch: (id: string) =>
+    post<{ ok: boolean; queries: Record<string, string> }>(`/api/jobs/${id}/start-social-search`),
+  addSocialMention: (id: string, body: Partial<SocialMention>) =>
+    post<{ ok: boolean; id: number }>(`/api/jobs/${id}/social_mentions`, body),
+  portfolioLatest: () => get<{ portfolio: Portfolio | null }>("/api/portfolio/latest"),
+  generatePortfolio: (include_github = false) =>
+    post<{ ok: boolean; id: number; version: string; path: string }>("/api/portfolio/generate", {
+      include_github,
+    }),
+  portfolioPreviewUrl: (id: number) => `/api/portfolio/${id}/preview`,
+  peers: () => get<{ peers: Peer[] }>("/api/peers"),
+  addPeer: (body: Partial<Peer>) => post<{ ok: boolean; id: number }>("/api/peers", body),
+  exportUrl: (columns?: string[], state?: string) => {
+    const p = new URLSearchParams();
+    if (columns?.length) p.set("columns", columns.join(","));
+    if (state) p.set("state", state);
+    const q = p.toString();
+    return `/api/export${q ? `?${q}` : ""}`;
+  },
 };

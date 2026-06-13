@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Any
 
 import engine.paths as paths
-from engine.normalize import STAGE_TIMESTAMP_COLS, Job, now_iso
+from engine.normalize import STAGE_TIMESTAMP_COLS, Job, norm_company, now_iso
 from engine.paths import ensure_dirs
 
 _SCHEMA = Path(__file__).with_name("schema.sql")
@@ -56,7 +56,23 @@ class DB:
     # ── lifecycle ────────────────────────────────────────────────────────────
     def init_schema(self) -> None:
         self.conn.executescript(_SCHEMA.read_text())
+        self._migrate()
         self.conn.commit()
+
+    def _migrate(self) -> None:
+        """Idempotent additive migrations.
+
+        `CREATE TABLE IF NOT EXISTS` never adds a column to a table that already
+        exists, so a new column on an established `jobs` row needs a guarded
+        `ALTER TABLE ... ADD COLUMN`. SQLite has no `ADD COLUMN IF NOT EXISTS`, so
+        we check `PRAGMA table_info` first — safe to run on every startup.
+        """
+        self._ensure_column("jobs", "language", "TEXT")
+
+    def _ensure_column(self, table: str, column: str, decl: str) -> None:
+        existing = {r["name"] for r in self.conn.execute(f"PRAGMA table_info({table})")}
+        if column not in existing:
+            self.conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {decl}")
 
     def close(self) -> None:
         self.conn.close()
@@ -83,8 +99,8 @@ class DB:
                    (id, source, source_job_id, title, company, location, is_remote,
                     workplace_type, url, apply_url, description, employment_type,
                     salary_min, salary_max, salary_currency, salary_interval,
-                    date_posted, raw_json, sources_json, state, discovered_at)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'discovered', ?)""",
+                    date_posted, language, raw_json, sources_json, state, discovered_at)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'discovered', ?)""",
                 (
                     job.id,
                     job.source,
@@ -103,6 +119,7 @@ class DB:
                     job.salary_currency,
                     job.salary_interval,
                     job.date_posted,
+                    job.language,
                     json.dumps(job.raw),
                     json.dumps([job.source]),
                     now,
@@ -126,6 +143,7 @@ class DB:
                  salary_interval = COALESCE(salary_interval, ?),
                  employment_type = COALESCE(employment_type, ?),
                  date_posted     = COALESCE(date_posted, ?),
+                 language        = COALESCE(language, ?),
                  is_remote       = COALESCE(is_remote, ?),
                  sources_json    = ?
                WHERE id=?""",
@@ -139,6 +157,7 @@ class DB:
                 job.salary_interval,
                 job.employment_type,
                 job.date_posted,
+                job.language,
                 _b(job.is_remote),
                 json.dumps(sorted(sources)),
                 job.id,
@@ -439,6 +458,276 @@ class DB:
             (key, value, now_iso()),
         )
         self.conn.commit()
+
+    # ── social mentions (P2-C) ─────────────────────────────────────────────────
+    def add_social_mention(
+        self,
+        job_id: str,
+        *,
+        platform: str,
+        source_url: str | None = None,
+        recruiter_name: str | None = None,
+        recruiter_linkedin: str | None = None,
+        recruiter_email: str | None = None,
+        post_title: str | None = None,
+        post_excerpt: str | None = None,
+        context_type: str | None = None,
+    ) -> int:
+        cur = self.conn.execute(
+            """INSERT INTO social_mentions
+               (job_id, platform, source_url, recruiter_name, recruiter_linkedin,
+                recruiter_email, post_title, post_excerpt, context_type, found_at)
+               VALUES (?,?,?,?,?,?,?,?,?,?)""",
+            (
+                job_id,
+                platform,
+                source_url,
+                recruiter_name,
+                recruiter_linkedin,
+                recruiter_email,
+                post_title,
+                post_excerpt,
+                context_type,
+                now_iso(),
+            ),
+        )
+        self.conn.commit()
+        return int(cur.lastrowid)
+
+    def social_mentions_for(self, job_id: str) -> list[dict]:
+        rows = self.conn.execute(
+            "SELECT * FROM social_mentions WHERE job_id=? ORDER BY found_at DESC", (job_id,)
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    # ── learning loop (P2-D) ───────────────────────────────────────────────────
+    def record_outcome(
+        self,
+        job_id: str | None,
+        company: str,
+        *,
+        final_state: str,
+        response_days: int | None = None,
+        interview_count: int = 0,
+        offer_made: bool = False,
+        recruiter_source: str | None = None,
+        reason: str | None = None,
+        notes: str | None = None,
+    ) -> int:
+        """Record a HUMAN-confirmed application outcome (company stored normalized)."""
+        cur = self.conn.execute(
+            """INSERT INTO application_outcomes
+               (job_id, company, final_state, response_days, interview_count, offer_made,
+                recruiter_source, reason, notes, captured_at)
+               VALUES (?,?,?,?,?,?,?,?,?,?)""",
+            (
+                job_id,
+                norm_company(company),
+                final_state,
+                response_days,
+                interview_count,
+                _b(offer_made),
+                recruiter_source,
+                reason,
+                notes,
+                now_iso(),
+            ),
+        )
+        self.conn.commit()
+        return int(cur.lastrowid)
+
+    def outcomes_for_company(self, company: str) -> list[dict]:
+        rows = self.conn.execute(
+            "SELECT * FROM application_outcomes WHERE company=? ORDER BY captured_at",
+            (norm_company(company),),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    def companies_with_outcomes(self) -> list[str]:
+        rows = self.conn.execute("SELECT DISTINCT company FROM application_outcomes").fetchall()
+        return [r["company"] for r in rows]
+
+    def upsert_learning(
+        self, company: str, pattern_type: str, observation: str, confidence: float, evidence: int
+    ) -> None:
+        self.conn.execute(
+            """INSERT INTO learnings
+                 (company, pattern_type, observation, confidence, evidence_count, last_updated)
+               VALUES (?,?,?,?,?,?)
+               ON CONFLICT(company, pattern_type) DO UPDATE SET
+                 observation=excluded.observation,
+                 confidence=excluded.confidence,
+                 evidence_count=excluded.evidence_count,
+                 last_updated=excluded.last_updated""",
+            (norm_company(company), pattern_type, observation, confidence, evidence, now_iso()),
+        )
+        self.conn.commit()
+
+    def learnings_for_company(self, company: str) -> list[dict]:
+        rows = self.conn.execute(
+            "SELECT * FROM learnings WHERE company=? ORDER BY confidence DESC",
+            (norm_company(company),),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    def all_learnings(self) -> list[dict]:
+        rows = self.conn.execute(
+            "SELECT * FROM learnings ORDER BY company, confidence DESC"
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    # ── interviews (P3-E) ──────────────────────────────────────────────────────
+    def add_interview(
+        self,
+        job_id: str,
+        *,
+        scheduled_at: str | None = None,
+        round: str | None = None,
+        mode: str | None = None,
+        notes: str | None = None,
+    ) -> int:
+        cur = self.conn.execute(
+            """INSERT INTO interviews (job_id, scheduled_at, round, mode, notes, created_at)
+               VALUES (?,?,?,?,?,?)""",
+            (job_id, scheduled_at, round, mode, notes, now_iso()),
+        )
+        self.conn.commit()
+        return int(cur.lastrowid)
+
+    def get_interview(self, interview_id: int) -> dict | None:
+        row = self.conn.execute("SELECT * FROM interviews WHERE id=?", (interview_id,)).fetchone()
+        return dict(row) if row else None
+
+    def interviews_for_job(self, job_id: str) -> list[dict]:
+        rows = self.conn.execute(
+            "SELECT * FROM interviews WHERE job_id=? ORDER BY scheduled_at", (job_id,)
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    def list_interviews(self) -> list[dict]:
+        rows = self.conn.execute("SELECT * FROM interviews ORDER BY scheduled_at").fetchall()
+        return [dict(r) for r in rows]
+
+    def set_interview_prep_path(self, interview_id: int, path: str) -> None:
+        self.conn.execute("UPDATE interviews SET prep_path=? WHERE id=?", (path, interview_id))
+        self.conn.commit()
+
+    def add_interviewer(
+        self,
+        interview_id: int,
+        *,
+        name: str,
+        title: str | None = None,
+        company: str | None = None,
+        linkedin_url: str | None = None,
+        research_notes: str | None = None,
+    ) -> int:
+        cur = self.conn.execute(
+            """INSERT INTO interviewers
+               (interview_id, name, title, company, linkedin_url, research_notes, created_at)
+               VALUES (?,?,?,?,?,?,?)""",
+            (interview_id, name, title, company, linkedin_url, research_notes, now_iso()),
+        )
+        self.conn.commit()
+        return int(cur.lastrowid)
+
+    def interviewers_for(self, interview_id: int) -> list[dict]:
+        rows = self.conn.execute(
+            "SELECT * FROM interviewers WHERE interview_id=? ORDER BY id", (interview_id,)
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    # ── portfolio + peers (P3-F) ───────────────────────────────────────────────
+    def add_portfolio(
+        self,
+        *,
+        version: str,
+        path_html: str,
+        metadata_json: str = "{}",
+        output_format: str = "html",
+    ) -> int:
+        cur = self.conn.execute(
+            """INSERT INTO portfolios (version, output_format, path_html, metadata_json, generated_at)
+               VALUES (?,?,?,?,?)""",
+            (version, output_format, path_html, metadata_json, now_iso()),
+        )
+        self.conn.commit()
+        return int(cur.lastrowid)
+
+    def list_portfolios(self) -> list[dict]:
+        rows = self.conn.execute("SELECT * FROM portfolios ORDER BY generated_at DESC").fetchall()
+        return [dict(r) for r in rows]
+
+    def latest_portfolio(self) -> dict | None:
+        row = self.conn.execute(
+            "SELECT * FROM portfolios ORDER BY generated_at DESC LIMIT 1"
+        ).fetchone()
+        return dict(row) if row else None
+
+    def add_peer_portfolio(
+        self,
+        *,
+        peer_name: str,
+        role_match: str | None = None,
+        peer_profile_url: str | None = None,
+        peer_portfolio_url: str | None = None,
+        key_strengths: list[str] | None = None,
+        how_to_emulate: list[str] | None = None,
+        source_url: str | None = None,
+        notes: str | None = None,
+    ) -> int:
+        cur = self.conn.execute(
+            """INSERT INTO peer_portfolios
+               (role_match, peer_name, peer_profile_url, peer_portfolio_url,
+                key_strengths_json, how_to_emulate_json, source_url, notes, reviewed_at)
+               VALUES (?,?,?,?,?,?,?,?,?)""",
+            (
+                role_match,
+                peer_name,
+                peer_profile_url,
+                peer_portfolio_url,
+                json.dumps(key_strengths or []),
+                json.dumps(how_to_emulate or []),
+                source_url,
+                notes,
+                now_iso(),
+            ),
+        )
+        self.conn.commit()
+        return int(cur.lastrowid)
+
+    def list_peer_portfolios(self) -> list[dict]:
+        rows = self.conn.execute(
+            "SELECT * FROM peer_portfolios ORDER BY reviewed_at DESC"
+        ).fetchall()
+        out = []
+        for r in rows:
+            d = dict(r)
+            d["key_strengths"] = _loads(d.get("key_strengths_json"), [])
+            d["how_to_emulate"] = _loads(d.get("how_to_emulate_json"), [])
+            out.append(d)
+        return out
+
+    def record_learning_feedback(
+        self,
+        learning_id: int,
+        *,
+        feedback_type: str,
+        job_id: str | None = None,
+        reasoning: str = "",
+    ) -> int:
+        cur = self.conn.execute(
+            """INSERT INTO learning_feedback (learning_id, job_id, feedback_type, reasoning, created_at)
+               VALUES (?,?,?,?,?)""",
+            (learning_id, job_id, feedback_type, reasoning, now_iso()),
+        )
+        # A 'disagree' halves the pattern's confidence so the scorer trusts it less.
+        if feedback_type == "disagree":
+            self.conn.execute(
+                "UPDATE learnings SET confidence = confidence * 0.5 WHERE id=?", (learning_id,)
+            )
+        self.conn.commit()
+        return int(cur.lastrowid)
 
 
 def _b(v: bool | None) -> int | None:

@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS jobs (
     salary_currency TEXT,
     salary_interval TEXT,
     date_posted     TEXT,
+    language        TEXT,                      -- detected posting language (en|es|de|fr|pt)
     raw_json        TEXT,
     sources_json    TEXT,                      -- json array of every source it was seen on
 
@@ -142,4 +143,110 @@ CREATE TABLE IF NOT EXISTS meta (
     key        TEXT PRIMARY KEY,
     value      TEXT,
     updated_at TEXT
+);
+
+-- Self-improving memory (P2-D). Outcomes are HUMAN-confirmed (form/CLI), never fabricated
+-- by the brain. auto_learn() rolls them into per-company `learnings` the scorer/outreach read.
+CREATE TABLE IF NOT EXISTS application_outcomes (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    job_id          TEXT REFERENCES jobs(id) ON DELETE CASCADE,
+    company         TEXT NOT NULL,             -- normalized (normalize.norm_company)
+    final_state     TEXT NOT NULL,             -- rejected | responded | interviewed | offer | ghosted
+    response_days   INTEGER,
+    interview_count INTEGER DEFAULT 0,
+    offer_made      INTEGER DEFAULT 0,         -- 1/0
+    recruiter_source TEXT,                      -- referral | recruiter | cold | inbound | unknown
+    reason          TEXT,
+    notes           TEXT,
+    captured_at     TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_outcomes_company ON application_outcomes(company);
+
+CREATE TABLE IF NOT EXISTS learnings (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    company        TEXT NOT NULL,              -- normalized
+    pattern_type   TEXT NOT NULL,              -- process_speed | referral_conversion | rejection_rate | offer_rate | process
+    observation    TEXT NOT NULL,
+    confidence     REAL DEFAULT 0,             -- 0..1, grows with evidence
+    evidence_count INTEGER DEFAULT 0,
+    last_updated   TEXT NOT NULL,
+    UNIQUE(company, pattern_type)
+);
+CREATE INDEX IF NOT EXISTS idx_learnings_company ON learnings(company);
+
+CREATE TABLE IF NOT EXISTS learning_feedback (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    learning_id   INTEGER REFERENCES learnings(id) ON DELETE CASCADE,
+    job_id        TEXT,
+    feedback_type TEXT,                        -- agree | disagree
+    reasoning     TEXT,
+    created_at    TEXT NOT NULL
+);
+
+-- Social signal (P2-C): recruiter/posts found about a vacancy on LinkedIn/X via a
+-- SUPERVISED Claude-in-Chrome session. Captured after the human confirms — never auto-contacted.
+CREATE TABLE IF NOT EXISTS social_mentions (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    job_id            TEXT REFERENCES jobs(id) ON DELETE CASCADE,
+    platform          TEXT,                    -- linkedin | x | other
+    source_url        TEXT,
+    recruiter_name    TEXT,
+    recruiter_linkedin TEXT,
+    recruiter_email   TEXT,
+    post_title        TEXT,
+    post_excerpt      TEXT,
+    context_type      TEXT,                    -- hiring_post | recruiter_profile | mention | other
+    found_at          TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_social_job ON social_mentions(job_id);
+
+-- Interview prep (P3-E): interviews are entered MANUALLY in the dashboard. Interviewer
+-- research is SUPERVISED Claude-in-Chrome (the human confirms LinkedIn URLs).
+CREATE TABLE IF NOT EXISTS interviews (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    job_id       TEXT REFERENCES jobs(id) ON DELETE CASCADE,
+    scheduled_at TEXT,
+    round        TEXT,                          -- phone | technical | system_design | hiring_manager | final | other
+    mode         TEXT,                          -- video | onsite | phone
+    status       TEXT DEFAULT 'scheduled',      -- scheduled | done | cancelled
+    notes        TEXT,
+    prep_path    TEXT,
+    created_at   TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_interviews_job ON interviews(job_id);
+
+CREATE TABLE IF NOT EXISTS interviewers (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    interview_id   INTEGER REFERENCES interviews(id) ON DELETE CASCADE,
+    name           TEXT,
+    title          TEXT,
+    company        TEXT,
+    linkedin_url   TEXT,
+    research_notes TEXT,
+    created_at     TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_interviewers_iv ON interviewers(interview_id);
+
+-- Portfolio (P3-F): generated artifacts (local-only, never auto-published) + peer references
+-- studied via SUPERVISED Claude-in-Chrome (links + notes only — no scraping/hoarding).
+CREATE TABLE IF NOT EXISTS portfolios (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    version       TEXT,
+    output_format TEXT DEFAULT 'html',
+    path_html     TEXT,
+    metadata_json TEXT,
+    generated_at  TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS peer_portfolios (
+    id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+    role_match         TEXT,
+    peer_name          TEXT,
+    peer_profile_url   TEXT,
+    peer_portfolio_url TEXT,
+    key_strengths_json TEXT,
+    how_to_emulate_json TEXT,
+    source_url         TEXT,
+    notes              TEXT,
+    reviewed_at        TEXT
 );

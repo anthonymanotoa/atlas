@@ -119,6 +119,117 @@ def test_mutating_post_allows_allowlisted_origin(atlas_app):
     assert resp.status_code != 403
 
 
+# ── P1-B: settings + CSV export ────────────────────────────────────────────────
+def test_settings_roundtrip_and_whitelist(atlas_app):
+    with TestClient(atlas_app) as client:
+        assert client.post("/api/settings", json={"key": "evil", "value": "x"}).status_code == 400
+        r = client.post(
+            "/api/settings", json={"key": "csv_columns", "value": '["title","company"]'}
+        )
+        assert r.status_code == 200
+        assert client.get("/api/settings").json()["csv_columns"] == '["title","company"]'
+
+
+def test_export_csv_headers_and_columns(atlas_app):
+    with TestClient(atlas_app) as client:
+        _seed_job("shortlisted")
+        r = client.get("/api/export?columns=title,company")
+    assert r.status_code == 200
+    assert "text/csv" in r.headers["content-type"]
+    assert "attachment" in r.headers["content-disposition"]
+    assert "Puesto,Empresa" in r.text and "Data Scientist,Acme" in r.text
+
+
+def test_csv_columns_lists_catalog(atlas_app):
+    with TestClient(atlas_app) as client:
+        r = client.get("/api/csv/columns").json()
+    ids = {c["id"] for c in r["available"]}
+    assert {"title", "company", "salary"} <= ids
+    assert r["selected"]
+
+
+# ── P3-F: portfolio + peers ──────────────────────────────────────────────────────
+def test_portfolio_generate_and_peers(atlas_app):
+    with TestClient(atlas_app) as client:
+        gen = client.post("/api/portfolio/generate", json={"include_github": False})
+        assert gen.status_code == 200
+        pid = gen.json()["id"]
+        latest = client.get("/api/portfolio/latest").json()["portfolio"]
+        assert latest and latest["id"] == pid
+        prev = client.get(f"/api/portfolio/{pid}/preview")
+        assert prev.status_code == 200 and "text/html" in prev.headers["content-type"]
+        client.post("/api/peers", json={"peer_name": "Grace", "peer_portfolio_url": "https://x"})
+        peers = client.get("/api/peers").json()["peers"]
+        assert peers and peers[0]["peer_name"] == "Grace"
+
+
+# ── P3-E: interview prep ─────────────────────────────────────────────────────────
+def test_interview_flow(atlas_app):
+    with TestClient(atlas_app) as client:
+        jid = _seed_job("interview")
+        iid = client.post(
+            f"/api/jobs/{jid}/interview", json={"scheduled_at": "2026-07-15", "round": "technical"}
+        ).json()["id"]
+        client.post(
+            f"/api/interview/{iid}/interviewer", json={"name": "Jane", "linkedin_url": "https://x"}
+        )
+        prep = client.post(f"/api/interview/{iid}/prep", json={"language": "en"})
+        assert prep.status_code == 200 and "Interview prep" in prep.json()["markdown"]
+        ivs = client.get(f"/api/jobs/{jid}/interviews").json()["interviews"]
+        assert ivs and ivs[0]["interviewers"][0]["name"] == "Jane"
+
+
+# ── P2-D: learning loop ─────────────────────────────────────────────────────────
+def test_record_outcome_creates_learnings(atlas_app):
+    with TestClient(atlas_app) as client:
+        jid = _seed_job("applied")
+        r = client.post(
+            f"/api/jobs/{jid}/outcome",
+            json={"final_state": "offer", "recruiter_source": "referral", "interview_count": 2},
+        )
+        assert r.status_code == 200
+        assert any(learning["pattern_type"] == "offer_rate" for learning in r.json()["learnings"])
+        assert client.get("/api/learnings").json()["learnings"]
+
+
+def test_learning_feedback_unknown_id_is_404(atlas_app):
+    with TestClient(atlas_app) as client:
+        resp = client.post("/api/learnings/999999/feedback", json={"feedback_type": "disagree"})
+    assert resp.status_code == 404
+
+
+# ── P2-C: supervised social search ──────────────────────────────────────────────
+def test_social_search_flow(atlas_app):
+    with TestClient(atlas_app) as client:
+        jid = _seed_job("shortlisted")
+        r = client.post(f"/api/jobs/{jid}/start-social-search")
+        assert r.status_code == 200 and "queries" in r.json()
+        assert any(
+            p["job_id"] == jid for p in client.get("/api/pending-searches").json()["pending"]
+        )
+        add = client.post(
+            f"/api/jobs/{jid}/social_mentions",
+            json={"platform": "linkedin", "recruiter_name": "Jane"},
+        )
+        assert add.status_code == 200
+        ms = client.get(f"/api/jobs/{jid}/social_mentions").json()["mentions"]
+        assert ms and ms[0]["recruiter_name"] == "Jane"
+        # capturing a mention clears the pending search
+        assert all(
+            p["job_id"] != jid for p in client.get("/api/pending-searches").json()["pending"]
+        )
+
+
+# ── P1-G: onboarding gate ───────────────────────────────────────────────────────
+def test_onboarding_status_and_complete(atlas_app):
+    with TestClient(atlas_app) as client:
+        st = client.get("/api/onboarding").json()
+        assert st["complete"] is False
+        assert "summary" in st["audit"] and "findings" in st["audit"]
+        assert client.post("/api/onboarding/complete").status_code == 200
+        assert client.get("/api/onboarding").json()["complete"] is True
+
+
 # ── Plan 019: dashboard-triggered discover→score (deterministic, keyless) ──────
 def test_discover_endpoint_runs_deterministic_pipeline(atlas_app, monkeypatch):
     import engine.discovery.runner as runner_mod

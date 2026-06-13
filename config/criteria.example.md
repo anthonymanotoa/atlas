@@ -47,6 +47,13 @@ knockout_terms:               # surface (don't auto-reject) — usually applicat
   - us citizenship required
   - active clearance
 shortlist_threshold: 62
+# ── Quality gates (P1-A) — all optional, sane defaults if omitted ─────────────
+max_age_days: 45              # 0 = off; postings older than this are down-ranked
+freshness_hard: false         # true = a stale posting is disqualified, not just down-ranked
+exclude_exec: true            # drop Director/VP/Head/Chief roles (over-qualified for an IC track)
+max_years_required: 12        # 0 = off; flag postings demanding more years than this
+company_blocklist: []         # never surface these companies (matched case/suffix-insensitively)
+#  - acme
 ---
 
 # Mis criterios de búsqueda (notas para el cerebro de Atlas)

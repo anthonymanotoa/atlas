@@ -1,8 +1,9 @@
 import * as Dialog from "@radix-ui/react-dialog";
-import { Check, Copy, Download, ExternalLink, FileText, Send, X } from "lucide-react";
+import { Check, Copy, Download, ExternalLink, FileText, Plus, Search, Send, X } from "lucide-react";
 import { useEffect, useState } from "react";
-import { api, type JobDetail } from "../api";
-import { STATE_ES, copy, fitTone, pct } from "../lib";
+import { api, type JobDetail, type Learning, type SocialMention } from "../api";
+import { STATE_ES, copy, fitTone, freshLabel, langLabel, pct, salaryLabel } from "../lib";
+import { InterviewPanel } from "./InterviewPanel";
 
 const KIND_ES: Record<string, string> = {
   cover_letter: "Carta de presentación",
@@ -105,6 +106,202 @@ function MessageCard({ m }: { m: JobDetail["messages"][number] }) {
   );
 }
 
+// P2-C: supervised social signal. Atlas queues a search + prepares queries; the human
+// runs the LinkedIn/X lookup in their own Chrome and saves what they confirm. No auto-contact.
+function SocialSearch({ jobId }: { jobId: string }) {
+  const [mentions, setMentions] = useState<SocialMention[]>([]);
+  const [queries, setQueries] = useState<Record<string, string> | null>(null);
+  const [form, setForm] = useState({ recruiter_name: "", recruiter_linkedin: "", source_url: "" });
+  const refresh = () => api.socialMentions(jobId).then((r) => setMentions(r.mentions));
+  useEffect(() => {
+    refresh();
+  }, [jobId]); // eslint-disable-line react-hooks/exhaustive-deps
+  const g = (q: string) => `https://www.google.com/search?q=${encodeURIComponent(q)}`;
+  async function start() {
+    setQueries((await api.startSocialSearch(jobId)).queries);
+  }
+  async function save() {
+    if (!form.recruiter_name && !form.source_url) return;
+    await api.addSocialMention(jobId, { platform: "linkedin", ...form });
+    setForm({ recruiter_name: "", recruiter_linkedin: "", source_url: "" });
+    refresh();
+  }
+  return (
+    <div>
+      <div className="mb-2 text-sm font-semibold">Señal social (LinkedIn / X)</div>
+      <div className="card space-y-2 p-3 text-sm">
+        <div className="text-[0.78rem] text-[var(--color-muted)]">
+          Búsqueda supervisada en tu navegador — Atlas no contacta a nadie por ti.
+        </div>
+        <button className="btn !py-1 text-xs" onClick={start}>
+          <Search size={13} /> Buscar reclutador
+        </button>
+        {queries && (
+          <div className="flex flex-col gap-1 text-xs">
+            <a
+              className="text-[var(--color-accent)]"
+              target="_blank"
+              rel="noreferrer"
+              href={g(queries.linkedin_recruiters)}
+            >
+              · LinkedIn — reclutadores ↗
+            </a>
+            <a
+              className="text-[var(--color-accent)]"
+              target="_blank"
+              rel="noreferrer"
+              href={g(queries.linkedin_posts)}
+            >
+              · LinkedIn — posts de la vacante ↗
+            </a>
+            <a
+              className="text-[var(--color-accent)]"
+              target="_blank"
+              rel="noreferrer"
+              href={g(queries.x)}
+            >
+              · X / Twitter ↗
+            </a>
+          </div>
+        )}
+        {mentions.map((m) => (
+          <div key={m.id} className="border-t border-[var(--color-border)] pt-2">
+            <b>{m.recruiter_name || m.post_title || "Mención"}</b>{" "}
+            {m.platform && <span className="chip !px-1.5">{m.platform}</span>}
+            {m.recruiter_linkedin && (
+              <a
+                className="ml-2 text-xs text-[var(--color-accent)]"
+                target="_blank"
+                rel="noreferrer"
+                href={m.recruiter_linkedin}
+              >
+                LinkedIn ↗
+              </a>
+            )}
+            {m.source_url && (
+              <a
+                className="ml-2 text-xs text-[var(--color-accent)]"
+                target="_blank"
+                rel="noreferrer"
+                href={m.source_url}
+              >
+                fuente ↗
+              </a>
+            )}
+          </div>
+        ))}
+        <div className="flex flex-col gap-1 pt-1">
+          <input
+            className="btn !justify-start text-xs"
+            placeholder="Nombre del reclutador"
+            value={form.recruiter_name}
+            onChange={(e) => setForm({ ...form, recruiter_name: e.target.value })}
+          />
+          <input
+            className="btn !justify-start text-xs"
+            placeholder="URL de LinkedIn del reclutador"
+            value={form.recruiter_linkedin}
+            onChange={(e) => setForm({ ...form, recruiter_linkedin: e.target.value })}
+          />
+          <div className="flex gap-2">
+            <input
+              className="btn !justify-start flex-1 text-xs"
+              placeholder="URL fuente (post)"
+              value={form.source_url}
+              onChange={(e) => setForm({ ...form, source_url: e.target.value })}
+            />
+            <button className="btn !py-1 text-xs" onClick={save}>
+              <Plus size={13} /> Guardar
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// P2-D: record a HUMAN-confirmed outcome → feeds the per-company learning loop.
+function RecordOutcome({ jobId, onSaved }: { jobId: string; onSaved: () => void }) {
+  const [state, setState] = useState("rejected");
+  const [recruiterSource, setRecruiterSource] = useState("");
+  const [responseDays, setResponseDays] = useState("");
+  const [saved, setSaved] = useState(false);
+  async function save() {
+    await api.recordOutcome(jobId, {
+      final_state: state,
+      recruiter_source: recruiterSource || null,
+      response_days: responseDays ? Number(responseDays) : null,
+      offer_made: state === "offer",
+    });
+    setSaved(true);
+    setTimeout(() => setSaved(false), 1500);
+    onSaved();
+  }
+  return (
+    <div>
+      <div className="mb-2 text-sm font-semibold">Registrar resultado</div>
+      <div className="card space-y-2 p-3 text-sm">
+        <div className="flex flex-wrap gap-2">
+          <select
+            className="btn !py-1 text-xs"
+            value={state}
+            onChange={(e) => setState(e.target.value)}
+          >
+            <option value="rejected">Rechazado</option>
+            <option value="responded">Respondieron</option>
+            <option value="interviewed">Entrevista</option>
+            <option value="offer">Oferta</option>
+            <option value="ghosted">Sin respuesta</option>
+          </select>
+          <select
+            className="btn !py-1 text-xs"
+            value={recruiterSource}
+            onChange={(e) => setRecruiterSource(e.target.value)}
+          >
+            <option value="">Origen…</option>
+            <option value="referral">Referido</option>
+            <option value="recruiter">Reclutador</option>
+            <option value="cold">En frío</option>
+            <option value="inbound">Inbound</option>
+          </select>
+          <input
+            className="btn !justify-start w-24 text-xs"
+            placeholder="Días resp."
+            value={responseDays}
+            onChange={(e) => setResponseDays(e.target.value.replace(/\D/g, ""))}
+          />
+          <button className="btn !py-1 text-xs" onClick={save}>
+            {saved ? "Guardado ✓" : "Guardar"}
+          </button>
+        </div>
+        <div className="text-[0.72rem] text-[var(--color-faint)]">
+          Alimenta la memoria de Atlas (qué empresas convierten y cómo). Tú confirmas; el brain
+          nunca lo inventa.
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CompanyInsights({ learnings }: { learnings?: Learning[] }) {
+  if (!learnings || learnings.length === 0) return null;
+  return (
+    <div>
+      <div className="mb-2 text-sm font-semibold">🧠 Lo aprendido de esta empresa</div>
+      <div className="card space-y-1 p-3 text-sm">
+        {learnings.map((l) => (
+          <div key={l.id}>
+            {l.observation}{" "}
+            <span className="text-[0.72rem] text-[var(--color-faint)]">
+              · confianza {Math.round(l.confidence * 100)}%
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function DetailDrawer({
   jobId,
   onClose,
@@ -124,7 +321,7 @@ export function DetailDrawer({
 
   async function prep() {
     if (!jobId) return;
-    await api.prep(jobId, "en");
+    await api.prep(jobId); // language auto-picked from the posting (es offer → ES, else EN)
     api.job(jobId).then(setD);
     onChanged();
   }
@@ -165,6 +362,17 @@ export function DetailDrawer({
                 </span>
                 <span className="chip">{STATE_ES[d.job.state] || d.job.state}</span>
                 {d.job.is_remote === 1 && <span className="chip">Remoto</span>}
+                {salaryLabel(d.job) && (
+                  <span className="chip" title="Salario publicado">
+                    💰 {salaryLabel(d.job)}
+                  </span>
+                )}
+                {d.job.language && (
+                  <span className="chip uppercase">{langLabel(d.job.language)}</span>
+                )}
+                {(d.job.posted_days ?? d.job.age_days) != null && (
+                  <span className="chip">{freshLabel(d.job.posted_days ?? d.job.age_days)}</span>
+                )}
                 {(d.job.apply_url || d.job.url) && (
                   <a
                     href={d.job.apply_url || d.job.url}
@@ -240,6 +448,20 @@ export function DetailDrawer({
                   ))}
                 </div>
               </div>
+
+              <CompanyInsights learnings={d.learnings} />
+
+              <SocialSearch jobId={d.job.id} />
+
+              <InterviewPanel jobId={d.job.id} />
+
+              <RecordOutcome
+                jobId={d.job.id}
+                onSaved={() => {
+                  api.job(d.job.id).then(setD);
+                  onChanged();
+                }}
+              />
 
               <div className="flex gap-2 pt-2">
                 <button className="btn flex-1 justify-center" onClick={markApplied}>
