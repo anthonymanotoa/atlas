@@ -14,10 +14,15 @@ import re
 import shutil
 from pathlib import Path
 
+import yaml
+
 from engine.paths import PROFILES_DIR, REGISTRY_PATH, REPO_ROOT
 
 OWNER_ID = "owner"
 _ID_RE = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
+# Legacy/placeholder owner labels we auto-replace with the real name from the CV, so nobody
+# is ever shown the cryptic "Dueño". (The owner used to be hardcoded as "Dueño".)
+_PLACEHOLDER_LABELS = {"", "dueño", "dueno", "owner", "mi perfil", "owner profile"}
 
 # (destination relative to a profile root, seed relative to the repo root). Seeds let a
 # brand-new profile boot on the committed examples, ready to edit.
@@ -85,6 +90,53 @@ def set_active(profile_id: str) -> None:
         raise ValueError(f"unknown profile {profile_id!r}")
     reg["active"] = profile_id
     _write_registry(reg)
+
+
+# ── labels (display name) ─────────────────────────────────────────────────────
+def cv_name_of(profile_id: str) -> str | None:
+    """The `basics.name` from a profile's own master_cv.yaml, if present and non-empty."""
+    cv_path = _profile_root(profile_id) / "profile" / "master_cv.yaml"
+    if not cv_path.exists():
+        return None
+    try:
+        data = yaml.safe_load(cv_path.read_text()) or {}
+    except (yaml.YAMLError, OSError):
+        return None
+    return ((data.get("basics") or {}).get("name") or "").strip() or None
+
+
+def set_label(profile_id: str, label: str) -> str:
+    """Rename a profile (its display label in the selector). Returns the saved label."""
+    _require_valid(profile_id)
+    label = (label or "").strip()[:60]
+    if not label:
+        raise ValueError("label must not be empty")
+    reg = _read_registry()
+    for p in reg.get("profiles", []):
+        if p["id"] == profile_id:
+            p["label"] = label
+            _write_registry(reg)
+            return label
+    raise ValueError(f"unknown profile {profile_id!r}")
+
+
+def reconcile_labels() -> bool:
+    """Self-heal placeholder labels (e.g. the legacy "Dueño") to the profile's real CV name.
+
+    Idempotent and safe to call on every startup: only rewrites the registry when a profile
+    still carries a placeholder label AND its CV provides a name. No-op in legacy mode (no
+    registry). Returns True if anything changed."""
+    reg = _read_registry()
+    changed = False
+    for p in reg.get("profiles", []):
+        if (p.get("label") or "").strip().lower() in _PLACEHOLDER_LABELS:
+            name = cv_name_of(p["id"])
+            if name and name != p.get("label"):
+                p["label"] = name
+                changed = True
+    if changed:
+        _write_registry(reg)
+    return changed
 
 
 def _register(profile_id: str, label: str, *, owner: bool = False) -> None:
@@ -166,5 +218,8 @@ def init_owner() -> dict:
         # never created) from the committed seeds so the profile boots out-of-the-box.
         _seed_missing(root)
 
-    _register(OWNER_ID, "Dueño", owner=True)
+    # Label the owner with the real name from their CV (falls back to a neutral default,
+    # never the cryptic "Dueño"). reconcile_labels() keeps existing registries in sync too.
+    _register(OWNER_ID, cv_name_of(OWNER_ID) or "Mi perfil", owner=True)
+    reconcile_labels()
     return {"profile": OWNER_ID, "migrated": migrated, "root": str(root)}
