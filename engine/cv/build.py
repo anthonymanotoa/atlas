@@ -61,6 +61,20 @@ def build_for_job(
     )
     parse_ok, issues = parse_check.check(docx_path, cv, language=language)
 
+    # Mirror a human-readable copy into the per-profile CV library so every tailored CV lands
+    # in one browsable folder named by company/role (the canonical store stays under job_id/).
+    from engine.cv.naming import copy_to_library
+
+    cv_name = (master.get("basics") or {}).get("name")
+    company, title = job.get("company"), job.get("title")
+    copy_to_library(
+        docx_path, cv_name=cv_name, company=company, title=title, language=language, fmt="docx"
+    )
+    if pdf_path:
+        copy_to_library(
+            pdf_path, cv_name=cv_name, company=company, title=title, language=language, fmt="pdf"
+        )
+
     cv_version_id = db.add_cv_version(
         job_id,
         language=language,
