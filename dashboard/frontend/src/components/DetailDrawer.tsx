@@ -14,6 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { Separator } from "./ui/separator";
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "./ui/sheet";
 import { Skeleton } from "./ui/skeleton";
+import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 
 const KIND_ES: Record<string, string> = {
   cover_letter: "Carta de presentación",
@@ -507,9 +508,17 @@ export function DetailDrawer({
                 <SectionTitle>Mensajes — qué enviar</SectionTitle>
                 <div className="space-y-2">
                   {d.messages.length === 0 && (
-                    <Button variant="secondary" className="w-full" onClick={prep}>
-                      Generar borradores
-                    </Button>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button variant="secondary" className="w-full" onClick={prep}>
+                          Generar borradores
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        Adapta tu CV a esta oferta (ATS-safe) y redacta los mensajes de contacto.
+                        Reordena solo lo que ya está en tu CV — nunca inventa. Determinista, sin IA.
+                      </TooltipContent>
+                    </Tooltip>
                   )}
                   {d.messages.map((m) => (
                     <MessageCard key={m.id} m={m} />
