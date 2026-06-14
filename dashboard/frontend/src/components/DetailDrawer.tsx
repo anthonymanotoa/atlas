@@ -1,9 +1,19 @@
-import * as Dialog from "@radix-ui/react-dialog";
-import { Check, Copy, Download, ExternalLink, FileText, Plus, Search, Send, X } from "lucide-react";
+import { Check, Copy, Download, ExternalLink, FileText, Plus, Search, Send } from "lucide-react";
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import { api, type JobDetail, type Learning, type SocialMention } from "../api";
 import { STATE_ES, copy, fitTone, freshLabel, langLabel, pct, salaryLabel } from "../lib";
 import { InterviewPanel } from "./InterviewPanel";
+import { Badge } from "./ui/badge";
+import { Button, buttonVariants } from "./ui/button";
+import { Card } from "./ui/card";
+import { InsightsIcon, KnockoutIcon, MatchIcon, ReferralIcon, SalaryIcon } from "./ui/icons";
+import { Input } from "./ui/input";
+import { ScoreRing } from "./ui/score-ring";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
+import { Separator } from "./ui/separator";
+import { Sheet, SheetContent, SheetDescription, SheetTitle } from "./ui/sheet";
+import { Skeleton } from "./ui/skeleton";
 
 const KIND_ES: Record<string, string> = {
   cover_letter: "Carta de presentación",
@@ -15,6 +25,10 @@ const KIND_ES: Record<string, string> = {
   follow_up: "Follow-up",
   breakup: "Cierre cordial",
 };
+
+function SectionTitle({ children }: { children: React.ReactNode }) {
+  return <div className="mb-2 text-caption text-muted-foreground uppercase">{children}</div>;
+}
 
 function Ledger({ d }: { d: JobDetail }) {
   const cv = d.cv_versions[0];
@@ -41,25 +55,21 @@ function Ledger({ d }: { d: JobDetail }) {
     },
   ];
   return (
-    <div className="card p-3 space-y-2">
+    <Card className="space-y-2 p-3.5">
       {rows.map((r, i) => (
         <div key={i} className="flex items-center gap-2 text-sm">
           <span
-            className="w-4 h-4 rounded-full flex items-center justify-center text-[10px]"
-            style={{
-              background: r.ok ? "var(--color-done)" : "var(--color-panel2)",
-              color: "#000",
-            }}
+            className={`grid size-4 place-items-center rounded-full ${
+              r.ok ? "bg-success text-success-foreground" : "bg-secondary text-muted-foreground"
+            }`}
           >
-            {r.ok ? <Check size={11} /> : ""}
+            {r.ok ? <Check className="size-3" strokeWidth={3} /> : null}
           </span>
-          <span className={r.ok ? "" : "text-[var(--color-muted)]"}>{r.ok ? r.on : r.off}</span>
-          {r.detail && (
-            <span className="text-[0.72rem] text-[var(--color-faint)]">· {r.detail}</span>
-          )}
+          <span className={r.ok ? "" : "text-muted-foreground"}>{r.ok ? r.on : r.off}</span>
+          {r.detail && <span className="text-[0.72rem] text-muted-foreground">· {r.detail}</span>}
         </div>
       ))}
-    </div>
+    </Card>
   );
 }
 
@@ -67,42 +77,47 @@ function MessageCard({ m }: { m: JobDetail["messages"][number] }) {
   const [done, setDone] = useState(false);
   const [sent, setSent] = useState(m.state === "sent");
   return (
-    <div className="card p-3">
-      <div className="flex items-center justify-between">
+    <Card className="p-3.5">
+      <div className="flex items-center justify-between gap-2">
         <div className="text-sm font-medium">{KIND_ES[m.kind] || m.kind}</div>
-        <span className="chip !px-1.5">
+        <Badge variant="secondary">
           {m.channel} · {m.language}
-        </span>
+        </Badge>
       </div>
       {m.subject && (
-        <div className="text-[0.78rem] text-[var(--color-muted)] mt-1">Asunto: {m.subject}</div>
+        <div className="mt-1 text-[0.78rem] text-muted-foreground">Asunto: {m.subject}</div>
       )}
-      <pre className="text-[0.8rem] whitespace-pre-wrap mt-2 text-[var(--color-fg)] font-sans max-h-44 overflow-auto">
+      <pre className="mt-2 max-h-44 overflow-auto rounded-lg bg-background/60 p-2.5 font-sans text-[0.8rem] whitespace-pre-wrap text-foreground">
         {m.body}
       </pre>
-      <div className="flex gap-2 mt-2">
-        <button
-          className="btn !py-1 !px-2 text-xs"
+      <div className="mt-2.5 flex gap-2">
+        <Button
+          variant="secondary"
+          size="sm"
           onClick={async () => {
             await copy((m.subject ? `${m.subject}\n\n` : "") + m.body);
             setDone(true);
+            toast.success("Copiado al portapapeles");
             setTimeout(() => setDone(false), 1200);
           }}
         >
-          {done ? <Check size={13} /> : <Copy size={13} />} {done ? "Copiado" : "Copiar"}
-        </button>
-        <button
-          className="btn !py-1 !px-2 text-xs"
+          {done ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}{" "}
+          {done ? "Copiado" : "Copiar"}
+        </Button>
+        <Button
+          variant="secondary"
+          size="sm"
           disabled={sent}
           onClick={async () => {
             await api.markSent(m.id);
             setSent(true);
+            toast.success("Mensaje marcado como enviado");
           }}
         >
-          <Send size={13} /> {sent ? "Enviado" : "Marcar enviado"}
-        </button>
+          <Send className="size-3.5" /> {sent ? "Enviado" : "Marcar enviado"}
+        </Button>
       </div>
-    </div>
+    </Card>
   );
 }
 
@@ -125,21 +140,22 @@ function SocialSearch({ jobId }: { jobId: string }) {
     await api.addSocialMention(jobId, { platform: "linkedin", ...form });
     setForm({ recruiter_name: "", recruiter_linkedin: "", source_url: "" });
     refresh();
+    toast.success("Mención guardada");
   }
   return (
     <div>
-      <div className="mb-2 text-sm font-semibold">Señal social (LinkedIn / X)</div>
-      <div className="card space-y-2 p-3 text-sm">
-        <div className="text-[0.78rem] text-[var(--color-muted)]">
+      <SectionTitle>Señal social (LinkedIn / X)</SectionTitle>
+      <Card className="space-y-2.5 p-3.5 text-sm">
+        <div className="text-[0.78rem] text-muted-foreground">
           Búsqueda supervisada en tu navegador — Atlas no contacta a nadie por ti.
         </div>
-        <button className="btn !py-1 text-xs" onClick={start}>
-          <Search size={13} /> Buscar reclutador
-        </button>
+        <Button variant="secondary" size="sm" onClick={start}>
+          <Search className="size-3.5" /> Buscar reclutador
+        </Button>
         {queries && (
           <div className="flex flex-col gap-1 text-xs">
             <a
-              className="text-[var(--color-accent)]"
+              className="text-primary hover:underline"
               target="_blank"
               rel="noreferrer"
               href={g(queries.linkedin_recruiters)}
@@ -147,7 +163,7 @@ function SocialSearch({ jobId }: { jobId: string }) {
               · LinkedIn — reclutadores ↗
             </a>
             <a
-              className="text-[var(--color-accent)]"
+              className="text-primary hover:underline"
               target="_blank"
               rel="noreferrer"
               href={g(queries.linkedin_posts)}
@@ -155,7 +171,7 @@ function SocialSearch({ jobId }: { jobId: string }) {
               · LinkedIn — posts de la vacante ↗
             </a>
             <a
-              className="text-[var(--color-accent)]"
+              className="text-primary hover:underline"
               target="_blank"
               rel="noreferrer"
               href={g(queries.x)}
@@ -165,12 +181,13 @@ function SocialSearch({ jobId }: { jobId: string }) {
           </div>
         )}
         {mentions.map((m) => (
-          <div key={m.id} className="border-t border-[var(--color-border)] pt-2">
+          <div key={m.id}>
+            <Separator className="mb-2" />
             <b>{m.recruiter_name || m.post_title || "Mención"}</b>{" "}
-            {m.platform && <span className="chip !px-1.5">{m.platform}</span>}
+            {m.platform && <Badge variant="secondary">{m.platform}</Badge>}
             {m.recruiter_linkedin && (
               <a
-                className="ml-2 text-xs text-[var(--color-accent)]"
+                className="ml-2 text-xs text-primary hover:underline"
                 target="_blank"
                 rel="noreferrer"
                 href={m.recruiter_linkedin}
@@ -180,7 +197,7 @@ function SocialSearch({ jobId }: { jobId: string }) {
             )}
             {m.source_url && (
               <a
-                className="ml-2 text-xs text-[var(--color-accent)]"
+                className="ml-2 text-xs text-primary hover:underline"
                 target="_blank"
                 rel="noreferrer"
                 href={m.source_url}
@@ -190,32 +207,32 @@ function SocialSearch({ jobId }: { jobId: string }) {
             )}
           </div>
         ))}
-        <div className="flex flex-col gap-1 pt-1">
-          <input
-            className="btn !justify-start text-xs"
+        <div className="flex flex-col gap-1.5 pt-1">
+          <Input
+            className="h-8 text-xs"
             placeholder="Nombre del reclutador"
             value={form.recruiter_name}
             onChange={(e) => setForm({ ...form, recruiter_name: e.target.value })}
           />
-          <input
-            className="btn !justify-start text-xs"
+          <Input
+            className="h-8 text-xs"
             placeholder="URL de LinkedIn del reclutador"
             value={form.recruiter_linkedin}
             onChange={(e) => setForm({ ...form, recruiter_linkedin: e.target.value })}
           />
           <div className="flex gap-2">
-            <input
-              className="btn !justify-start flex-1 text-xs"
+            <Input
+              className="h-8 flex-1 text-xs"
               placeholder="URL fuente (post)"
               value={form.source_url}
               onChange={(e) => setForm({ ...form, source_url: e.target.value })}
             />
-            <button className="btn !py-1 text-xs" onClick={save}>
-              <Plus size={13} /> Guardar
-            </button>
+            <Button variant="secondary" size="sm" onClick={save}>
+              <Plus className="size-3.5" /> Guardar
+            </Button>
           </div>
         </div>
-      </div>
+      </Card>
     </div>
   );
 }
@@ -234,51 +251,53 @@ function RecordOutcome({ jobId, onSaved }: { jobId: string; onSaved: () => void 
       offer_made: state === "offer",
     });
     setSaved(true);
+    toast.success("Resultado registrado");
     setTimeout(() => setSaved(false), 1500);
     onSaved();
   }
   return (
     <div>
-      <div className="mb-2 text-sm font-semibold">Registrar resultado</div>
-      <div className="card space-y-2 p-3 text-sm">
+      <SectionTitle>Registrar resultado</SectionTitle>
+      <Card className="space-y-2.5 p-3.5 text-sm">
         <div className="flex flex-wrap gap-2">
-          <select
-            className="btn !py-1 text-xs"
-            value={state}
-            onChange={(e) => setState(e.target.value)}
-          >
-            <option value="rejected">Rechazado</option>
-            <option value="responded">Respondieron</option>
-            <option value="interviewed">Entrevista</option>
-            <option value="offer">Oferta</option>
-            <option value="ghosted">Sin respuesta</option>
-          </select>
-          <select
-            className="btn !py-1 text-xs"
-            value={recruiterSource}
-            onChange={(e) => setRecruiterSource(e.target.value)}
-          >
-            <option value="">Origen…</option>
-            <option value="referral">Referido</option>
-            <option value="recruiter">Reclutador</option>
-            <option value="cold">En frío</option>
-            <option value="inbound">Inbound</option>
-          </select>
-          <input
-            className="btn !justify-start w-24 text-xs"
+          <Select value={state} onValueChange={setState}>
+            <SelectTrigger size="sm" className="w-auto">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="rejected">Rechazado</SelectItem>
+              <SelectItem value="responded">Respondieron</SelectItem>
+              <SelectItem value="interviewed">Entrevista</SelectItem>
+              <SelectItem value="offer">Oferta</SelectItem>
+              <SelectItem value="ghosted">Sin respuesta</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={recruiterSource || undefined} onValueChange={(v) => setRecruiterSource(v)}>
+            <SelectTrigger size="sm" className="w-auto">
+              <SelectValue placeholder="Origen…" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="referral">Referido</SelectItem>
+              <SelectItem value="recruiter">Reclutador</SelectItem>
+              <SelectItem value="cold">En frío</SelectItem>
+              <SelectItem value="inbound">Inbound</SelectItem>
+            </SelectContent>
+          </Select>
+          <Input
+            className="h-8 w-24 text-xs"
             placeholder="Días resp."
             value={responseDays}
             onChange={(e) => setResponseDays(e.target.value.replace(/\D/g, ""))}
           />
-          <button className="btn !py-1 text-xs" onClick={save}>
+          <Button variant="secondary" size="sm" onClick={save}>
             {saved ? "Guardado ✓" : "Guardar"}
-          </button>
+          </Button>
         </div>
-        <div className="text-[0.72rem] text-[var(--color-faint)]">
+        <div className="text-[0.72rem] text-muted-foreground">
           Alimenta la memoria de Atlas (qué empresas convierten y cómo). Tú confirmas; el brain
           nunca lo inventa.
         </div>
-      </div>
+      </Card>
     </div>
   );
 }
@@ -287,17 +306,21 @@ function CompanyInsights({ learnings }: { learnings?: Learning[] }) {
   if (!learnings || learnings.length === 0) return null;
   return (
     <div>
-      <div className="mb-2 text-sm font-semibold">🧠 Lo aprendido de esta empresa</div>
-      <div className="card space-y-1 p-3 text-sm">
+      <SectionTitle>
+        <span className="inline-flex items-center gap-1.5">
+          <InsightsIcon className="size-3.5" /> Lo aprendido de esta empresa
+        </span>
+      </SectionTitle>
+      <Card className="space-y-1.5 p-3.5 text-sm">
         {learnings.map((l) => (
           <div key={l.id}>
             {l.observation}{" "}
-            <span className="text-[0.72rem] text-[var(--color-faint)]">
+            <span className="text-[0.72rem] text-muted-foreground">
               · confianza {Math.round(l.confidence * 100)}%
             </span>
           </div>
         ))}
-      </div>
+      </Card>
     </div>
   );
 }
@@ -330,117 +353,135 @@ export function DetailDrawer({
     await api.markApplied(jobId);
     api.job(jobId).then(setD);
     onChanged();
+    toast.success("Marcado como aplicado");
   }
 
   return (
-    <Dialog.Root open={!!jobId} onOpenChange={(o) => !o && onClose()}>
-      <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 bg-black/50 backdrop-blur-[2px] z-40" />
-        <Dialog.Content
-          className="fixed right-0 top-0 h-full w-full max-w-[540px] z-50 bg-[var(--color-bg)] border-l border-[var(--color-border)] overflow-y-auto"
-          style={{ animation: "fadeUp 0.2s ease" }}
-        >
-          {!d ? (
-            <div className="p-6 text-[var(--color-muted)]">Cargando…</div>
-          ) : (
-            <div className="p-5 space-y-4">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <Dialog.Title className="text-lg font-semibold leading-snug">
-                    {d.job.title}
-                  </Dialog.Title>
-                  <div className="text-[var(--color-muted)]">{d.job.company}</div>
+    <Sheet open={!!jobId} onOpenChange={(o) => !o && onClose()}>
+      <SheetContent side="right" className="gap-0 p-0 sm:max-w-[560px]">
+        {!d ? (
+          <div className="space-y-4 p-5">
+            <Skeleton className="h-7 w-2/3" />
+            <Skeleton className="h-4 w-1/3" />
+            <div className="flex gap-2">
+              <Skeleton className="h-6 w-16" />
+              <Skeleton className="h-6 w-16" />
+              <Skeleton className="h-6 w-20" />
+            </div>
+            <Skeleton className="h-24 w-full" />
+            <Skeleton className="h-32 w-full" />
+          </div>
+        ) : (
+          <>
+            {/* sticky header */}
+            <div className="sticky top-0 z-10 border-b border-border bg-background/85 px-5 py-4 backdrop-blur-xl">
+              <div className="flex items-start gap-3 pr-8">
+                <ScoreRing
+                  value={d.job.fit_score}
+                  tone={fitTone(d.job.fit_score)}
+                  centerClassName="bg-background"
+                />
+                <div className="min-w-0">
+                  <SheetTitle className="truncate">{d.job.title}</SheetTitle>
+                  <SheetDescription className="text-foreground/70">
+                    {d.job.company}
+                  </SheetDescription>
                 </div>
-                <Dialog.Close className="btn !p-2">
-                  <X size={16} />
-                </Dialog.Close>
               </div>
+            </div>
 
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="chip font-semibold" style={{ color: fitTone(d.job.fit_score) }}>
-                  fit {d.job.fit_score ?? "—"}
-                </span>
+            {/* scrollable body */}
+            <div className="flex-1 space-y-4 overflow-y-auto px-5 py-4">
+              <div className="flex flex-wrap items-center gap-2">
                 {d.job.match_score != null && (
-                  <span
-                    className="chip font-semibold"
+                  <Badge
+                    variant="score"
+                    style={{ "--tone": fitTone(d.job.match_score) } as React.CSSProperties}
                     title="Match CV↔oferta: cobertura ponderada de las keywords de la vacante"
-                    style={{ color: fitTone(d.job.match_score) }}
                   >
                     match {d.job.match_score}%
-                  </span>
+                  </Badge>
                 )}
-                <span className="chip">{STATE_ES[d.job.state] || d.job.state}</span>
-                {d.job.is_remote === 1 && <span className="chip">Remoto</span>}
+                <Badge variant="secondary">{STATE_ES[d.job.state] || d.job.state}</Badge>
+                {d.job.is_remote === 1 && <Badge variant="secondary">Remoto</Badge>}
                 {salaryLabel(d.job) && (
-                  <span className="chip" title="Salario publicado">
-                    💰 {salaryLabel(d.job)}
-                  </span>
+                  <Badge variant="secondary" title="Salario publicado">
+                    <SalaryIcon /> {salaryLabel(d.job)}
+                  </Badge>
                 )}
                 {d.job.language && (
-                  <span className="chip uppercase">{langLabel(d.job.language)}</span>
+                  <Badge variant="secondary" className="uppercase">
+                    {langLabel(d.job.language)}
+                  </Badge>
                 )}
                 {(d.job.posted_days ?? d.job.age_days) != null && (
-                  <span className="chip">{freshLabel(d.job.posted_days ?? d.job.age_days)}</span>
+                  <Badge variant="secondary">
+                    {freshLabel(d.job.posted_days ?? d.job.age_days)}
+                  </Badge>
                 )}
                 {(d.job.apply_url || d.job.url) && (
-                  <a
-                    href={d.job.apply_url || d.job.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="btn !py-1 !px-2 text-xs"
-                  >
-                    <ExternalLink size={13} /> Postular
-                  </a>
+                  <Button asChild variant="ghost" size="sm" className="h-7 px-2 text-xs">
+                    <a href={d.job.apply_url || d.job.url} target="_blank" rel="noreferrer">
+                      <ExternalLink className="size-3.5" /> Postular
+                    </a>
+                  </Button>
                 )}
               </div>
 
               {d.job.knockout_flags && d.job.knockout_flags.length > 0 && (
-                <div className="card p-3 text-sm" style={{ borderColor: "var(--color-pending)" }}>
-                  ⚑ <b>Filtros del puesto:</b> {d.job.knockout_flags.join(", ")}
-                </div>
+                <Card className="flex items-start gap-2 border-warning/50 bg-warning/5 p-3 text-sm">
+                  <KnockoutIcon className="mt-0.5 size-4 shrink-0 text-warning" />
+                  <div>
+                    <b>Filtros del puesto:</b> {d.job.knockout_flags.join(", ")}
+                  </div>
+                </Card>
               )}
 
               {d.job.missing_keywords && d.job.missing_keywords.length > 0 && (
-                <div className="card p-3 text-sm">
-                  <div className="font-medium mb-1">
-                    🎯 Keywords de la oferta que tu CV no evidencia
+                <Card className="p-3.5 text-sm">
+                  <div className="mb-2 flex items-center gap-1.5 font-medium">
+                    <MatchIcon className="size-4 text-muted-foreground" /> Keywords de la oferta que
+                    tu CV no evidencia
                   </div>
-                  <div className="flex flex-wrap gap-1">
+                  <div className="flex flex-wrap gap-1.5">
                     {d.job.missing_keywords.slice(0, 12).map((k) => (
-                      <span key={k} className="chip text-xs">
+                      <Badge key={k} variant="outline">
                         {k}
-                      </span>
+                      </Badge>
                     ))}
                   </div>
-                  <div className="text-xs text-[var(--color-muted)] mt-1">
+                  <div className="mt-2 text-xs text-muted-foreground">
                     Agrégalas a tu CV solo si realmente las tienes (nunca inventes).
                   </div>
-                </div>
+                </Card>
               )}
 
               <Ledger d={d} />
 
               {d.referrals.length > 0 && (
-                <div className="card p-3" style={{ borderColor: "var(--color-accent2)" }}>
-                  <div className="text-sm font-medium" style={{ color: "var(--color-accent2)" }}>
-                    🤝 Referido disponible (prioriza esto)
+                <Card className="border-[color-mix(in_oklch,var(--accent2)_50%,var(--border))] bg-[color-mix(in_oklch,var(--accent2)_8%,transparent)] p-3.5">
+                  <div
+                    className="flex items-center gap-1.5 text-sm font-medium"
+                    style={{ color: "var(--color-accent2)" }}
+                  >
+                    <ReferralIcon className="size-4" /> Referido disponible (prioriza esto)
                   </div>
                   {d.referrals.map((r) => (
-                    <div key={r.id} className="text-sm mt-1">
+                    <div key={r.id} className="mt-1 text-sm">
                       <b>{r.name}</b> — {r.title || ""} @ {r.company}
                       {r.linkedin_url && (
                         <a
                           href={r.linkedin_url}
                           target="_blank"
                           rel="noreferrer"
-                          className="ml-2 text-[var(--color-accent)] text-xs"
+                          className="ml-2 text-xs text-primary hover:underline"
                         >
                           LinkedIn ↗
                         </a>
                       )}
                     </div>
                   ))}
-                </div>
+                </Card>
               )}
 
               {d.cv_versions[0] && (
@@ -448,27 +489,27 @@ export function DetailDrawer({
                   {d.cv_versions[0].path_pdf && (
                     <a
                       href={api.cvDownload(d.job.id, d.cv_versions[0].id, "pdf")}
-                      className="btn btn-accent flex-1 justify-center"
+                      className={buttonVariants({ className: "flex-1" })}
                     >
-                      <FileText size={15} /> CV PDF <Download size={14} />
+                      <FileText className="size-4" /> CV PDF <Download className="size-3.5" />
                     </a>
                   )}
                   <a
                     href={api.cvDownload(d.job.id, d.cv_versions[0].id, "docx")}
-                    className="btn flex-1 justify-center"
+                    className={buttonVariants({ variant: "secondary", className: "flex-1" })}
                   >
-                    <FileText size={15} /> CV DOCX <Download size={14} />
+                    <FileText className="size-4" /> CV DOCX <Download className="size-3.5" />
                   </a>
                 </div>
               )}
 
               <div>
-                <div className="text-sm font-semibold mb-2">Mensajes — qué enviar</div>
+                <SectionTitle>Mensajes — qué enviar</SectionTitle>
                 <div className="space-y-2">
                   {d.messages.length === 0 && (
-                    <button className="btn w-full justify-center" onClick={prep}>
+                    <Button variant="secondary" className="w-full" onClick={prep}>
                       Generar borradores
-                    </button>
+                    </Button>
                   )}
                   {d.messages.map((m) => (
                     <MessageCard key={m.id} m={m} />
@@ -489,19 +530,20 @@ export function DetailDrawer({
                   onChanged();
                 }}
               />
-
-              <div className="flex gap-2 pt-2">
-                <button className="btn flex-1 justify-center" onClick={markApplied}>
-                  Marcar como aplicado
-                </button>
-                <button className="btn flex-1 justify-center" onClick={prep}>
-                  Re-preparar
-                </button>
-              </div>
             </div>
-          )}
-        </Dialog.Content>
-      </Dialog.Portal>
-    </Dialog.Root>
+
+            {/* sticky footer */}
+            <div className="sticky bottom-0 z-10 flex gap-2 border-t border-border bg-background/85 px-5 py-3 backdrop-blur-xl">
+              <Button variant="secondary" className="flex-1" onClick={markApplied}>
+                Marcar como aplicado
+              </Button>
+              <Button className="flex-1" onClick={prep}>
+                Re-preparar
+              </Button>
+            </div>
+          </>
+        )}
+      </SheetContent>
+    </Sheet>
   );
 }

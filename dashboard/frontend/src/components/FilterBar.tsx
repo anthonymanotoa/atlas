@@ -2,7 +2,20 @@
 // Operates on the already-annotated jobs (salary_visible / language / posted_days), so no
 // extra request is needed.
 
+import { SlidersHorizontal } from "lucide-react";
+import { Checkbox } from "./ui/checkbox";
+import { Label } from "./ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
+
 export type Filters = { onlySalary: boolean; language: string; maxAgeDays: number };
+
+const AGE_OPTIONS = [
+  { value: "0", label: "Frescura: cualquiera" },
+  { value: "14", label: "≤ 14 días" },
+  { value: "30", label: "≤ 30 días" },
+  { value: "60", label: "≤ 60 días" },
+  { value: "90", label: "≤ 90 días" },
+];
 
 export function FilterBar({
   filters,
@@ -14,38 +27,46 @@ export function FilterBar({
   languages: string[];
 }) {
   return (
-    <div className="flex items-center gap-2 mb-2 text-[0.78rem] flex-wrap text-[var(--color-muted)]">
-      <label className="flex items-center gap-1.5 cursor-pointer select-none">
-        <input
-          type="checkbox"
+    <div className="mb-3 flex flex-wrap items-center gap-2.5 text-[0.8rem] text-muted-foreground">
+      <SlidersHorizontal className="size-3.5 text-muted-foreground/70" />
+      <Label className="cursor-pointer font-normal text-muted-foreground">
+        <Checkbox
           checked={filters.onlySalary}
-          onChange={(e) => setFilters({ ...filters, onlySalary: e.target.checked })}
+          onCheckedChange={(c) => setFilters({ ...filters, onlySalary: c === true })}
         />
         Solo con salario
-      </label>
-      <select
-        className="btn !py-1 cursor-pointer"
-        value={filters.language}
-        onChange={(e) => setFilters({ ...filters, language: e.target.value })}
+      </Label>
+      <Select
+        value={filters.language || "all"}
+        onValueChange={(v) => setFilters({ ...filters, language: v === "all" ? "" : v })}
       >
-        <option value="">Idioma: todos</option>
-        {languages.map((l) => (
-          <option key={l} value={l}>
-            {l.toUpperCase()}
-          </option>
-        ))}
-      </select>
-      <select
-        className="btn !py-1 cursor-pointer"
-        value={filters.maxAgeDays}
-        onChange={(e) => setFilters({ ...filters, maxAgeDays: Number(e.target.value) })}
+        <SelectTrigger size="sm" className="w-auto">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="all">Idioma: todos</SelectItem>
+          {languages.map((l) => (
+            <SelectItem key={l} value={l}>
+              {l.toUpperCase()}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <Select
+        value={String(filters.maxAgeDays)}
+        onValueChange={(v) => setFilters({ ...filters, maxAgeDays: Number(v) })}
       >
-        <option value={0}>Frescura: cualquiera</option>
-        <option value={14}>≤ 14 días</option>
-        <option value={30}>≤ 30 días</option>
-        <option value={60}>≤ 60 días</option>
-        <option value={90}>≤ 90 días</option>
-      </select>
+        <SelectTrigger size="sm" className="w-auto">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {AGE_OPTIONS.map((o) => (
+            <SelectItem key={o.value} value={o.value}>
+              {o.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
     </div>
   );
 }

@@ -1,64 +1,257 @@
 @import "tailwindcss";
+@import "tw-animate-css";
 
-/* ── Atlas design tokens (dark, Linear-like, intentional) ──────────────────── */
-@theme {
-  --color-bg: oklch(0.17 0.01 265);
-  --color-panel: oklch(0.21 0.012 265);
-  --color-panel2: oklch(0.245 0.014 265);
-  --color-border: oklch(0.3 0.015 265);
-  --color-fg: oklch(0.96 0.005 265);
-  --color-muted: oklch(0.68 0.012 265);
-  --color-faint: oklch(0.52 0.012 265);
-  --color-accent: oklch(0.68 0.16 280);
-  --color-accent2: oklch(0.72 0.15 300);
-  --color-done: oklch(0.74 0.15 155);
-  --color-pending: oklch(0.8 0.14 75);
-  --color-action: oklch(0.72 0.14 240);
-  --color-danger: oklch(0.68 0.18 25);
+/* ════════════════════════════════════════════════════════════════════════════
+   Atlas — "Warm Editorial" design system
+   Warm charcoal/ink canvas · amber→terracotta accent · crafted typography.
+   Theme is switched at runtime via `data-theme="dark|light"` on <html> (see App.tsx).
+   Fonts (Geist) are loaded as side-effects in main.tsx.
+   ──────────────────────────────────────────────────────────────────────────── */
 
-  --radius-xl: 14px;
-  --font-sans: ui-sans-serif, system-ui, -apple-system, "Inter", "Segoe UI", sans-serif;
+/* shadcn `dark:` variant wired to the EXISTING attribute switch (not a .dark class),
+   so App.tsx's theme logic stays untouched. */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+/* ── Base tokens — dark (default) ─────────────────────────────────────────── */
+:root {
+  --radius: 0.875rem;
+
+  /* canvas + layered warm surfaces */
+  --background: oklch(0.165 0.01 70);
+  --foreground: oklch(0.955 0.008 80);
+  --card: oklch(0.205 0.012 68);
+  --card-foreground: oklch(0.955 0.008 80);
+  --popover: oklch(0.235 0.014 68);
+  --popover-foreground: oklch(0.965 0.008 80);
+
+  /* brand: amber accent + terracotta partner */
+  --primary: oklch(0.78 0.145 65);
+  --primary-foreground: oklch(0.21 0.04 60);
+  --accent2: oklch(0.66 0.15 38);
+
+  /* neutral surfaces + muted text */
+  --secondary: oklch(0.255 0.014 66);
+  --secondary-foreground: oklch(0.92 0.008 78);
+  --muted: oklch(0.255 0.012 66);
+  --muted-foreground: oklch(0.7 0.014 74);
+
+  /* semantics (warning kept distinct from the amber accent → pushed to gold) */
+  --success: oklch(0.74 0.14 152);
+  --success-foreground: oklch(0.18 0.03 152);
+  --warning: oklch(0.83 0.13 95);
+  --warning-foreground: oklch(0.21 0.04 95);
+  --info: oklch(0.71 0.11 232);
+  --info-foreground: oklch(0.16 0.03 232);
+  --destructive: oklch(0.64 0.19 28);
+  --destructive-foreground: oklch(0.98 0.01 25);
+
+  /* lines + fields + focus */
+  --border: oklch(0.3 0.012 68);
+  --input: oklch(0.33 0.013 68);
+  --ring: oklch(0.78 0.145 65 / 0.55);
+
+  /* chart / funnel hues */
+  --chart-1: oklch(0.78 0.145 65);
+  --chart-2: oklch(0.66 0.15 38);
+  --chart-3: oklch(0.83 0.13 95);
+  --chart-4: oklch(0.74 0.14 152);
+  --chart-5: oklch(0.71 0.11 232);
+
+  /* elevation */
+  --shadow-xs: 0 1px 2px oklch(0 0 0 / 0.34);
+  --shadow-sm: 0 1px 2px oklch(0 0 0 / 0.34), 0 2px 6px oklch(0 0 0 / 0.24);
+  --shadow-md: 0 4px 14px oklch(0 0 0 / 0.4), 0 2px 4px oklch(0 0 0 / 0.26);
+  --shadow-lg: 0 14px 38px oklch(0 0 0 / 0.5), 0 4px 10px oklch(0 0 0 / 0.32);
+  --shadow-glow: 0 0 0 1px oklch(0.78 0.145 65 / 0.32), 0 10px 30px oklch(0.78 0.145 65 / 0.26);
+  --highlight-top: inset 0 1px 0 oklch(1 0 0 / 0.06);
+
+  /* motion */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --dur-fast: 120ms;
+  --dur-base: 180ms;
+  --dur-slow: 280ms;
+}
+
+/* ── Light theme — warm paper ─────────────────────────────────────────────── */
+:root[data-theme="light"] {
+  --background: oklch(0.985 0.008 85);
+  --foreground: oklch(0.24 0.012 60);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.24 0.012 60);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.24 0.012 60);
+
+  --primary: oklch(0.56 0.16 55);
+  --primary-foreground: oklch(0.99 0.01 85);
+  --accent2: oklch(0.56 0.16 36);
+
+  --secondary: oklch(0.955 0.008 80);
+  --secondary-foreground: oklch(0.3 0.012 60);
+  --muted: oklch(0.955 0.008 80);
+  --muted-foreground: oklch(0.47 0.012 65);
+
+  --success: oklch(0.55 0.14 152);
+  --success-foreground: oklch(0.99 0.01 152);
+  --warning: oklch(0.62 0.13 78);
+  --warning-foreground: oklch(0.2 0.03 78);
+  --info: oklch(0.52 0.13 245);
+  --info-foreground: oklch(0.99 0.01 245);
+  --destructive: oklch(0.55 0.2 28);
+  --destructive-foreground: oklch(0.99 0.01 25);
+
+  --border: oklch(0.9 0.008 75);
+  --input: oklch(0.88 0.009 75);
+  --ring: oklch(0.56 0.16 55 / 0.45);
+
+  --chart-1: oklch(0.56 0.16 55);
+  --chart-2: oklch(0.56 0.16 36);
+  --chart-3: oklch(0.62 0.13 78);
+  --chart-4: oklch(0.55 0.14 152);
+  --chart-5: oklch(0.52 0.13 245);
+
+  --shadow-xs: 0 1px 2px oklch(0.2 0.02 60 / 0.06);
+  --shadow-sm: 0 1px 2px oklch(0.2 0.02 60 / 0.07), 0 2px 6px oklch(0.2 0.02 60 / 0.05);
+  --shadow-md: 0 4px 16px oklch(0.2 0.02 60 / 0.1);
+  --shadow-lg: 0 18px 44px oklch(0.2 0.02 60 / 0.14);
+  --shadow-glow: 0 0 0 1px oklch(0.56 0.16 55 / 0.24), 0 12px 32px oklch(0.56 0.16 55 / 0.18);
+  --highlight-top: inset 0 1px 0 oklch(1 0 0 / 0.9);
 }
 
 :root,
 :root[data-theme="dark"] {
   color-scheme: dark;
 }
-
-/* Light theme — overrides the @theme tokens at runtime (Tailwind utilities read the vars). */
 :root[data-theme="light"] {
   color-scheme: light;
-  --color-bg: oklch(0.985 0.003 265);
-  --color-panel: oklch(1 0 0);
-  --color-panel2: oklch(0.965 0.004 265);
-  --color-border: oklch(0.9 0.006 265);
-  --color-fg: oklch(0.22 0.01 265);
-  --color-muted: oklch(0.45 0.012 265);
-  --color-faint: oklch(0.58 0.012 265);
-  --color-accent: oklch(0.55 0.18 280);
-  --color-accent2: oklch(0.58 0.17 300);
-  --color-done: oklch(0.55 0.15 155);
-  --color-pending: oklch(0.62 0.14 65);
-  --color-action: oklch(0.55 0.16 250);
 }
 
+/* Tailwind v4 theme map: registers the tokens as bg- / text- / border- color utilities.
+   NOTE: `accent`, `accent-foreground`, and the `muted` surface are intentionally NOT
+   mapped — that frees the legacy `--color-accent` / `--color-muted` names (below) to act
+   as a pure compat layer with zero collisions. Primitives use `secondary` for hovers. */
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-info: var(--info);
+  --color-info-foreground: var(--info-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+
+  --font-sans: "Geist Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "Geist Mono Variable", ui-monospace, "SF Mono", Menlo, monospace;
+
+  /* type scale */
+  --text-caption: 0.7rem;
+  --text-caption--line-height: 1.4;
+  --text-caption--letter-spacing: 0.04em;
+  --text-caption--font-weight: 500;
+  --text-h3: 0.95rem;
+  --text-h3--line-height: 1.35;
+  --text-h3--font-weight: 600;
+  --text-h2: 1.125rem;
+  --text-h2--line-height: 1.3;
+  --text-h2--letter-spacing: -0.01em;
+  --text-h2--font-weight: 600;
+  --text-h1: 1.5rem;
+  --text-h1--line-height: 1.2;
+  --text-h1--letter-spacing: -0.015em;
+  --text-h1--font-weight: 650;
+  --text-display: 2.25rem;
+  --text-display--line-height: 1.08;
+  --text-display--letter-spacing: -0.022em;
+  --text-display--font-weight: 700;
+}
+
+/* ── Legacy `--color-*` compat layer ──────────────────────────────────────────
+   Re-points the original token names at the new semantic tokens so any not-yet-migrated
+   markup keeps rendering. `:root:root` raises specificity so these deterministically win.
+   New code should prefer the Tailwind utilities (bg-card, text-muted-foreground, …). ── */
+:root:root {
+  --color-bg: var(--background);
+  --color-panel: var(--card);
+  --color-panel2: var(--popover);
+  --color-fg: var(--foreground);
+  --color-muted: var(--muted-foreground);
+  --color-faint: color-mix(in oklch, var(--muted-foreground) 70%, var(--background));
+  --color-accent: var(--primary);
+  --color-accent2: var(--accent2);
+  --color-done: var(--success);
+  --color-pending: var(--warning);
+  --color-action: var(--info);
+  --color-danger: var(--destructive);
+}
+
+/* ── Base elements ────────────────────────────────────────────────────────── */
 html,
 body,
 #root {
   height: 100%;
 }
+
 body {
   margin: 0;
-  background:
-    radial-gradient(
-      1200px 600px at 80% -10%,
-      color-mix(in oklch, var(--color-accent) 14%, transparent),
-      transparent
-    ),
-    var(--color-bg);
-  color: var(--color-fg);
+  color: var(--foreground);
   font-family: var(--font-sans);
+  font-feature-settings: "cv01", "ss03";
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  /* warm editorial aurora — amber + terracotta + a faint cool, fixed to the viewport */
+  background:
+    radial-gradient(900px 540px at 8% -10%, oklch(0.78 0.145 65 / 0.14), transparent 60%),
+    radial-gradient(820px 600px at 96% -6%, oklch(0.66 0.15 38 / 0.12), transparent 62%),
+    radial-gradient(760px 720px at 50% 118%, oklch(0.71 0.11 232 / 0.07), transparent 60%),
+    var(--background);
+  background-attachment: fixed;
+}
+
+:root[data-theme="light"] body {
+  background:
+    radial-gradient(900px 540px at 8% -10%, oklch(0.78 0.13 65 / 0.1), transparent 60%),
+    radial-gradient(820px 600px at 96% -6%, oklch(0.66 0.14 38 / 0.08), transparent 62%),
+    radial-gradient(760px 720px at 50% 118%, oklch(0.6 0.1 232 / 0.05), transparent 60%),
+    var(--background);
+  background-attachment: fixed;
+}
+
+::selection {
+  background: color-mix(in oklch, var(--primary) 30%, transparent);
+  color: var(--foreground);
+}
+
+* {
+  border-color: var(--border);
+}
+
+:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 1px;
 }
 
 ::-webkit-scrollbar {
@@ -66,18 +259,26 @@ body {
   height: 10px;
 }
 ::-webkit-scrollbar-thumb {
-  background: var(--color-border);
+  background: color-mix(in oklch, var(--border) 80%, var(--foreground) 8%);
   border-radius: 8px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in oklch, var(--border) 60%, var(--foreground) 18%);
+  background-clip: padding-box;
 }
 ::-webkit-scrollbar-track {
   background: transparent;
 }
 
+/* ── Legacy component classes — reskinned to the new tokens (compat during migration) ── */
 @layer components {
   .card {
-    background: var(--color-panel);
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-xl);
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-sm);
   }
   .chip {
     display: inline-flex;
@@ -88,39 +289,40 @@ body {
     font-size: 0.72rem;
     font-weight: 500;
     letter-spacing: 0.01em;
-    border: 1px solid var(--color-border);
-    background: var(--color-panel2);
-    color: var(--color-muted);
+    border: 1px solid var(--border);
+    background: var(--popover);
+    color: var(--muted-foreground);
   }
   .btn {
     display: inline-flex;
     align-items: center;
     gap: 0.4rem;
-    border-radius: 10px;
+    border-radius: var(--radius-md);
     padding: 0.45rem 0.8rem;
     font-size: 0.85rem;
     font-weight: 500;
-    border: 1px solid var(--color-border);
-    background: var(--color-panel2);
-    color: var(--color-fg);
+    border: 1px solid var(--border);
+    background: var(--secondary);
+    color: var(--foreground);
     cursor: pointer;
-    transition: all 0.14s ease;
+    transition: all var(--dur-fast) var(--ease-out);
   }
   .btn:hover {
-    background: var(--color-border);
+    background: color-mix(in oklch, var(--secondary) 70%, var(--foreground) 10%);
   }
   .btn-accent {
-    background: var(--color-accent);
+    background: var(--primary);
     border-color: transparent;
-    color: oklch(0.16 0.02 280);
+    color: var(--primary-foreground);
     font-weight: 600;
   }
   .btn-accent:hover {
-    filter: brightness(1.08);
-    background: var(--color-accent);
+    filter: brightness(1.06);
+    background: var(--primary);
   }
 }
 
+/* ── Motion ───────────────────────────────────────────────────────────────── */
 @keyframes fadeUp {
   from {
     opacity: 0;
@@ -132,5 +334,16 @@ body {
   }
 }
 .fade-up {
-  animation: fadeUp 0.22s ease both;
+  animation: fadeUp var(--dur-base) var(--ease-out) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

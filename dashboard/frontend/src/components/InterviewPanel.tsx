@@ -1,6 +1,12 @@
 import { CalendarPlus, FileText, Plus } from "lucide-react";
 import { useEffect, useState } from "react";
 import { api, type Interview } from "../api";
+import { Button } from "./ui/button";
+import { Card } from "./ui/card";
+import { Input } from "./ui/input";
+import { ScrollArea } from "./ui/scroll-area";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
+import { Separator } from "./ui/separator";
 
 const ROUNDS = ["phone", "technical", "system_design", "hiring_manager", "final", "other"];
 
@@ -29,45 +35,47 @@ export function InterviewPanel({ jobId }: { jobId: string }) {
 
   return (
     <div>
-      <div className="mb-2 text-sm font-semibold">Entrevistas</div>
-      <div className="card space-y-3 p-3 text-sm">
+      <div className="mb-2 text-caption text-muted-foreground uppercase">Entrevistas</div>
+      <Card className="space-y-3 p-3.5 text-sm">
         <div className="flex flex-wrap items-center gap-2">
-          <input
+          <Input
             type="date"
-            className="btn !justify-start text-xs"
+            className="h-8 w-auto text-xs"
             value={date}
             onChange={(e) => setDate(e.target.value)}
           />
-          <select
-            className="btn !py-1 text-xs"
-            value={round}
-            onChange={(e) => setRound(e.target.value)}
-          >
-            {ROUNDS.map((r) => (
-              <option key={r} value={r}>
-                {r}
-              </option>
-            ))}
-          </select>
-          <button className="btn !py-1 text-xs" onClick={addInterview}>
-            <CalendarPlus size={13} /> Agregar
-          </button>
+          <Select value={round} onValueChange={setRound}>
+            <SelectTrigger size="sm" className="w-auto">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {ROUNDS.map((r) => (
+                <SelectItem key={r} value={r}>
+                  {r}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button variant="secondary" size="sm" onClick={addInterview}>
+            <CalendarPlus className="size-3.5" /> Agregar
+          </Button>
         </div>
 
         {interviews.length === 0 && (
-          <div className="text-[0.78rem] text-[var(--color-faint)]">Sin entrevistas agendadas.</div>
+          <div className="text-[0.78rem] text-muted-foreground">Sin entrevistas agendadas.</div>
         )}
 
         {interviews.map((iv) => (
-          <div key={iv.id} className="border-t border-[var(--color-border)] pt-2">
+          <div key={iv.id}>
+            <Separator className="mb-2" />
             <div className="flex items-center justify-between">
               <div>
                 <b>{iv.round || "entrevista"}</b>{" "}
-                <span className="text-[var(--color-faint)]">{iv.scheduled_at || "sin fecha"}</span>
+                <span className="text-muted-foreground">{iv.scheduled_at || "sin fecha"}</span>
               </div>
-              <button className="btn !py-1 text-xs" onClick={() => genPrep(iv.id)}>
-                <FileText size={13} /> Generar prep
-              </button>
+              <Button variant="secondary" size="sm" onClick={() => genPrep(iv.id)}>
+                <FileText className="size-3.5" /> Generar prep
+              </Button>
             </div>
             <InterviewerEditor
               interviewId={iv.id}
@@ -75,13 +83,15 @@ export function InterviewPanel({ jobId }: { jobId: string }) {
               interviewers={iv.interviewers}
             />
             {prep[iv.id] && (
-              <pre className="mt-2 max-h-60 overflow-auto whitespace-pre-wrap rounded bg-[var(--color-panel2)] p-2 font-sans text-[0.76rem] text-[var(--color-fg)]">
-                {prep[iv.id]}
-              </pre>
+              <ScrollArea className="mt-2 max-h-60 rounded-lg bg-background/60">
+                <pre className="p-2.5 font-mono text-[0.76rem] whitespace-pre-wrap text-foreground">
+                  {prep[iv.id]}
+                </pre>
+              </ScrollArea>
             )}
           </div>
         ))}
-      </div>
+      </Card>
     </div>
   );
 }
@@ -105,14 +115,14 @@ function InterviewerEditor({
     onAdded();
   }
   return (
-    <div className="mt-1">
+    <div className="mt-1.5">
       {(interviewers || []).map((p) => (
         <div key={p.id} className="text-[0.8rem]">
           • {p.name}
           {p.title ? ` · ${p.title}` : ""}
           {p.linkedin_url && (
             <a
-              className="ml-2 text-xs text-[var(--color-accent)]"
+              className="ml-2 text-xs text-primary hover:underline"
               target="_blank"
               rel="noreferrer"
               href={p.linkedin_url}
@@ -122,22 +132,22 @@ function InterviewerEditor({
           )}
         </div>
       ))}
-      <div className="mt-1 flex gap-2">
-        <input
-          className="btn !justify-start flex-1 text-xs"
+      <div className="mt-1.5 flex gap-2">
+        <Input
+          className="h-8 flex-1 text-xs"
           placeholder="Entrevistador"
           value={name}
           onChange={(e) => setName(e.target.value)}
         />
-        <input
-          className="btn !justify-start flex-1 text-xs"
+        <Input
+          className="h-8 flex-1 text-xs"
           placeholder="URL LinkedIn"
           value={linkedin}
           onChange={(e) => setLinkedin(e.target.value)}
         />
-        <button className="btn !py-1 text-xs" onClick={add}>
-          <Plus size={13} />
-        </button>
+        <Button variant="secondary" size="icon-sm" onClick={add}>
+          <Plus className="size-3.5" />
+        </Button>
       </div>
     </div>
   );
