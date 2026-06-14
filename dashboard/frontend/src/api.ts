@@ -14,6 +14,7 @@ export type Job = {
   fit_reasons?: string[];
   knockout_flags?: string[];
   sources?: string[];
+  source?: string; // first source that discovered it (raw row column)
   discovered_at?: string;
   applied_at?: string | null;
   age_days?: number | null;
@@ -30,6 +31,7 @@ export type Job = {
   // CV↔JD match (distinct from fit_score): how well the master CV covers the posting.
   match_score?: number | null;
   missing_keywords?: string[]; // importance-ranked JD keywords the CV doesn't evidence (detail only)
+  jd_skills?: string[]; // skills the posting itself asks for, extracted from the description (detail only)
 };
 
 export type Action = {
@@ -133,6 +135,18 @@ export type Learning = {
   evidence_count: number;
 };
 export type Portfolio = { id: number; version: string; path_html?: string; generated_at?: string };
+export type PeerExample = {
+  peer_name: string;
+  url: string;
+  role_match: string;
+  key_strengths: string[];
+  what_to_steal: string[];
+};
+export type PortfolioResearch = {
+  examples: PeerExample[];
+  patterns: Record<string, string[]>;
+  prompt: string;
+};
 export type Peer = {
   id: number;
   peer_name: string;
@@ -184,8 +198,14 @@ export const api = {
   brief: () => get<{ markdown: string }>("/api/brief"),
   cvDownload: (jobId: string, vid: number, fmt = "docx") =>
     `/api/cv/${jobId}/${vid}/download?fmt=${fmt}`,
+  cvLibrary: () =>
+    get<{ dir: string; count: number; files: { name: string; size: number; modified: number }[] }>(
+      "/api/cv/library",
+    ),
   profiles: () => get<{ profiles: Profile[]; active: string }>("/api/profiles"),
   switchProfile: (id: string) => post<{ ok: boolean; active: string }>("/api/profile", { id }),
+  renameProfile: (id: string, label: string) =>
+    post<{ ok: boolean; id: string; label: string }>(`/api/profiles/${id}/label`, { label }),
   // settings + CSV export (P1-B)
   settings: () => get<Record<string, string | null>>("/api/settings"),
   setSetting: (key: string, value: string) =>
@@ -236,6 +256,7 @@ export const api = {
       include_github,
     }),
   portfolioPreviewUrl: (id: number) => `/api/portfolio/${id}/preview`,
+  portfolioResearch: () => get<PortfolioResearch>("/api/portfolio/research"),
   peers: () => get<{ peers: Peer[] }>("/api/peers"),
   addPeer: (body: Partial<Peer>) => post<{ ok: boolean; id: number }>("/api/peers", body),
   exportUrl: (columns?: string[], state?: string) => {

@@ -10,7 +10,9 @@ function ScrollArea({
   return (
     <ScrollAreaPrimitive.Root
       data-slot="scroll-area"
-      className={cn("relative", className)}
+      // overflow-hidden is load-bearing: without it the Root doesn't clip, so a tall child
+      // (e.g. a long <pre>) bleeds past a `max-h-*` box and overlaps the content below it.
+      className={cn("relative overflow-hidden", className)}
       {...props}
     >
       <ScrollAreaPrimitive.Viewport

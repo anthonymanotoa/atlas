@@ -119,6 +119,25 @@ def test_mutating_post_allows_allowlisted_origin(atlas_app):
     assert resp.status_code != 403
 
 
+def test_mutating_post_allows_any_loopback_port(atlas_app):
+    # Atlas may be served on any port the user picks (or our verify server on 8799); a loopback
+    # origin on ANY port is the app itself and must be allowed — a remote site can't forge one.
+    with TestClient(atlas_app) as client:
+        jid = _seed_job()
+        for origin in ("http://127.0.0.1:8799", "http://localhost:9999", "http://[::1]:3000"):
+            resp = client.post(f"/api/jobs/{jid}/applied", headers={"origin": origin})
+            assert resp.status_code != 403, origin
+
+
+def test_mutating_post_rejects_lookalike_loopback_host(atlas_app):
+    # Defense against an origin that merely contains 'localhost' but isn't a loopback host.
+    with TestClient(atlas_app) as client:
+        resp = client.post(
+            "/api/jobs/anyjob/applied", headers={"origin": "http://localhost.evil.com"}
+        )
+    assert resp.status_code == 403
+
+
 # ── P1-B: settings + CSV export ────────────────────────────────────────────────
 def test_settings_roundtrip_and_whitelist(atlas_app):
     with TestClient(atlas_app) as client:
