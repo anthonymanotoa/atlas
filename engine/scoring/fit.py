@@ -16,9 +16,15 @@ from engine.config import Criteria
 from engine.lang import detect_language
 from engine.normalize import norm_company
 
-# Senior IC track (good fit). NOTE: director/head/chief live in EXEC_TERMS, not here —
-# they're over-qualified for an IC pivoting into AI, so they must NOT earn a seniority bonus.
-SENIOR_TERMS = ("senior", "sr.", "sr ", "lead", "staff", "principal")
+# Senior IC track (good fit). NOTE: director/head/chief live in EXEC_TERMS, and
+# staff/principal live in STRETCH_TERMS — neither earns a plain seniority bonus, because
+# both are over-qualified for a mid/senior IC pivoting into AI.
+SENIOR_TERMS = ("senior", "sr.", "sr ", "lead")
+# "Stretch" seniority: Staff/Principal/Distinguished/Fellow IC roles normally want 8–12+
+# years. For a candidate with fewer years they're a long shot, so they're flagged and
+# down-ranked rather than bonused (this is the "Staff Engineer wants 15 yrs, I have 5" case).
+_STRETCH_RE = re.compile(r"\b(staff|principal|distinguished|fellow)\b", re.I)
+STRETCH_MIN_YEARS = 8  # below this many years of experience, Staff/Principal is a stretch
 EXEC_TERMS = (
     "director",
     "vp ",
@@ -98,6 +104,12 @@ def score_job(job: dict, criteria: Criteria, learnings: list[dict] | None = None
     reasons: list[str] = []
     knockouts: list[str] = []
     disq = False
+    # Soft cap: a "stretch" posting (Staff/Principal title, or a years requirement far above
+    # yours) stays visible and browsable but is held just below the shortlist threshold, so it
+    # never lands in "Preseleccionados" as if it were a realistic match. Distinct from `disq`
+    # (which hard-caps at 12 for true deal-breakers).
+    soft_cap = 100.0
+    stretch_cap = min(58.0, float(criteria.shortlist_threshold) - 4.0)
 
     # 0. Company blocklist — never surface these (hard filter, short-circuits).
     if criteria.company_blocklist:
@@ -130,8 +142,11 @@ def score_job(job: dict, criteria: Criteria, learnings: list[dict] | None = None
         else:
             reasons.append("remote status unknown")
 
-    # 3. Seniority — junior is under-qualified (DQ); exec is over-qualified (DQ when excluded).
+    # 3. Seniority fit — junior is under-qualified (DQ); exec is over-qualified (DQ when
+    #    excluded); Staff/Principal is a "stretch" (over-qualified seniority) for a candidate
+    #    with fewer than STRETCH_MIN_YEARS of experience — flagged + down-ranked, not bonused.
     title_pad = f" {title_l} "
+    cy = criteria.candidate_years
     if any(_has(title_l, t) for t in JUNIOR_TERMS):
         disq = True
         reasons.append("junior/intern level (under-qualified)")
@@ -139,6 +154,18 @@ def score_job(job: dict, criteria: Criteria, learnings: list[dict] | None = None
         disq = True
         knockouts.append("over-qualified (exec/management role)")
         reasons.append("exec/management title — over-qualified for an IC track")
+    elif _STRETCH_RE.search(title):
+        if cy and cy < STRETCH_MIN_YEARS:
+            score -= 12
+            soft_cap = min(soft_cap, stretch_cap)  # keep it out of the shortlist
+            knockouts.append(f"rol staff/principal (suele pedir +{STRETCH_MIN_YEARS} años)")
+            reasons.append(
+                f"staff/principal title — typically wants ~{STRETCH_MIN_YEARS}+ yrs "
+                f"(you have ~{cy})"
+            )
+        else:
+            score += 6
+            reasons.append("staff/principal seniority")
     elif any(_has(title_l, t.strip()) for t in [s.strip() for s in criteria.seniority]) or any(
         _has(title_l, t) for t in SENIOR_TERMS
     ):
@@ -197,10 +224,25 @@ def score_job(job: dict, criteria: Criteria, learnings: list[dict] | None = None
             if criteria.freshness_hard:
                 disq = True
 
-    # 10. Over-demanding experience requirement (flag, don't reject).
-    if criteria.max_years_required and desc:
-        req = _required_years(desc)
-        if req and req > criteria.max_years_required:
+    # 10. Experience-years demand vs the candidate's real years (the realism filter). When
+    #     candidate_years is set, the gap between what the posting asks and what you have
+    #     drives the penalty: small gaps are fine, big ones flag + down-rank hard (so a
+    #     "12+ yrs" req never out-ranks a role you can actually land). Falls back to the
+    #     absolute max_years_required threshold when candidate_years is not configured.
+    req = _required_years(desc) if desc else None
+    if req:
+        if cy:
+            gap = req - cy
+            if gap >= 6:
+                score -= 18
+                soft_cap = min(soft_cap, stretch_cap)  # a +6yr gap is a long shot — don't shortlist
+                knockouts.append(f"pide {req}+ años (tienes ~{cy})")
+                reasons.append(f"requires {req}+ yrs — far above your ~{cy}")
+            elif gap >= 3:
+                score -= 9
+                knockouts.append(f"pide {req}+ años (tienes ~{cy})")
+                reasons.append(f"requires {req}+ yrs (above your ~{cy})")
+        elif criteria.max_years_required and req > criteria.max_years_required:
             knockouts.append(f"requires {req}+ years")
             score -= 8
             reasons.append(f"requires {req}+ years (> your {criteria.max_years_required})")
@@ -220,7 +262,7 @@ def score_job(job: dict, criteria: Criteria, learnings: list[dict] | None = None
             # a *different* future role, and "rejection in 0/N" must never penalize at all.
             reasons.append(f"learning: {obs}")
 
-    score = max(0.0, min(100.0, score))
+    score = max(0.0, min(100.0, score, soft_cap))
     if disq:
         score = min(score, 12.0)
     return ScoreResult(round(score, 1), reasons, knockouts, disq)
