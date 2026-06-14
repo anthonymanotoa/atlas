@@ -1,10 +1,13 @@
-import { CheckCircle2, RefreshCw } from "lucide-react";
+import { CheckCircle2, RefreshCw, Sparkles } from "lucide-react";
 import { api, type OnboardingStatus } from "../api";
+import { Badge } from "./ui/badge";
+import { Button } from "./ui/button";
+import { Card } from "./ui/card";
 
-const SEV: Record<string, { tone: string; label: string }> = {
-  high: { tone: "var(--color-danger)", label: "Alta" },
-  med: { tone: "var(--color-pending)", label: "Media" },
-  low: { tone: "var(--color-faint)", label: "Baja" },
+const SEV: Record<string, { variant: "destructive" | "warning" | "secondary"; label: string }> = {
+  high: { variant: "destructive", label: "Alta" },
+  med: { variant: "warning", label: "Media" },
+  low: { variant: "secondary", label: "Baja" },
 };
 
 const LINKEDIN_CHECKLIST = [
@@ -36,92 +39,110 @@ export function OnboardingGate({
   }
 
   return (
-    <div className="mx-auto max-w-[760px] py-6">
-      <div className="card p-5">
-        <h2 className="text-lg font-semibold">Primer paso: adapta tu CV y tu LinkedIn</h2>
-        <p className="mt-1 text-sm text-[var(--color-muted)]">
+    <div className="fade-up mx-auto max-w-[760px] py-8">
+      {/* hero */}
+      <div className="mb-6 flex flex-col items-center text-center">
+        <div
+          className="relative mb-4 grid size-12 place-items-center rounded-2xl text-lg font-bold text-primary-foreground shadow-[var(--shadow-glow)] before:absolute before:inset-0 before:rounded-2xl before:bg-[radial-gradient(circle_at_30%_20%,oklch(1_0_0/0.4),transparent_60%)]"
+          style={{ background: "linear-gradient(135deg, var(--primary), var(--accent2))" }}
+        >
+          A
+        </div>
+        <h1 className="text-display">Primer paso: adapta tu CV y tu LinkedIn</h1>
+        <p className="mt-2 max-w-[52ch] text-sm text-muted-foreground">
           Antes de empezar a buscar, dejá listo tu CV maestro y tu perfil de LinkedIn. Cuando estén,
           marcá este paso como completo y se desbloquea el tablero.
         </p>
+      </div>
 
+      <Card className="p-5">
         {!cv_present && (
-          <div className="card mt-4 p-3 text-sm" style={{ borderColor: "var(--color-pending)" }}>
-            No encontré tu <code>master_cv.yaml</code>. Copiá el ejemplo y completalo:
-            <code> profiles/&lt;perfil&gt;/profile/master_cv.yaml</code>.
-          </div>
+          <Card className="mb-4 border-warning/50 bg-warning/5 p-3 text-sm">
+            No encontré tu <code className="font-mono text-warning">master_cv.yaml</code>. Copiá el
+            ejemplo y completalo:{" "}
+            <code className="font-mono text-muted-foreground">
+              profiles/&lt;perfil&gt;/profile/master_cv.yaml
+            </code>
+            .
+          </Card>
         )}
 
-        <div className="mt-5 flex items-center justify-between">
-          <div className="text-sm font-semibold">
-            Auditoría del CV —{" "}
-            <span style={{ color: SEV.high.tone }}>{audit.summary.high} altas</span> ·{" "}
-            <span style={{ color: SEV.med.tone }}>{audit.summary.med} medias</span> ·{" "}
-            {audit.summary.low} bajas
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-2 text-sm font-semibold">
+            <span>Auditoría del CV</span>
+            <Badge variant="destructive">{audit.summary.high} altas</Badge>
+            <Badge variant="warning">{audit.summary.med} medias</Badge>
+            <Badge variant="secondary">{audit.summary.low} bajas</Badge>
           </div>
-          <button
-            className="btn !py-1 text-xs"
+          <Button
+            variant="ghost"
+            size="sm"
             onClick={onRefresh}
             title="Re-evaluar tras editar el CV"
           >
-            <RefreshCw size={13} /> Re-evaluar
-          </button>
+            <RefreshCw className="size-3.5" /> Re-evaluar
+          </Button>
         </div>
 
-        <div className="mt-2 space-y-1.5">
+        <div className="mt-3 space-y-2.5">
           {audit.findings.length === 0 && (
-            <div className="text-sm text-[var(--color-done)]">
-              Sin hallazgos. ¡Tu CV se ve bien!
+            <div className="flex items-center gap-2 text-sm text-success">
+              <CheckCircle2 className="size-4" /> Sin hallazgos. ¡Tu CV se ve bien!
             </div>
           )}
-          {audit.findings.map((f, i) => (
-            <div key={i} className="text-sm">
-              <span
-                className="chip !px-1.5 !py-0 mr-2"
-                style={{ color: (SEV[f.severity] || SEV.low).tone }}
-              >
-                {(SEV[f.severity] || SEV.low).label}
-              </span>
-              <span className="text-[var(--color-faint)]">[{f.area}]</span> {f.message}
-              <div className="ml-1 text-[0.78rem] text-[var(--color-muted)]">→ {f.suggestion}</div>
-            </div>
-          ))}
+          {audit.findings.map((f, i) => {
+            const sev = SEV[f.severity] || SEV.low;
+            return (
+              <div key={i} className="flex gap-2.5 text-sm">
+                <Badge variant={sev.variant} className="mt-0.5 shrink-0">
+                  {sev.label}
+                </Badge>
+                <div>
+                  <span className="text-muted-foreground">[{f.area}]</span> {f.message}
+                  <div className="mt-0.5 text-[0.8rem] text-muted-foreground">→ {f.suggestion}</div>
+                </div>
+              </div>
+            );
+          })}
         </div>
 
-        <div className="card mt-5 p-3 text-sm" style={{ borderColor: "var(--color-accent2)" }}>
-          <div className="font-medium" style={{ color: "var(--color-accent2)" }}>
-            Mejora guiada con IA
+        <Card className="mt-5 border-[color-mix(in_oklch,var(--accent2)_50%,var(--border))] bg-[color-mix(in_oklch,var(--accent2)_8%,transparent)] p-3.5 text-sm">
+          <div
+            className="flex items-center gap-1.5 font-medium"
+            style={{ color: "var(--color-accent2)" }}
+          >
+            <Sparkles className="size-4" /> Mejora guiada con IA
           </div>
-          <div className="mt-1 text-[var(--color-muted)]">
-            Corré <code>atlas advise</code> y usá la guía <b>cv-linkedin-advisor</b> (
-            <code>advisor/cv_linkedin_advisor.md</code>) en Claude para reposicionar tu CV y
-            LinkedIn hacia IA/ML de forma veraz. Aplicá los cambios en tu{" "}
-            <code>master_cv.yaml</code> y volvé a “Re-evaluar”.
+          <div className="mt-1.5 text-muted-foreground">
+            Corré <code className="font-mono">atlas advise</code> y usá la guía{" "}
+            <b className="text-foreground">cv-linkedin-advisor</b> (
+            <code className="font-mono">advisor/cv_linkedin_advisor.md</code>) en Claude para
+            reposicionar tu CV y LinkedIn hacia IA/ML de forma veraz. Aplicá los cambios en tu{" "}
+            <code className="font-mono">master_cv.yaml</code> y volvé a “Re-evaluar”.
           </div>
-        </div>
+        </Card>
 
-        <div className="mt-4">
-          <div className="text-sm font-semibold mb-1">Checklist de LinkedIn</div>
-          <ul className="space-y-1">
+        <div className="mt-5">
+          <div className="mb-2 text-sm font-semibold">Checklist de LinkedIn</div>
+          <ul className="space-y-1.5">
             {LINKEDIN_CHECKLIST.map((item) => (
-              <li key={item} className="flex items-start gap-2 text-sm text-[var(--color-muted)]">
-                <CheckCircle2 size={15} className="mt-0.5 shrink-0 text-[var(--color-faint)]" />
+              <li key={item} className="flex items-start gap-2 text-sm text-muted-foreground">
+                <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-success/70" />
                 {item}
               </li>
             ))}
           </ul>
         </div>
 
-        <div className="mt-6 flex items-center gap-3">
-          <button className="btn btn-accent" onClick={complete}>
-            Completar onboarding y empezar
-          </button>
+        <div className="mt-6 flex flex-wrap items-center gap-3">
+          <Button onClick={complete}>Completar onboarding y empezar</Button>
           {highs > 0 && (
-            <span className="text-[0.78rem]" style={{ color: SEV.high.tone }}>
+            <span className="text-[0.8rem] text-destructive">
               Hay {highs} hallazgo(s) de prioridad alta — revisalos antes si puedes.
             </span>
           )}
         </div>
-      </div>
+      </Card>
     </div>
   );
 }

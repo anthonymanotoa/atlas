@@ -1,6 +1,7 @@
-import { clsx, type ClassValue } from "clsx";
-
-export const cn = (...a: ClassValue[]) => clsx(a);
+// Atlas domain helpers + the shared `cn` class merger.
+// `cn` lives in ./utils (twMerge-backed) and is re-exported here so existing
+// `import { cn } from "../lib"` call sites keep working unchanged.
+export { cn } from "./utils";
 
 export const STATE_ES: Record<string, string> = {
   discovered: "Descubierto",
@@ -27,11 +28,12 @@ export const COLUMN_ES: Record<string, string> = {
   offer: "Oferta",
 };
 
-export const ACTION_META: Record<string, { icon: string; tone: string }> = {
-  ask_referral: { icon: "🤝", tone: "var(--color-accent2)" },
-  send_application: { icon: "📨", tone: "var(--color-action)" },
-  reply: { icon: "💬", tone: "var(--color-done)" },
-  follow_up: { icon: "⏰", tone: "var(--color-pending)" },
+// Tone per action type (the icon now lives in the lucide icon map — see components/ui/icons.ts).
+export const ACTION_META: Record<string, { tone: string }> = {
+  ask_referral: { tone: "var(--color-accent2)" },
+  send_application: { tone: "var(--color-action)" },
+  reply: { tone: "var(--color-done)" },
+  follow_up: { tone: "var(--color-pending)" },
 };
 
 export function fitTone(score?: number | null): string {
