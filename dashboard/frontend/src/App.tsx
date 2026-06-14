@@ -1,4 +1,3 @@
-import * as Dialog from "@radix-ui/react-dialog";
 import {
   Command as CmdIcon,
   Loader2,
@@ -7,7 +6,6 @@ import {
   Search,
   Settings as SettingsIcon,
   Sun,
-  X,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
@@ -27,6 +25,22 @@ import { NeedsAction } from "./components/NeedsAction";
 import { OnboardingGate } from "./components/OnboardingGate";
 import { PortfolioViewer } from "./components/PortfolioViewer";
 import { SettingsModal } from "./components/SettingsModal";
+import { Button } from "./components/ui/button";
+import { Card } from "./components/ui/card";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./components/ui/dialog";
+import { DowntimeIcon } from "./components/ui/icons";
+import { Kbd } from "./components/ui/kbd";
+import { ScrollArea } from "./components/ui/scroll-area";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "./components/ui/select";
+import { Toaster } from "./components/ui/sonner";
+import { Tabs, TabsList, TabsTrigger } from "./components/ui/tabs";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "./components/ui/tooltip";
 
 export default function App() {
   const [ov, setOv] = useState<Overview | null>(null);
@@ -160,152 +174,165 @@ export default function App() {
   }, [jobs, filters]);
 
   return (
-    <div className="min-h-full px-5 py-4 max-w-[1500px] mx-auto">
-      {/* top bar */}
-      <header className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-3">
-          <div
-            className="w-8 h-8 rounded-lg flex items-center justify-center font-bold"
-            style={{
-              background: "linear-gradient(135deg, var(--color-accent), var(--color-accent2))",
-              color: "#0d0d12",
-            }}
-          >
-            A
-          </div>
-          <div>
-            <div className="font-semibold leading-none">Atlas</div>
-            <div className="text-[0.72rem] text-[var(--color-faint)]">
-              {ov?.last_run
-                ? `última corrida ${new Date(ov.last_run).toLocaleString("es")}`
-                : "sin corridas"}
-            </div>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          {profiles.length > 0 && (
-            <select
-              className="btn !py-1.5 cursor-pointer"
-              title="Perfil activo"
-              value={activeProfile}
-              onChange={(e) => switchProfile(e.target.value)}
+    <TooltipProvider>
+      <div className="mx-auto min-h-full max-w-[1500px] px-5 py-4">
+        {/* top bar */}
+        <header className="sticky top-0 z-40 -mx-5 mb-5 flex items-center justify-between gap-3 border-b border-border/70 bg-background/70 px-5 py-3 backdrop-blur-xl">
+          <div className="flex items-center gap-3">
+            <div
+              className="relative grid size-9 place-items-center rounded-xl font-bold text-primary-foreground shadow-[var(--shadow-glow)] before:absolute before:inset-0 before:rounded-xl before:bg-[radial-gradient(circle_at_30%_20%,oklch(1_0_0/0.4),transparent_60%)]"
+              style={{
+                background: "linear-gradient(135deg, var(--primary), var(--accent2))",
+              }}
             >
-              {profiles.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.label}
-                  {p.is_owner ? " ★" : ""}
-                </option>
-              ))}
-            </select>
-          )}
-          <button
-            className="btn !py-1.5"
-            title="Buscar vacantes nuevas (discover + score)"
-            onClick={buscarAhora}
-            disabled={searching}
-          >
-            {searching ? <Loader2 size={14} className="animate-spin" /> : <Search size={14} />}
-            {searching ? "Buscando…" : "Buscar"}
-          </button>
-          <button className="btn !py-1.5" onClick={() => setPaletteOpen(true)}>
-            <CmdIcon size={14} /> K
-          </button>
-          <button
-            className="btn !py-1.5"
-            title="Ajustes y exportar CSV"
-            onClick={() => setSettingsOpen(true)}
-          >
-            <SettingsIcon size={14} />
-          </button>
-          <button
-            className="btn !py-1.5"
-            title="Tema claro / oscuro"
-            onClick={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}
-          >
-            {theme === "dark" ? <Sun size={14} /> : <Moon size={14} />}
-          </button>
-          <button className="btn !py-1.5" onClick={load}>
-            <RefreshCw size={14} />
-          </button>
-        </div>
-      </header>
-
-      {onboarding && !onboarding.complete ? (
-        <OnboardingGate status={onboarding} onComplete={load} onRefresh={refreshOnboarding} />
-      ) : (
-        <>
-          <nav className="mb-4 flex gap-2">
-            {(["pipeline", "portfolio"] as const).map((v) => (
-              <button
-                key={v}
-                className="btn !py-1.5"
-                style={view === v ? { borderColor: "var(--color-accent)" } : undefined}
-                onClick={() => setView(v)}
-              >
-                {v === "pipeline" ? "Pipeline" : "Portafolio"}
-              </button>
-            ))}
-          </nav>
-
-          {view === "portfolio" ? (
-            <PortfolioViewer />
-          ) : (
-            <>
-              {ov?.downtime_hours ? (
-                <div
-                  className="card p-3 mb-4 text-sm"
-                  style={{ borderColor: "var(--color-pending)" }}
-                >
-                  ⚠️ Estuve sin correr ~{Math.round(ov.downtime_hours)}h. Revisa que el Mac esté
-                  despierto y Claude Desktop abierto.
-                </div>
-              ) : null}
-
-              {ov && (
-                <div className="mb-5">
-                  <AnalyticsStrip ov={ov} />
-                </div>
-              )}
-
-              <div className="mb-6">
-                <NeedsAction actions={actions} onOpen={setSelected} />
-              </div>
-
-              <FilterBar filters={filters} setFilters={setFilters} languages={languages} />
-              <Board columns={columns} jobs={filteredJobs} onOpen={setSelected} onMove={move} />
-            </>
-          )}
-        </>
-      )}
-
-      <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
-      <DetailDrawer jobId={selected} onClose={() => setSelected(null)} onChanged={load} />
-      <CommandPalette
-        open={paletteOpen}
-        setOpen={setPaletteOpen}
-        jobs={allJobs}
-        onOpenJob={setSelected}
-        onRefresh={load}
-        onBrief={openBrief}
-        onSearch={buscarAhora}
-      />
-
-      <Dialog.Root open={briefOpen} onOpenChange={setBriefOpen}>
-        <Dialog.Portal>
-          <Dialog.Overlay className="fixed inset-0 bg-black/50 z-40" />
-          <Dialog.Content className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 card w-[640px] max-w-[92vw] max-h-[80vh] overflow-auto p-5">
-            <div className="flex items-center justify-between mb-3">
-              <Dialog.Title className="font-semibold">Resumen del día</Dialog.Title>
-              <Dialog.Close className="btn !p-2">
-                <X size={16} />
-              </Dialog.Close>
+              A
             </div>
-            <pre className="text-[0.82rem] whitespace-pre-wrap font-sans text-[var(--color-fg)]">
-              {brief}
-            </pre>
-          </Dialog.Content>
-        </Dialog.Portal>
-      </Dialog.Root>
-    </div>
+            <div>
+              <div className="leading-none font-semibold tracking-tight">Atlas</div>
+              <div className="mt-0.5 text-[0.72rem] text-muted-foreground">
+                {ov?.last_run
+                  ? `última corrida ${new Date(ov.last_run).toLocaleString("es")}`
+                  : "sin corridas"}
+              </div>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            {profiles.length > 0 && (
+              <Select value={activeProfile} onValueChange={switchProfile}>
+                <SelectTrigger size="sm" className="w-auto" aria-label="Perfil activo">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {profiles.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.label}
+                      {p.is_owner ? " ★" : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+            <Button
+              size="sm"
+              onClick={buscarAhora}
+              disabled={searching}
+              title="Buscar vacantes nuevas (discover + score)"
+            >
+              {searching ? (
+                <Loader2 className="size-3.5 animate-spin" />
+              ) : (
+                <Search className="size-3.5" />
+              )}
+              {searching ? "Buscando…" : "Buscar"}
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setPaletteOpen(true)}
+              className="gap-1.5"
+            >
+              <CmdIcon className="size-3.5" /> <Kbd>K</Kbd>
+            </Button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="ghost" size="icon-sm" onClick={() => setSettingsOpen(true)}>
+                  <SettingsIcon className="size-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Ajustes y exportar CSV</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  onClick={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}
+                >
+                  {theme === "dark" ? <Sun className="size-4" /> : <Moon className="size-4" />}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Tema claro / oscuro</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="ghost" size="icon-sm" onClick={load}>
+                  <RefreshCw className="size-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Actualizar</TooltipContent>
+            </Tooltip>
+          </div>
+        </header>
+
+        {onboarding && !onboarding.complete ? (
+          <OnboardingGate status={onboarding} onComplete={load} onRefresh={refreshOnboarding} />
+        ) : (
+          <>
+            <nav className="mb-4">
+              <Tabs value={view} onValueChange={(v) => setView(v as "pipeline" | "portfolio")}>
+                <TabsList>
+                  <TabsTrigger value="pipeline">Pipeline</TabsTrigger>
+                  <TabsTrigger value="portfolio">Portafolio</TabsTrigger>
+                </TabsList>
+              </Tabs>
+            </nav>
+
+            {view === "portfolio" ? (
+              <PortfolioViewer />
+            ) : (
+              <>
+                {ov?.downtime_hours ? (
+                  <Card className="mb-4 flex items-center gap-2 border-warning/50 p-3 text-sm">
+                    <DowntimeIcon className="size-4 shrink-0 text-warning" />
+                    Estuve sin correr ~{Math.round(ov.downtime_hours)}h. Revisa que el Mac esté
+                    despierto y Claude Desktop abierto.
+                  </Card>
+                ) : null}
+
+                {ov && (
+                  <div className="mb-5">
+                    <AnalyticsStrip ov={ov} />
+                  </div>
+                )}
+
+                <div className="mb-6">
+                  <NeedsAction actions={actions} onOpen={setSelected} />
+                </div>
+
+                <FilterBar filters={filters} setFilters={setFilters} languages={languages} />
+                <Board columns={columns} jobs={filteredJobs} onOpen={setSelected} onMove={move} />
+              </>
+            )}
+          </>
+        )}
+
+        <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+        <DetailDrawer jobId={selected} onClose={() => setSelected(null)} onChanged={load} />
+        <CommandPalette
+          open={paletteOpen}
+          setOpen={setPaletteOpen}
+          jobs={allJobs}
+          onOpenJob={setSelected}
+          onRefresh={load}
+          onBrief={openBrief}
+          onSearch={buscarAhora}
+        />
+
+        <Dialog open={briefOpen} onOpenChange={setBriefOpen}>
+          <DialogContent className="max-w-[640px]">
+            <DialogHeader>
+              <DialogTitle>Resumen del día</DialogTitle>
+            </DialogHeader>
+            <ScrollArea className="max-h-[70vh]">
+              <pre className="font-sans text-[0.82rem] whitespace-pre-wrap text-foreground">
+                {brief}
+              </pre>
+            </ScrollArea>
+          </DialogContent>
+        </Dialog>
+
+        <Toaster theme={theme as "dark" | "light"} />
+      </div>
+    </TooltipProvider>
   );
 }

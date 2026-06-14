@@ -53,6 +53,22 @@ npm --prefix dashboard/frontend run build       # production build
 - Tests live in `tests/test_engine.py` (network-free) — model new tests after the existing ones.
 - Languages for CVs/outreach are constrained to `{en, es}`.
 
+## Frontend UI / design system
+
+The dashboard follows the **"Warm Editorial" design system** — spec in
+`dashboard/frontend/DESIGN_SYSTEM.md`. **Any UI change must follow it.**
+
+- Compose from the primitives in `dashboard/frontend/src/components/ui/*` (shadcn-style: Radix +
+  cva + `cn` from `@/lib/utils`). Don't hand-roll buttons/inputs/badges or hardcode colors.
+- Use the semantic tokens / Tailwind utilities (`bg-card`, `text-muted-foreground`, `bg-primary`,
+  `bg-secondary`, `border-border`, `ring-ring`, …) from `src/index.css`. **Never** use `bg-accent`/
+  `bg-muted` (unmapped on purpose) — use `secondary`. Theme is `data-theme` on `<html>` (no `.dark`).
+- Icons come from `src/components/ui/icons.ts` (lucide) — **no raw emoji**. Font is Geist; use
+  `tabular-nums` on numbers.
+- `components.json` enables the shadcn CLI/skill; a repo skill `.claude/skills/atlas-design-system/`
+  auto-enforces this. FE lint is `--max-warnings 0`; run `npm --prefix dashboard/frontend run build`
+  (it is **not** part of `check.sh`).
+
 ## Knowledge graph (graphify)
 
 This repo has a graphify knowledge graph (god nodes, community structure, cross-file edges).
