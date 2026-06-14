@@ -7,6 +7,7 @@ import { Input } from "./ui/input";
 import { ScrollArea } from "./ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Separator } from "./ui/separator";
+import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 
 const ROUNDS = ["phone", "technical", "system_design", "hiring_manager", "final", "other"];
 
@@ -73,9 +74,17 @@ export function InterviewPanel({ jobId }: { jobId: string }) {
                 <b>{iv.round || "entrevista"}</b>{" "}
                 <span className="text-muted-foreground">{iv.scheduled_at || "sin fecha"}</span>
               </div>
-              <Button variant="secondary" size="sm" onClick={() => genPrep(iv.id)}>
-                <FileText className="size-3.5" /> Generar prep
-              </Button>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="secondary" size="sm" onClick={() => genPrep(iv.id)}>
+                    <FileText className="size-3.5" /> Generar prep
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  Genera el doc de preparación: preguntas probables (conductuales + técnicas), temas
+                  a repasar (gaps del JD) y tu evidencia STAR real. Sale de tu CV + la oferta.
+                </TooltipContent>
+              </Tooltip>
             </div>
             <InterviewerEditor
               interviewId={iv.id}

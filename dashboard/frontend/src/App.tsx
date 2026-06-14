@@ -1,5 +1,6 @@
 import {
   Command as CmdIcon,
+  HelpCircle,
   Loader2,
   Moon,
   RefreshCw,
@@ -8,6 +9,7 @@ import {
   Sun,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
 import {
   api,
   type Action,
@@ -21,6 +23,7 @@ import { Board } from "./components/Board";
 import { CommandPalette } from "./components/CommandPalette";
 import { DetailDrawer } from "./components/DetailDrawer";
 import { FilterBar, type Filters } from "./components/FilterBar";
+import { HelpGuide } from "./components/HelpGuide";
 import { NeedsAction } from "./components/NeedsAction";
 import { OnboardingGate } from "./components/OnboardingGate";
 import { PortfolioViewer } from "./components/PortfolioViewer";
@@ -42,6 +45,8 @@ import { Toaster } from "./components/ui/sonner";
 import { Tabs, TabsList, TabsTrigger } from "./components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "./components/ui/tooltip";
 
+const SEARCH_SOURCES = "LinkedIn · Indeed · Greenhouse · Lever · Ashby · Himalayas · Adzuna";
+
 export default function App() {
   const [ov, setOv] = useState<Overview | null>(null);
   const [actions, setActions] = useState<Action[]>([]);
@@ -55,8 +60,10 @@ export default function App() {
   const [briefOpen, setBriefOpen] = useState(false);
   const [brief, setBrief] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
   const [view, setView] = useState<"pipeline" | "portfolio">("pipeline");
   const [searching, setSearching] = useState(false);
+  const [searchSeconds, setSearchSeconds] = useState(0);
   const [filters, setFilters] = useState<Filters>({
     onlySalary: false,
     language: "",
@@ -68,6 +75,22 @@ export default function App() {
     document.documentElement.dataset.theme = theme;
     localStorage.setItem("atlas-theme", theme);
   }, [theme]);
+
+  // Open the guide automatically the first time (one-time hint).
+  useEffect(() => {
+    if (!localStorage.getItem("atlas-guide-seen")) {
+      setHelpOpen(true);
+      localStorage.setItem("atlas-guide-seen", "1");
+    }
+  }, []);
+
+  // Live elapsed counter while a search runs, so it's obvious it's working.
+  useEffect(() => {
+    if (!searching) return;
+    setSearchSeconds(0);
+    const t = setInterval(() => setSearchSeconds((s) => s + 1), 1000);
+    return () => clearInterval(t);
+  }, [searching]);
 
   const load = useCallback(async () => {
     const [p, ob] = await Promise.all([api.profiles(), api.onboarding()]);
@@ -102,6 +125,9 @@ export default function App() {
   const buscarAhora = useCallback(async () => {
     if (searching) return;
     setSearching(true);
+    const tid = toast.loading("Buscando vacantes nuevas…", {
+      description: `Consultando fuentes y puntuando contra tu CV. ${SEARCH_SOURCES}`,
+    });
     try {
       await api.discover();
       for (let i = 0; i < 60; i++) {
@@ -111,6 +137,12 @@ export default function App() {
         if (!running) break;
       }
       await load();
+      toast.success("Búsqueda completa", {
+        id: tid,
+        description: "Tablero actualizado. Revisá la columna “Preseleccionados”.",
+      });
+    } catch {
+      toast.error("No se pudo completar la búsqueda", { id: tid });
     } finally {
       setSearching(false);
     }
@@ -189,50 +221,83 @@ export default function App() {
             </div>
             <div>
               <div className="leading-none font-semibold tracking-tight">Atlas</div>
-              <div className="mt-0.5 text-[0.72rem] text-muted-foreground">
+              <button
+                type="button"
+                onClick={() => setHelpOpen(true)}
+                className="mt-0.5 text-[0.72rem] text-muted-foreground transition-colors hover:text-foreground"
+              >
                 {ov?.last_run
                   ? `última corrida ${new Date(ov.last_run).toLocaleString("es")}`
-                  : "sin corridas"}
-              </div>
+                  : "sin corridas"}{" "}
+                · cómo funciona
+              </button>
             </div>
           </div>
           <div className="flex items-center gap-2">
             {profiles.length > 0 && (
-              <Select value={activeProfile} onValueChange={switchProfile}>
-                <SelectTrigger size="sm" className="w-auto" aria-label="Perfil activo">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {profiles.map((p) => (
-                    <SelectItem key={p.id} value={p.id}>
-                      {p.label}
-                      {p.is_owner ? " ★" : ""}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Select value={activeProfile} onValueChange={switchProfile}>
+                    <SelectTrigger size="sm" className="w-auto" aria-label="Perfil activo">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {profiles.map((p) => (
+                        <SelectItem key={p.id} value={p.id}>
+                          {p.label}
+                          {p.is_owner ? " ★" : ""}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </TooltipTrigger>
+                <TooltipContent>
+                  Perfil activo. Cada perfil es una cuenta local con su propio CV, base de datos y
+                  configuración.
+                </TooltipContent>
+              </Tooltip>
             )}
-            <Button
-              size="sm"
-              onClick={buscarAhora}
-              disabled={searching}
-              title="Buscar vacantes nuevas (discover + score)"
-            >
-              {searching ? (
-                <Loader2 className="size-3.5 animate-spin" />
-              ) : (
-                <Search className="size-3.5" />
-              )}
-              {searching ? "Buscando…" : "Buscar"}
-            </Button>
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => setPaletteOpen(true)}
-              className="gap-1.5"
-            >
-              <CmdIcon className="size-3.5" /> <Kbd>K</Kbd>
-            </Button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button size="sm" onClick={buscarAhora} disabled={searching}>
+                  {searching ? (
+                    <Loader2 className="size-3.5 animate-spin" />
+                  ) : (
+                    <Search className="size-3.5" />
+                  )}
+                  {searching ? `Buscando… ${searchSeconds}s` : "Buscar"}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <b>Buscar vacantes</b> — trae ofertas nuevas de todas las fuentes y las puntúa
+                contra tu CV (discover + score). Es Python determinista (sin IA), tarda ~1–2 min.
+              </TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setPaletteOpen(true)}
+                  className="gap-1.5"
+                >
+                  <CmdIcon className="size-3.5" /> <Kbd>K</Kbd>
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                Paleta de comandos (⌘/Ctrl + K) — saltá a una vacante o acción al instante.
+              </TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="ghost" size="icon-sm" onClick={() => setHelpOpen(true)}>
+                  <HelpCircle className="size-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                Cómo funciona Atlas — guía de todas las funcionalidades y cómo usa la IA.
+              </TooltipContent>
+            </Tooltip>
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button variant="ghost" size="icon-sm" onClick={() => setSettingsOpen(true)}>
@@ -259,10 +324,28 @@ export default function App() {
                   <RefreshCw className="size-4" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>Actualizar</TooltipContent>
+              <TooltipContent>Actualizar el tablero (relee la base de datos local)</TooltipContent>
             </Tooltip>
           </div>
         </header>
+
+        {/* live search progress — so it's obvious Atlas is working */}
+        {searching && (
+          <Card className="fade-up mb-4 flex items-center gap-3 border-primary/40 p-3.5">
+            <Loader2 className="size-4 shrink-0 animate-spin text-primary" />
+            <div className="min-w-0 flex-1">
+              <div className="text-sm font-medium">
+                Buscando vacantes nuevas… <span className="tabular-nums">{searchSeconds}s</span>
+              </div>
+              <div className="truncate text-[0.78rem] text-muted-foreground">
+                Consultando fuentes y puntuando contra tu CV · {SEARCH_SOURCES}
+              </div>
+              <div className="mt-2 h-1 w-full overflow-hidden rounded-full bg-secondary">
+                <div className="h-full w-1/3 animate-[indet_1.2s_ease-in-out_infinite] rounded-full bg-[linear-gradient(90deg,var(--primary),var(--accent2))]" />
+              </div>
+            </div>
+          </Card>
+        )}
 
         {onboarding && !onboarding.complete ? (
           <OnboardingGate status={onboarding} onComplete={load} onRefresh={refreshOnboarding} />
@@ -271,8 +354,23 @@ export default function App() {
             <nav className="mb-4">
               <Tabs value={view} onValueChange={(v) => setView(v as "pipeline" | "portfolio")}>
                 <TabsList>
-                  <TabsTrigger value="pipeline">Pipeline</TabsTrigger>
-                  <TabsTrigger value="portfolio">Portafolio</TabsTrigger>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <TabsTrigger value="pipeline">Pipeline</TabsTrigger>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      Tu embudo de búsqueda: vacantes por estado (preseleccionado → aplicado →
+                      entrevista → oferta).
+                    </TooltipContent>
+                  </Tooltip>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <TabsTrigger value="portfolio">Portafolio</TabsTrigger>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      Generá tu sitio de portafolio local y guardá referencias (peers).
+                    </TooltipContent>
+                  </Tooltip>
                 </TabsList>
               </Tabs>
             </nav>
@@ -307,6 +405,7 @@ export default function App() {
         )}
 
         <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+        <HelpGuide open={helpOpen} onOpenChange={setHelpOpen} />
         <DetailDrawer jobId={selected} onClose={() => setSelected(null)} onChanged={load} />
         <CommandPalette
           open={paletteOpen}
