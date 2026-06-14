@@ -337,6 +337,16 @@ body {
   animation: fadeUp var(--dur-base) var(--ease-out) both;
 }
 
+/* indeterminate progress sweep (search-in-progress banner) */
+@keyframes indet {
+  0% {
+    transform: translateX(-120%);
+  }
+  100% {
+    transform: translateX(360%);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
