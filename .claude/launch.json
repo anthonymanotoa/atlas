@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "atlas-dashboard",
+      "runtimeExecutable": "uv",
+      "runtimeArgs": ["run", "uvicorn", "dashboard.backend.main:app", "--host", "127.0.0.1", "--port", "8787"],
+      "port": 8787
+    }
+  ]
+}

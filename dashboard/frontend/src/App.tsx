@@ -1,5 +1,6 @@
 import {
   Command as CmdIcon,
+  FileText,
   HelpCircle,
   Loader2,
   Moon,
@@ -21,6 +22,7 @@ import {
 import { AnalyticsStrip } from "./components/AnalyticsStrip";
 import { Board } from "./components/Board";
 import { CommandPalette } from "./components/CommandPalette";
+import { CvAuditDialog } from "./components/CvAuditDialog";
 import { DetailDrawer } from "./components/DetailDrawer";
 import { FilterBar, type Filters } from "./components/FilterBar";
 import { HelpGuide } from "./components/HelpGuide";
@@ -61,6 +63,7 @@ export default function App() {
   const [brief, setBrief] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
+  const [cvOpen, setCvOpen] = useState(false);
   const [view, setView] = useState<"pipeline" | "portfolio">("pipeline");
   const [searching, setSearching] = useState(false);
   const [searchSeconds, setSearchSeconds] = useState(0);
@@ -300,6 +303,16 @@ export default function App() {
             </Tooltip>
             <Tooltip>
               <TooltipTrigger asChild>
+                <Button variant="ghost" size="icon-sm" onClick={() => setCvOpen(true)}>
+                  <FileText className="size-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                Auditoría de tu CV — score y recomendaciones (atlas advise), siempre a mano.
+              </TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
                 <Button variant="ghost" size="icon-sm" onClick={() => setSettingsOpen(true)}>
                   <SettingsIcon className="size-4" />
                 </Button>
@@ -406,6 +419,7 @@ export default function App() {
 
         <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
         <HelpGuide open={helpOpen} onOpenChange={setHelpOpen} />
+        <CvAuditDialog open={cvOpen} onOpenChange={setCvOpen} />
         <DetailDrawer jobId={selected} onClose={() => setSelected(null)} onChanged={load} />
         <CommandPalette
           open={paletteOpen}

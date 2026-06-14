@@ -635,6 +635,18 @@ def api_onboarding_complete(db: DB = Depends(get_db)):
     return {"ok": True}
 
 
+@app.get("/api/cv/audit")
+def api_cv_audit(db: DB = Depends(get_db)):
+    """CV audit (score + recommendations) for the active profile, available any time —
+    not just during onboarding. Same deterministic `atlas advise` engine, re-read live so
+    editing master_cv.yaml + reopening reflects instantly."""
+    from engine.advisor import audit_dict
+    from engine.config import load_master_cv
+
+    cv = load_master_cv()
+    return {"cv_present": bool(cv), "audit": audit_dict(cv)}
+
+
 # ── Profiles (selector, no password — profile *selection* on a trusted local box) ─────
 @app.get("/api/profiles")
 def api_profiles():

@@ -193,6 +193,11 @@ export const api = {
   csvColumns: () => get<{ available: CsvColumn[]; selected: string[] }>("/api/csv/columns"),
   onboarding: () => get<OnboardingStatus>("/api/onboarding"),
   completeOnboarding: () => post<{ ok: boolean }>("/api/onboarding/complete"),
+  cvAudit: () =>
+    get<{
+      cv_present: boolean;
+      audit: { findings: Finding[]; summary: { high: number; med: number; low: number } };
+    }>("/api/cv/audit"),
   recordOutcome: (
     id: string,
     body: {

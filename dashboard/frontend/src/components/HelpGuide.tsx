@@ -1,5 +1,6 @@
 import {
   Brain,
+  ClipboardCheck,
   Download,
   FileText,
   Globe,
@@ -27,6 +28,14 @@ type Feature = {
 };
 
 const FEATURES: Feature[] = [
+  {
+    icon: ClipboardCheck,
+    title: "Auditoría de CV",
+    what: "Te da un score de tu CV maestro y recomendaciones concretas de qué editar.",
+    behind:
+      "Revisa tu master_cv.yaml contra buenas prácticas (logros cuantificados, foco IA/ML, claridad, longitud, keywords) y clasifica los hallazgos en alta/media/baja con una sugerencia por cada uno. Determinista; mismo motor que `atlas advise`.",
+    how: '📄 Botón "Auditoría de CV" (arriba a la derecha) → editás master_cv.yaml → "Re-evaluar" · CLI: atlas advise',
+  },
   {
     icon: Search,
     title: "Buscar vacantes",
