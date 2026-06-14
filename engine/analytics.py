@@ -161,6 +161,7 @@ def job_detail(db: DB, job_id: str) -> dict | None:
     job["knockout_flags"] = json.loads(job.get("knockout_flags") or "[]")
     job["sources"] = json.loads(job.get("sources_json") or "[]")
     job["missing_keywords"] = json.loads(job.get("match_missing") or "[]")  # CV↔JD gaps
+    job["jd_skills"] = _jd_skills(job)  # skills the posting itself asks for (detail view)
     annotate(job)  # age_days, posted_days, salary_visible
     job["applied_days"] = _days_since(job.get("applied_at"))
     return {
@@ -172,6 +173,25 @@ def job_detail(db: DB, job_id: str) -> dict | None:
         "learnings": db.learnings_for_company(job.get("company", "")),
         "timeline": _timeline(job),
     }
+
+
+def _jd_skills(job: dict, *, limit: int = 16) -> list[str]:
+    """Skills the posting itself asks for, extracted from title+description via the ontology
+    (importance-ranked, deduped). Empty when the source gave us no description to read."""
+    desc = job.get("description") or ""
+    if not desc:
+        return []
+    from engine.config import load_ontology
+    from engine.cv.keywords import extract_jd_keywords
+
+    hits = extract_jd_keywords(job.get("title") or "", desc, load_ontology())
+    out: list[str] = []
+    for h in hits:
+        if h.canonical not in out:
+            out.append(h.canonical)
+        if len(out) >= limit:
+            break
+    return out
 
 
 def _timeline(job: dict) -> list[dict]:
