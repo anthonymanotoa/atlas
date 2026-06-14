@@ -7,6 +7,7 @@ import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { Separator } from "./ui/separator";
 import { Switch } from "./ui/switch";
+import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 
 // P3-F: local portfolio generation + preview (never auto-published) + peer references
 // captured during supervised research.
@@ -51,9 +52,17 @@ export function PortfolioViewer() {
               <Switch checked={github} onCheckedChange={(c) => setGithub(c === true)} />
               Incluir GitHub
             </Label>
-            <Button variant="secondary" size="sm" onClick={generate} disabled={busy}>
-              <RefreshCw className="size-3.5" /> {busy ? "Generando…" : "Generar"}
-            </Button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="secondary" size="sm" onClick={generate} disabled={busy}>
+                  <RefreshCw className="size-3.5" /> {busy ? "Generando…" : "Generar"}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                Renderiza tu CV maestro en un sitio de portafolio HTML local. Nunca se publica;
+                queda solo en tu Mac. Determinista.
+              </TooltipContent>
+            </Tooltip>
             {portfolio && (
               <a
                 className={buttonVariants({ variant: "secondary", size: "sm" })}
