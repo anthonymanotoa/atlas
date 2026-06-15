@@ -224,13 +224,20 @@ def api_jobs(
 
 @app.get("/api/board")
 def api_board(db: DB = Depends(get_db)):
-    """Jobs grouped by the columns shown on the kanban board."""
+    """Jobs grouped by the columns shown on the kanban board, plus the dismissed bin."""
     columns = ["shortlisted", "tailored", "ready", "applied", "responded", "interview", "offer"]
-    rows = db.list_jobs(states=columns)  # one query; preserves fit_score/discovered_at ordering
+    # one query; preserves fit_score/discovered_at ordering. "dismissed" is fetched too but
+    # kept out of `jobs` so it never shows on the board / in the command palette.
+    rows = db.list_jobs(states=[*columns, "dismissed"])
     grouped: dict[str, list] = {c: [] for c in columns}
+    dismissed: list = []
     for j in rows:
-        grouped[j["state"]].append(analytics.annotate(j))
-    return {"columns": columns, "jobs": grouped}
+        annotated = analytics.annotate(j)
+        if j["state"] == "dismissed":
+            dismissed.append(annotated)
+        else:
+            grouped[j["state"]].append(annotated)
+    return {"columns": columns, "jobs": grouped, "dismissed": dismissed}
 
 
 @app.get("/api/filters")
@@ -373,21 +380,51 @@ def api_brief():
     }
 
 
+def _outbox_safe(path: str | None) -> Path | None:
+    """Resolve a stored CV path and confine it to the outbox; None if missing/escaping."""
+    if not path:
+        return None
+    p = Path(path).resolve()
+    if not p.is_relative_to(paths.OUTBOX_DIR.resolve()) or not p.exists():
+        return None
+    return p
+
+
 @app.get("/api/cv/{job_id}/{version_id}/download")
 def api_cv_download(job_id: str, version_id: int, fmt: str = "docx", db: DB = Depends(get_db)):
     from engine.config import load_master_cv
     from engine.cv.naming import cv_filename
 
+    fmt = "pdf" if fmt == "pdf" else "docx"  # normalize (also guards the SQL column name below)
     version = next((v for v in db.cv_versions_for(job_id) if v["id"] == version_id), None)
     if not version:
         raise HTTPException(404, "cv version not found")
-    path = version.get("path_pdf") if fmt == "pdf" else version.get("path_docx")
-    if not path:
-        raise HTTPException(404, f"{fmt} file not available")
-    p = Path(path).resolve()
-    # Confine downloads to the outbox: never serve a file outside data/outbox, whatever the DB row says.
-    if not p.is_relative_to(paths.OUTBOX_DIR.resolve()) or not p.exists():
-        raise HTTPException(404, f"{fmt} file not available")
+    language = version.get("language") or "en"
+    p = _outbox_safe(version.get("path_pdf") if fmt == "pdf" else version.get("path_docx"))
+
+    # Self-heal: a CV file can be missing (an older prep whose PDF render failed, an outbox
+    # that was cleaned, or a CV edited since). Rather than 404, regenerate it from the CURRENT
+    # master CV (no new version, no state change) and persist the fresh path so next time is fast.
+    if p is None:
+        try:
+            from engine.cv.build import render_cv_files
+
+            docx_path, pdf_path, _ = render_cv_files(db, job_id, language=language)
+        except (ValueError, OSError):
+            docx_path = pdf_path = None
+        p = _outbox_safe(str(pdf_path) if (fmt == "pdf" and pdf_path) else None) or _outbox_safe(
+            str(docx_path) if (fmt == "docx" and docx_path) else None
+        )
+        if p is not None:
+            col = "path_pdf" if fmt == "pdf" else "path_docx"
+            db.conn.execute(f"UPDATE cv_versions SET {col}=? WHERE id=?", (str(p), version_id))
+            db.conn.commit()
+    if p is None:
+        raise HTTPException(
+            404,
+            f"no se pudo generar el {fmt.upper()} — revisa tu CV en Ajustes y vuelve a preparar",
+        )
+
     media = (
         "application/pdf"
         if fmt == "pdf"
@@ -396,9 +433,7 @@ def api_cv_download(job_id: str, version_id: int, fmt: str = "docx", db: DB = De
     # Company/role-aware filename so the user can tell which CV is for which company.
     job = db.get_job(job_id) or {}
     cv_name = (load_master_cv().get("basics") or {}).get("name")
-    nice = cv_filename(
-        cv_name, job.get("company"), job.get("title"), version.get("language") or "en", fmt
-    )
+    nice = cv_filename(cv_name, job.get("company"), job.get("title"), language, fmt)
     return FileResponse(str(p), filename=nice, media_type=media)
 
 

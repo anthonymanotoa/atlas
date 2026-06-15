@@ -10,10 +10,12 @@ import {
   Globe,
   Languages,
   ListChecks,
+  Loader2,
   MapPin,
   Plus,
   Search,
   Send,
+  Trash2,
   Wallet,
 } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -494,6 +496,8 @@ export function DetailDrawer({
   onChanged: () => void;
 }) {
   const [d, setD] = useState<JobDetail | null>(null);
+  const [preparing, setPreparing] = useState(false);
+  const [applying, setApplying] = useState(false);
   useEffect(() => {
     if (jobId) {
       setD(null);
@@ -502,17 +506,55 @@ export function DetailDrawer({
   }, [jobId]);
 
   async function prep() {
-    if (!jobId) return;
-    await api.prep(jobId); // language auto-picked from the posting (es offer → ES, else EN)
-    api.job(jobId).then(setD);
-    onChanged();
+    if (!jobId || preparing) return;
+    setPreparing(true);
+    const tid = toast.loading("Preparando tu CV y mensajes…", {
+      description: "Adapto el CV a esta oferta (ATS-safe) y redacto los mensajes.",
+    });
+    try {
+      const r = await api.prep(jobId); // language auto-picked (es offer → ES, else EN)
+      setD(await api.job(jobId));
+      onChanged();
+      toast.success("CV y mensajes listos", {
+        id: tid,
+        description: `Cobertura ${pct(r.coverage)} · ${r.parse_ok ? "ATS ✓" : "revisar formato"}`,
+      });
+    } catch {
+      toast.error("No se pudo preparar", { id: tid, description: "Reintenta en un momento." });
+    } finally {
+      setPreparing(false);
+    }
   }
   async function markApplied() {
+    if (!jobId || applying) return;
+    setApplying(true);
+    try {
+      await api.markApplied(jobId);
+      setD(await api.job(jobId));
+      onChanged();
+      toast.success("Marcado como aplicado");
+    } catch {
+      toast.error("No se pudo marcar como aplicado");
+    } finally {
+      setApplying(false);
+    }
+  }
+  async function dismiss() {
     if (!jobId) return;
-    await api.markApplied(jobId);
-    api.job(jobId).then(setD);
+    const prev = d?.job.state || "shortlisted";
+    onClose();
+    await api.setState(jobId, "dismissed");
     onChanged();
-    toast.success("Marcado como aplicado");
+    toast.success("Vacante descartada", {
+      description: "No volverá a aparecer en tu tablero.",
+      action: {
+        label: "Deshacer",
+        onClick: async () => {
+          await api.setState(jobId, prev);
+          onChanged();
+        },
+      },
+    });
   }
 
   return (
@@ -685,8 +727,14 @@ export function DetailDrawer({
                   {d.messages.length === 0 && (
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <Button variant="secondary" className="w-full" onClick={prep}>
-                          Generar borradores
+                        <Button
+                          variant="secondary"
+                          className="w-full"
+                          onClick={prep}
+                          disabled={preparing}
+                        >
+                          {preparing && <Loader2 className="size-4 animate-spin" />}
+                          {preparing ? "Generando…" : "Generar borradores"}
                         </Button>
                       </TooltipTrigger>
                       <TooltipContent>
@@ -718,11 +766,26 @@ export function DetailDrawer({
 
             {/* sticky footer */}
             <div className="sticky bottom-0 z-10 flex gap-2 border-t border-border bg-background/85 px-5 py-3 backdrop-blur-xl">
-              <Button variant="secondary" className="flex-1" onClick={markApplied}>
-                Marcar como aplicado
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="ghost" size="icon" onClick={dismiss} aria-label="Descartar">
+                    <Trash2 className="size-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Descartar — no me interesa (se puede deshacer)</TooltipContent>
+              </Tooltip>
+              <Button
+                variant="secondary"
+                className="flex-1"
+                onClick={markApplied}
+                disabled={applying}
+              >
+                {applying && <Loader2 className="size-4 animate-spin" />}
+                {applying ? "Marcando…" : "Marcar como aplicado"}
               </Button>
-              <Button className="flex-1" onClick={prep}>
-                Re-preparar
+              <Button className="flex-1" onClick={prep} disabled={preparing}>
+                {preparing && <Loader2 className="size-4 animate-spin" />}
+                {preparing ? "Preparando…" : "Re-preparar"}
               </Button>
             </div>
           </>
