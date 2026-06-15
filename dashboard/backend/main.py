@@ -69,28 +69,28 @@ app.add_middleware(
 # ── Server-side request-authenticity check on state-mutating POSTs (plan 020) ──
 # Localhost-only, single-user, no auth. The CORS preflight + loopback bind are the
 # first line; this is the server-side backstop for when a request reaches a handler
-# anyway. Origins permitted to mutate state; config-driven so it tracks the bound
-# host/port (set ATLAS_ALLOWED_ORIGINS as a comma-list to override). Defaults cover
-# the loopback backend (documented --port 8787) + the Vite dev server.
-_DEFAULT_ALLOWED_ORIGINS = (
-    "http://127.0.0.1:8787",
-    "http://localhost:8787",
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
-)
+# anyway. The threat is CSRF: a remote page (evil.com) tricking the browser into POSTing
+# to 127.0.0.1. The browser stamps such a request with evil.com's Origin — it CANNOT forge
+# a loopback Origin — so we accept any loopback origin (127.0.0.1 / localhost / [::1] on ANY
+# port: Atlas may be served from any port the user picks) and reject everything else. Extra
+# explicit origins can still be allow-listed via ATLAS_ALLOWED_ORIGINS (comma-list).
+_LOOPBACK_HOSTS = frozenset(("127.0.0.1", "localhost", "::1", "[::1]"))
 ALLOWED_ORIGINS = frozenset(
-    o.strip()
-    for o in os.environ.get("ATLAS_ALLOWED_ORIGINS", ",".join(_DEFAULT_ALLOWED_ORIGINS)).split(",")
-    if o.strip()
+    o.strip() for o in os.environ.get("ATLAS_ALLOWED_ORIGINS", "").split(",") if o.strip()
 )
+
+
+def _is_loopback_origin(origin: str) -> bool:
+    parts = urlsplit(origin)
+    return parts.scheme in ("http", "https") and (parts.hostname or "") in _LOOPBACK_HOSTS
 
 
 def require_trusted_origin(request: Request) -> None:
     """Reject state-mutating requests from an untrusted browser origin (403).
 
     Same-origin and non-browser requests omit Origin and are allowed (this is
-    load-bearing for production "served-from-FastAPI" mode); a present
-    Origin/Referer must be in ALLOWED_ORIGINS.
+    load-bearing for production "served-from-FastAPI" mode); a present Origin/Referer must be
+    a loopback host (any port) or an explicitly allow-listed origin.
     """
     origin = request.headers.get("origin")
     if origin is None:
@@ -101,8 +101,9 @@ def require_trusted_origin(request: Request) -> None:
         origin = f"{parts.scheme}://{parts.netloc}" if parts.scheme and parts.netloc else None
         if origin is None:
             return
-    if origin not in ALLOWED_ORIGINS:
-        raise HTTPException(403, "origin not allowed")
+    if _is_loopback_origin(origin) or origin in ALLOWED_ORIGINS:
+        return
+    raise HTTPException(403, "origin not allowed")
 
 
 class StateBody(BaseModel):
@@ -117,6 +118,10 @@ class PrepBody(BaseModel):
 
 class ProfileBody(BaseModel):
     id: str
+
+
+class LabelBody(BaseModel):
+    label: str
 
 
 class SettingBody(BaseModel):
@@ -324,7 +329,10 @@ def _run_discover_and_score(only: set[str] | None, profile_id: str | None) -> No
             paths.set_profile(profile_id)
         with DB() as db:  # own connection — see note above
             run_discover(db, only=only)
-            score_jobs(db, load_criteria())
+            # rescore=True so a "Buscar" also re-evaluates already discovered/scored/
+            # shortlisted jobs with the current scorer (e.g. after a criteria change) —
+            # never regressing a job already tailored/applied. Keeps the shortlist honest.
+            score_jobs(db, load_criteria(), rescore=True)
     except Exception as e:  # noqa: BLE001 — record the failure instead of dropping it silently
         try:
             with DB() as db:
@@ -367,6 +375,9 @@ def api_brief():
 
 @app.get("/api/cv/{job_id}/{version_id}/download")
 def api_cv_download(job_id: str, version_id: int, fmt: str = "docx", db: DB = Depends(get_db)):
+    from engine.config import load_master_cv
+    from engine.cv.naming import cv_filename
+
     version = next((v for v in db.cv_versions_for(job_id) if v["id"] == version_id), None)
     if not version:
         raise HTTPException(404, "cv version not found")
@@ -382,7 +393,32 @@ def api_cv_download(job_id: str, version_id: int, fmt: str = "docx", db: DB = De
         if fmt == "pdf"
         else "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
     )
-    return FileResponse(str(p), filename=p.name, media_type=media)
+    # Company/role-aware filename so the user can tell which CV is for which company.
+    job = db.get_job(job_id) or {}
+    cv_name = (load_master_cv().get("basics") or {}).get("name")
+    nice = cv_filename(
+        cv_name, job.get("company"), job.get("title"), version.get("language") or "en", fmt
+    )
+    return FileResponse(str(p), filename=nice, media_type=media)
+
+
+@app.get("/api/cv/library")
+def api_cv_library():
+    """The per-profile folder where every tailored CV is saved (so the user can browse them
+    all in Finder), plus a listing of what's there. Read-only; download stays per-version."""
+    from engine.cv.naming import library_dir
+
+    d = library_dir()
+    files = sorted(
+        (
+            {"name": f.name, "size": f.stat().st_size, "modified": f.stat().st_mtime}
+            for f in d.glob("*")
+            if f.is_file()
+        ),
+        key=lambda x: x["modified"],
+        reverse=True,
+    )
+    return {"dir": str(d), "count": len(files), "files": files}
 
 
 @app.get("/api/health")
@@ -520,6 +556,22 @@ def api_portfolio_preview(portfolio_id: int, db: DB = Depends(get_db)):
     return FileResponse(str(p), media_type="text/html")
 
 
+@app.get("/api/portfolio/research")
+def api_portfolio_research():
+    """Curated, verified reference portfolios + the patterns behind them + a detailed,
+    personalized LLM prompt (built from the user's CV) to commission their own portfolio.
+    Everything the user needs to review the examples and brief an LLM, in one place."""
+    from engine.config import load_master_cv
+    from engine.portfolio.peer_examples import PEER_EXAMPLES, PORTFOLIO_PATTERNS
+    from engine.portfolio.prompt import build_portfolio_prompt
+
+    return {
+        "examples": PEER_EXAMPLES,
+        "patterns": PORTFOLIO_PATTERNS,
+        "prompt": build_portfolio_prompt(load_master_cv()),
+    }
+
+
 @app.get("/api/peers")
 def api_peers(db: DB = Depends(get_db)):
     return {"peers": db.list_peer_portfolios()}
@@ -650,7 +702,21 @@ def api_cv_audit(db: DB = Depends(get_db)):
 # ── Profiles (selector, no password — profile *selection* on a trusted local box) ─────
 @app.get("/api/profiles")
 def api_profiles():
+    # Self-heal placeholder labels (e.g. the legacy "Dueño") to the real CV name on read.
+    profiles.reconcile_labels()
     return {"profiles": profiles.list_profiles(), "active": paths.PROFILE_ID or profiles.OWNER_ID}
+
+
+@app.post("/api/profiles/{profile_id}/label", dependencies=[Depends(require_trusted_origin)])
+def api_rename_profile(profile_id: str, body: LabelBody):
+    """Rename a profile's display label (the name shown in the selector)."""
+    if not profiles.valid_id(profile_id) or not profiles.exists(profile_id):
+        raise HTTPException(404, "unknown profile")
+    try:
+        label = profiles.set_label(profile_id, body.label)
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from None
+    return {"ok": True, "id": profile_id, "label": label}
 
 
 @app.post("/api/profile", dependencies=[Depends(require_trusted_origin)])

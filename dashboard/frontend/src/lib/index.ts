@@ -91,6 +91,50 @@ export function langLabel(code?: string | null): string {
   return code ? code.toUpperCase() : "";
 }
 
+// Human modality label from is_remote / workplace_type.
+export function workplaceLabel(job: {
+  is_remote?: number | null;
+  workplace_type?: string;
+}): string {
+  const wt = (job.workplace_type || "").toLowerCase();
+  if (job.is_remote === 1 || wt === "remote") return "Remoto";
+  if (wt === "hybrid") return "Híbrido";
+  if (wt === "onsite") return "Presencial";
+  return "No especificado";
+}
+
+// Best-effort country: last comma-separated chunk of the location string.
+export function countryLabel(location?: string | null): string {
+  if (!location) return "";
+  const parts = location
+    .split(/[,·|]/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+  return parts.length ? parts[parts.length - 1] : location.trim();
+}
+
+// Clean a job description for plain-text display: strip any HTML tags, decode basic entities,
+// and remove the markdown emphasis/heading markers some ATS feeds leave in (** __ ### ), so we
+// never render raw markup. (Also our defense against a source that returns HTML.)
+export function stripHtml(text?: string | null): string {
+  if (!text) return "";
+  return text
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&#39;|&apos;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/\*\*|__/g, "") // markdown bold markers
+    .replace(/^#{1,6}\s+/gm, "") // markdown headings → plain line
+    .replace(/^\s*[-*]\s+/gm, "• ") // markdown bullets → real bullet
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .replace(/[ \t]{2,}/g, " ")
+    .trim();
+}
+
 export async function copy(text: string): Promise<void> {
   try {
     await navigator.clipboard.writeText(text);

@@ -98,6 +98,28 @@ def test_init_owner_is_idempotent_and_marks_owner(tmp_registry):
     assert profiles.init_owner()["migrated"] is False  # re-run is a no-op
 
 
+def test_set_label_renames_profile(tmp_registry):
+    profiles.create_profile("alex", "Alex")
+    assert profiles.set_label("alex", "Alejandra") == "Alejandra"
+    assert any(p["id"] == "alex" and p["label"] == "Alejandra" for p in profiles.list_profiles())
+    with pytest.raises(ValueError):
+        profiles.set_label("alex", "   ")  # empty label rejected
+    with pytest.raises(ValueError):
+        profiles.set_label("ghost", "X")  # unknown profile rejected
+
+
+def test_reconcile_labels_heals_legacy_dueno_from_cv(tmp_registry):
+    profiles.init_owner()
+    cv = profiles.PROFILES_DIR / "owner" / "profile" / "master_cv.yaml"
+    cv.write_text("basics:\n  name: Ada Lovelace\n")
+    profiles.set_label("owner", "Dueño")  # the legacy placeholder label
+    assert profiles.reconcile_labels() is True
+    assert any(
+        p["id"] == "owner" and p["label"] == "Ada Lovelace" for p in profiles.list_profiles()
+    )
+    assert profiles.reconcile_labels() is False  # idempotent once healed
+
+
 def test_set_active_rejects_unknown(tmp_registry):
     profiles.create_profile("alex", "Alex")
     profiles.set_active("alex")

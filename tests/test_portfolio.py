@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from engine.portfolio.builder import _gh_handle, generate_portfolio
+from engine.portfolio.peer_examples import PEER_EXAMPLES, PORTFOLIO_PATTERNS
+from engine.portfolio.prompt import build_portfolio_prompt
 
 
 def test_gh_handle_extracts():
@@ -39,3 +41,39 @@ def test_generate_portfolio_is_standalone(tmp_path):
     assert (
         "cdn" not in text.lower() and "http-equiv" not in text.lower()
     )  # standalone, offline-safe
+
+
+def test_peer_examples_are_well_formed():
+    assert len(PEER_EXAMPLES) >= 8
+    for ex in PEER_EXAMPLES:
+        assert ex["url"].startswith("http")
+        assert ex["peer_name"] and ex["role_match"]
+        assert ex["key_strengths"] and ex["what_to_steal"]
+    assert set(PORTFOLIO_PATTERNS) >= {"secciones", "como_mostrar_proyectos", "diseno"}
+
+
+def test_portfolio_prompt_personalizes_from_cv():
+    cv = {
+        "basics": {
+            "name": "Ada Lovelace",
+            "label": "Senior Data Scientist & AI Engineer",
+            "summary": "5+ years in retention and GenAI.",
+            "linkedin": "https://li/in/x",
+        },
+        "skills": ["SQL", "Python", "Large Language Models"],
+        "experience": [
+            {
+                "title": "Sr Data Specialist",
+                "company": "Acme Corp",
+                "start": "Feb 2025",
+                "end": "Present",
+                "highlights": ["Own retention analytics (AOV, CVR, LTV)."],
+            }
+        ],
+    }
+    p = build_portfolio_prompt(cv)
+    assert "Ada Lovelace" in p
+    assert "Senior Data Scientist & AI Engineer" in p
+    assert "Acme Corp" in p and "AOV" in p  # real experience woven in
+    assert "Large Language Models" in p
+    assert len(p) > 2000  # detailed, not a stub

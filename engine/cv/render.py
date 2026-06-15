@@ -176,16 +176,33 @@ def render_pdf(cv: dict, out_path: Path, language: str = "en") -> Path | None:
 
     h = HEADINGS.get(language, HEADINGS["en"])
     basics = cv.get("basics", {}) or {}
+    # NOTE: reportlab's ParagraphStyle defaults `leading` to a FIXED 12pt when omitted (it is
+    # NOT auto-scaled to the font size). So any style with fontSize > ~11 MUST set `leading`
+    # explicitly, or its line box is shorter than the glyphs and the next paragraph is drawn
+    # on top of it — which is exactly what made the name and the title line overlap. Every
+    # style below sets leading ≈ 1.2–1.3 × fontSize.
     name_s = ParagraphStyle(
-        "name", fontName="Helvetica-Bold", fontSize=19, alignment=TA_CENTER, spaceAfter=2
+        "name",
+        fontName="Helvetica-Bold",
+        fontSize=19,
+        leading=23,
+        alignment=TA_CENTER,
+        spaceAfter=3,
     )
     label_s = ParagraphStyle(
-        "label", fontName="Helvetica-Oblique", fontSize=11, alignment=TA_CENTER, textColor="#333333"
+        "label",
+        fontName="Helvetica-Oblique",
+        fontSize=11,
+        leading=14,
+        alignment=TA_CENTER,
+        textColor="#333333",
+        spaceAfter=2,
     )
     contact_s = ParagraphStyle(
         "contact",
         fontName="Helvetica",
         fontSize=9,
+        leading=12,
         alignment=TA_CENTER,
         textColor="#444444",
         spaceAfter=8,
@@ -194,14 +211,22 @@ def render_pdf(cv: dict, out_path: Path, language: str = "en") -> Path | None:
         "head",
         fontName="Helvetica-Bold",
         fontSize=11.5,
+        leading=15,
         textColor="#1a1a1a",
         spaceBefore=10,
         spaceAfter=3,
     )
     body_s = ParagraphStyle("body", fontName="Helvetica", fontSize=10, leading=13)
-    role_s = ParagraphStyle("role", fontName="Helvetica-Bold", fontSize=10.5, spaceBefore=5)
+    role_s = ParagraphStyle(
+        "role", fontName="Helvetica-Bold", fontSize=10.5, leading=13, spaceBefore=5
+    )
     meta_s = ParagraphStyle(
-        "meta", fontName="Helvetica-Oblique", fontSize=9, textColor="#555555", spaceAfter=2
+        "meta",
+        fontName="Helvetica-Oblique",
+        fontSize=9,
+        leading=12,
+        textColor="#555555",
+        spaceAfter=2,
     )
     bullet_s = ParagraphStyle("bullet", fontName="Helvetica", fontSize=9.5, leading=12.5)
 

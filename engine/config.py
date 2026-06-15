@@ -44,6 +44,10 @@ class Criteria(BaseModel):
     company_blocklist: list[str] = Field(default_factory=list)  # never surface these companies
     exclude_exec: bool = True  # drop director/VP/head/chief roles (over-qualified for an IC track)
     max_years_required: int = 0  # 0 = off; flag postings demanding more than N years
+    # ── Seniority-fit realism (P4) — keep me off roles I realistically can't land ──
+    candidate_years: int = 0  # your real years of experience; 0 = off. Powers realistic
+    # years-gap scoring (a "12+ yrs" posting is flagged + down-ranked when you have ~5) and
+    # demotes Staff/Principal titles (which usually want 8+ yrs) instead of bonusing them.
     prose: str = ""  # the Markdown body (for the LLM)
 
     @property
