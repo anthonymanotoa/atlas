@@ -324,6 +324,10 @@ def render_pdf(cv: dict, out_path: Path, language: str = "en") -> Path | None:
     )
     try:
         doc.build(story)
-    except Exception:  # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001 — never crash a prep run on a PDF render hiccup,
+        # but log WHY so a silently-missing PDF is debuggable instead of a mystery.
+        import logging
+
+        logging.getLogger("atlas.cv").warning("PDF render failed for %s: %s", out_path.name, exc)
         return None
     return out_path if out_path.exists() else None

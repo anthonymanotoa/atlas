@@ -31,16 +31,19 @@ class BuildResult:
     notes: list[str]
 
 
-def build_for_job(
+def render_cv_files(
     db: DB,
     job_id: str,
     *,
     language: str = "en",
     cv_override: dict | None = None,
     make_pdf: bool = True,
-) -> BuildResult:
-    """Generate a tailored, parse-safe CV for `job_id`. `cv_override` lets the brain
-    pass an LLM-reworded (still truthful) CV dict instead of the deterministic one."""
+) -> tuple[Path, Path | None, tailor.TailorResult]:
+    """Tailor + render the DOCX (and PDF) for `job_id` to its outbox dir and mirror them into
+    the CV library — WITHOUT creating a cv_version or changing the job's state.
+
+    This is the shared core of ``build_for_job`` and is also used to *self-heal* a download
+    when the stored file went missing (regenerating it from the current master CV)."""
     if language not in ALLOWED_LANGUAGES:
         raise ValueError(f"unsupported language {language!r}; allowed: {sorted(ALLOWED_LANGUAGES)}")
     job = db.get_job(job_id)
@@ -59,7 +62,6 @@ def build_for_job(
         if make_pdf
         else None
     )
-    parse_ok, issues = parse_check.check(docx_path, cv, language=language)
 
     # Mirror a human-readable copy into the per-profile CV library so every tailored CV lands
     # in one browsable folder named by company/role (the canonical store stays under job_id/).
@@ -74,6 +76,24 @@ def build_for_job(
         copy_to_library(
             pdf_path, cv_name=cv_name, company=company, title=title, language=language, fmt="pdf"
         )
+    return docx_path, pdf_path, result
+
+
+def build_for_job(
+    db: DB,
+    job_id: str,
+    *,
+    language: str = "en",
+    cv_override: dict | None = None,
+    make_pdf: bool = True,
+) -> BuildResult:
+    """Generate a tailored, parse-safe CV for `job_id`. `cv_override` lets the brain
+    pass an LLM-reworded (still truthful) CV dict instead of the deterministic one."""
+    docx_path, pdf_path, result = render_cv_files(
+        db, job_id, language=language, cv_override=cv_override, make_pdf=make_pdf
+    )
+    # parse-check the document we actually rendered (the override if the brain passed one).
+    parse_ok, issues = parse_check.check(docx_path, cv_override or result.cv, language=language)
 
     cv_version_id = db.add_cv_version(
         job_id,
