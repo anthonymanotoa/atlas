@@ -5,9 +5,11 @@ import {
   Loader2,
   Moon,
   RefreshCw,
+  RotateCcw,
   Search,
   Settings as SettingsIcon,
   Sun,
+  Trash2,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -54,6 +56,8 @@ export default function App() {
   const [actions, setActions] = useState<Action[]>([]);
   const [columns, setColumns] = useState<string[]>([]);
   const [jobs, setJobs] = useState<Record<string, Job[]>>({});
+  const [dismissed, setDismissed] = useState<Job[]>([]);
+  const [showDismissed, setShowDismissed] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [activeProfile, setActiveProfile] = useState<string>("");
@@ -106,6 +110,7 @@ export default function App() {
     setActions(o.needs_action);
     setColumns(b.columns);
     setJobs(b.jobs);
+    setDismissed(b.dismissed || []);
   }, []);
 
   const refreshOnboarding = useCallback(async () => {
@@ -180,6 +185,35 @@ export default function App() {
       return next;
     });
     await api.setState(jobId, to);
+    load();
+  }
+
+  // Discard a job the user isn't interested in: drop it off the board, with one-click undo.
+  async function dismiss(jobId: string, from: string) {
+    setJobs((prev) => {
+      const next: Record<string, Job[]> = {};
+      for (const c of Object.keys(prev)) next[c] = prev[c].filter((j) => j.id !== jobId);
+      return next;
+    });
+    if (selected === jobId) setSelected(null);
+    await api.setState(jobId, "dismissed");
+    toast.success("Vacante descartada", {
+      description: "No volverá a aparecer en tu tablero.",
+      action: {
+        label: "Deshacer",
+        onClick: async () => {
+          await api.setState(jobId, from);
+          load();
+        },
+      },
+    });
+    load();
+  }
+
+  async function restore(jobId: string) {
+    setDismissed((prev) => prev.filter((j) => j.id !== jobId));
+    await api.setState(jobId, "shortlisted");
+    toast.success("Vacante restaurada a Preseleccionados");
     load();
   }
 
@@ -411,7 +445,50 @@ export default function App() {
                 </div>
 
                 <FilterBar filters={filters} setFilters={setFilters} languages={languages} />
-                <Board columns={columns} jobs={filteredJobs} onOpen={setSelected} onMove={move} />
+                <Board
+                  columns={columns}
+                  jobs={filteredJobs}
+                  onOpen={setSelected}
+                  onMove={move}
+                  onDismiss={dismiss}
+                />
+
+                {dismissed.length > 0 && (
+                  <div className="mt-5">
+                    <button
+                      type="button"
+                      onClick={() => setShowDismissed((v) => !v)}
+                      className="inline-flex items-center gap-1.5 text-caption text-muted-foreground uppercase transition-colors hover:text-foreground"
+                    >
+                      <Trash2 className="size-3.5" />
+                      Descartadas ({dismissed.length}) {showDismissed ? "▾" : "▸"}
+                    </button>
+                    {showDismissed && (
+                      <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                        {dismissed.map((j) => (
+                          <Card
+                            key={j.id}
+                            className="flex items-center justify-between gap-2 p-3 text-sm"
+                          >
+                            <button
+                              type="button"
+                              onClick={() => setSelected(j.id)}
+                              className="min-w-0 text-left"
+                            >
+                              <div className="truncate font-medium">{j.title}</div>
+                              <div className="truncate text-xs text-muted-foreground">
+                                {j.company}
+                              </div>
+                            </button>
+                            <Button variant="secondary" size="sm" onClick={() => restore(j.id)}>
+                              <RotateCcw className="size-3.5" /> Restaurar
+                            </Button>
+                          </Card>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
               </>
             )}
           </>

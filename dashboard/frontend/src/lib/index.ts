@@ -16,6 +16,7 @@ export const STATE_ES: Record<string, string> = {
   offer: "Oferta",
   rejected: "Rechazado",
   closed: "Cerrado",
+  dismissed: "Descartado",
 };
 
 export const COLUMN_ES: Record<string, string> = {

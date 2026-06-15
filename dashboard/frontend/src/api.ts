@@ -185,13 +185,17 @@ async function post<T>(url: string, body?: unknown): Promise<T> {
 
 export const api = {
   overview: () => get<{ overview: Overview; needs_action: Action[] }>("/api/overview"),
-  board: () => get<{ columns: string[]; jobs: Record<string, Job[]> }>("/api/board"),
+  board: () =>
+    get<{ columns: string[]; jobs: Record<string, Job[]>; dismissed: Job[] }>("/api/board"),
   job: (id: string) => get<JobDetail>(`/api/jobs/${id}`),
   setState: (id: string, state: string) => post(`/api/jobs/${id}/state`, { state }),
   markApplied: (id: string) => post(`/api/jobs/${id}/applied`),
   // language omitted → backend auto-picks the posting's language (es offers → ES CV, else EN)
   prep: (id: string, language?: string) =>
-    post(`/api/jobs/${id}/prep`, language ? { language } : {}),
+    post<{ ok: boolean; coverage: number; parse_ok: boolean; language: string }>(
+      `/api/jobs/${id}/prep`,
+      language ? { language } : {},
+    ),
   markSent: (mid: number) => post(`/api/messages/${mid}/sent`),
   discover: () => post<{ started: boolean; running?: boolean }>("/api/discover"),
   discoverStatus: () => get<{ running: boolean }>("/api/discover/status"),
