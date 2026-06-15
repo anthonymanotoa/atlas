@@ -110,6 +110,44 @@ def test_scoring_flags_excessive_years():
     assert any("15+ years" in k for k in r.knockouts)
 
 
+# ── seniority-fit realism (P4): Staff/Principal + years-gap awareness ──────────
+def _remote_job(title: str, desc: str) -> dict:
+    return {
+        "title": title,
+        "description": desc,
+        "company": "Acme",
+        "is_remote": 1,
+        "workplace_type": "remote",
+    }
+
+
+def test_staff_title_is_a_stretch_not_a_bonus():
+    """A Staff/Principal IC role is over-qualified for a ~5yr candidate: flagged and held
+    below the shortlist threshold, never bonused (the 'Staff Engineer wants 15 yrs' case)."""
+    crit = _crit(candidate_years=5, remote_required=True, shortlist_threshold=62)
+    staff = score_job(_remote_job("Staff Data Scientist", "python sql. 10+ years."), crit)
+    senior = score_job(_remote_job("Senior Data Scientist", "python sql. 4+ years."), crit)
+    assert senior.score >= crit.shortlist_threshold  # realistic → shortlistable
+    assert staff.score < crit.shortlist_threshold  # stretch → browse-only, not shortlisted
+    assert any("staff/principal" in k for k in staff.knockouts)
+
+
+def test_large_years_gap_softcaps_even_a_senior_title():
+    crit = _crit(candidate_years=5, remote_required=True, shortlist_threshold=62)
+    r = score_job(
+        _remote_job("Senior Data Scientist", "python sql. 15+ years of experience required."),
+        crit,
+    )
+    assert r.score < crit.shortlist_threshold
+    assert any("años" in k for k in r.knockouts)
+
+
+def test_small_years_gap_stays_shortlistable():
+    crit = _crit(candidate_years=5, remote_required=True, shortlist_threshold=62)
+    r = score_job(_remote_job("Senior Data Scientist", "python sql. 7+ years."), crit)
+    assert r.score >= crit.shortlist_threshold  # 7 vs 5 = within reach, no realism penalty
+
+
 # ── analytics.annotate ────────────────────────────────────────────────────────
 def test_annotate_salary_visible_and_posted_days():
     job = {
