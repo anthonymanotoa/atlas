@@ -25,6 +25,8 @@ STATES = [
     "offer",
     "rejected",
     "closed",
+    "dismissed",  # user said "not interested" — hidden from the board, restorable. No timestamp
+    # column (set_state handles col-less states); never reached automatically by the pipeline.
 ]
 STATE_RANK = {s: i for i, s in enumerate(STATES)}
 
