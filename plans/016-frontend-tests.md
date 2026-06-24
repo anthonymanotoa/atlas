@@ -224,8 +224,7 @@ Behaviors a render test can assert (props → DOM, no network):
 
 ## Commands you will need
 
-All commands assume the repo root
-`/Users/example/dev/personal/atlas/.claude/worktrees/magical-spence-26136c`
+All commands assume the repo root (`/path/to/atlas`)
 and use the `--prefix dashboard/frontend` form so they run from root without
 `cd`.
 

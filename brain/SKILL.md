@@ -14,7 +14,7 @@ reviews and sends from the dashboard. Today's work is idempotent; safe to re-run
 
 1. **Run the deterministic pipeline.** In a terminal:
    ```bash
-   cd /Users/example/dev/personal/atlas && uv run atlas --profile owner brain --limit 8 --language en --json
+   cd /path/to/atlas && uv run atlas --profile owner brain --limit 8 --language en --json
    ```
    `--profile owner` pins the auto-run to the owner's profile regardless of which profile
    the dashboard last had active. The brain refuses to run for any non-owner profile.

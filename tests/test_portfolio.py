@@ -74,6 +74,6 @@ def test_portfolio_prompt_personalizes_from_cv():
     p = build_portfolio_prompt(cv)
     assert "Ada Lovelace" in p
     assert "Senior Data Scientist & AI Engineer" in p
-    assert "Acme Corp" in p and "AOV" in p  # real experience woven in
+    assert "Acme Corp" in p and "AOV" in p  # experience woven in from the CV
     assert "Large Language Models" in p
     assert len(p) > 2000  # detailed, not a stub

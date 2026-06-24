@@ -102,7 +102,7 @@ def run(db: DB, *, limit: int = 8, language: str = "en", do_discover: bool = Tru
 The failing runbook command (`brain/SKILL.md:17`):
 
 ```bash
-cd /Users/example/dev/personal/atlas && uv run atlas brain --limit 8 --language en --json
+cd /path/to/atlas && uv run atlas brain --limit 8 --language en --json
 ```
 
 Repo conventions that apply here (match them):

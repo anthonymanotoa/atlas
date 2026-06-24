@@ -6,7 +6,7 @@ roles:
   - ai engineer
   - machine learning engineer
 role_aliases:
-  - data specialist          # my current Acme Corp title
+  - data specialist          # e.g. an adjacent/alternate title you'd accept
   - analytics engineer
   - ml engineer
   - applied scientist
@@ -58,16 +58,19 @@ company_blocklist: []         # never surface these companies (matched case/suff
 
 # Mis criterios de búsqueda (notas para el cerebro de Atlas)
 
-Soy data scientist en transición hacia **AI/ML**. Mi rol actual en Acme Corp se llama
-"Senior Data Specialist", así que **no me fijo solo en el título** — me importa el
+> Plantilla de ejemplo — reemplaza el texto entre [corchetes] con tu propio contexto.
+> El cerebro de Atlas usa estas notas además de los criterios estructurados de arriba.
+
+Soy [tu rol actual] en transición hacia **[tu objetivo, p. ej. AI/ML]**. Mi título actual
+puede no coincidir con lo que busco, así que **no me fijo solo en el título** — me importa el
 contenido: analítica, experimentación (A/B testing), modelado, y cada vez más
 construir cosas con **IA/LLMs**.
 
 **Lo que busco:**
-- **100% remoto**, sin excepción. Trabajo desde LatAm; hablo inglés y español.
+- **100% remoto**, sin excepción. Trabajo desde [tu región]; hablo [tus idiomas].
 - **Seniority medio-alto** (senior idealmente; acepto roles "mid-senior" fuertes).
-- **Salario objetivo ~$70k USD/año en adelante.** La mayoría de ofertas no lo indican;
-  cuando no aparezca, **no descartes** — solo prioriza las que sí cumplen.
+- **Salario objetivo [tu piso, p. ej. ~$70k USD/año] en adelante.** La mayoría de ofertas no lo
+  indican; cuando no aparezca, **no descartes** — solo prioriza las que sí cumplen.
 - Roles: Data Scientist, Data Analyst, AI Engineer / ML Engineer, Analytics Engineer.
 
 **Señales de buen fit (suben el score):** producto data-driven, experimentación,

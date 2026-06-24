@@ -235,7 +235,7 @@ vacantes dudosas, elegir el contenido del CV, y redactar los mensajes en tu voz.
 **Levantar el tablero** (un solo comando):
 
 ```
-cd /Users/example/dev/personal/atlas
+cd /path/to/atlas
 ./scripts/run.sh
 ```
 

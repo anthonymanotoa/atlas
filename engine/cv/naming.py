@@ -3,7 +3,7 @@
 Two problems this solves:
   1. Downloads were all called ``cv_en.pdf`` — impossible to tell which company a saved CV
      was for. Every download now gets a name like
-     ``Anthony_Manotoa__Acme_Inc__Senior_Data_Scientist__en.pdf``.
+     ``Ada_Lovelace__Acme_Inc__Senior_Data_Scientist__en.pdf``.
   2. There was no single place to browse every tailored CV. Each ``build_for_job`` now drops a
      nicely-named copy into ``data/outbox/cv_library/`` (per profile), so the user has one
      folder with all their CVs, clearly labelled.

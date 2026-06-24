@@ -86,7 +86,7 @@ PEER_EXAMPLES: list[dict] = [
         ],
         "what_to_steal": [
             "Un bloque 'qué hago / a quién ayudo' arriba, enmarcado por el OUTCOME (retención/AOV/CVR)",
-            "Nombrar empresas y métricas reales (Acme Corp, Globex, el 0→40k) como prueba social",
+            "Nombrar empresas y métricas reales (las tuyas, de tu experiencia) como prueba social",
             "2–3 CTAs idénticos de 'hablemos' repartidos, no solo en el footer",
         ],
     },
@@ -134,7 +134,7 @@ PEER_EXAMPLES: list[dict] = [
         ],
         "what_to_steal": [
             "Una línea de posicionamiento afilada en vez de 'data scientist apasionado'",
-            "Un 'Sobre mí' humano (ecuatoriano en Anytown, remoto, bilingüe, ex-founder fintech)",
+            "Un 'Sobre mí' humano y concreto (origen, ciudad, idiomas, trayectoria)",
             "⚠️ Anti-patrón: sus proyectos son flacos (claims sin detalle). Haz lo contrario.",
         ],
     },

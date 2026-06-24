@@ -20,7 +20,7 @@ CV = {
         "label": "Senior Data Scientist, Retention & Experimentation (Remote, LATAM)",
         "email": "a@example.com",
         "phone": "+1 555 0100",
-        "location": "Remote · Anytown, Argentina",
+        "location": "Remote · Anytown",
         "linkedin": "https://www.linkedin.com/in/example",
         "github": "https://github.com/example",
         "summary": "Senior data scientist with 5+ years in retention, experimentation and GenAI.",
@@ -78,7 +78,7 @@ def test_cv_filename_is_company_aware_and_ascii_safe():
     from engine.cv.naming import cv_filename, slug
 
     fn = cv_filename("Ada Lovelace", "Açme Inc.", "Señor Data Scientist", "es", "pdf")
-    assert fn == "Anthony_Manotoa__Acme_Inc__Senor_Data_Scientist__es.pdf"
+    assert fn == "Ada_Lovelace__Acme_Inc__Senor_Data_Scientist__es.pdf"
     assert slug("Über Niño") == "Uber_Nino"  # accents transliterated, no spaces
     # never produces path separators / traversal, whatever the inputs
     assert "/" not in cv_filename("a/b", "../x", "..", "en", "pdf")

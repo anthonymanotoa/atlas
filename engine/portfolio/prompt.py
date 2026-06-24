@@ -72,11 +72,12 @@ ESTRUCTURA EXACTA DEL PORTAFOLIO (en este orden)
 1. HERO: mi nombre + el título objetivo EXACTO + una sola línea de posicionamiento centrada en
    el OUTCOME que genero (retención / AOV / CVR / LTV / experimentación / automatización con IA
    para e-commerce). Dos CTAs: "View projects" y "Get in touch". Botón de "Download CV".
-2. STAT BAR (chips de credibilidad, solo números reales): p.ej. "5+ años", "0→40k usuarios",
-   "~12 h/semana ahorradas con IA", "100% remoto", "EN/ES". Ajusta a mis datos reales.
-3. ABOUT: 3–4 frases humanas y concretas — ecuatoriano basado en Anytown, 100% remoto,
-   bilingüe, ex-cofundador de una fintech (a fintech startup), hoy en retención + experimentación + GenAI en
-   e-commerce. Nombra empresas reales (Acme Corp, Globex) como prueba social. Incluye foto.
+2. STAT BAR (chips de credibilidad, SOLO números reales tomados de mi resumen y mi experiencia
+   de arriba): años de experiencia, métricas de impacto cuantificadas, modalidad (remoto),
+   idiomas. No inventes cifras: usa únicamente las que aparecen en mis datos.
+3. ABOUT: 3–4 frases humanas y concretas construidas a partir de mi resumen, ubicación e historia
+   profesional de arriba (origen, ciudad, idiomas, trayectoria). Nombra mis empresas reales (las
+   de mi experiencia) como prueba social. Incluye foto.
 4. SKILLS por dominio (4 grupos), no una nube plana.
 5. PROYECTOS (el centro) — agrúpalos por TEMA: "Retention & Lifecycle", "Experimentation /
    A-B Testing", "GenAI & Automation". Para cada proyecto usa SIEMPRE la misma tarjeta:
