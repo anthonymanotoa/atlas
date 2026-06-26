@@ -139,16 +139,27 @@ def reconcile_labels() -> bool:
     return changed
 
 
-def _register(profile_id: str, label: str, *, owner: bool = False) -> None:
+def _register(profile_id: str, label: str, *, owner: bool = False, domain: str = "data") -> None:
     reg = _read_registry()
     profiles = reg.setdefault("profiles", [])
     if not any(p["id"] == profile_id for p in profiles):
-        entry: dict = {"id": profile_id, "label": label}
+        entry: dict = {"id": profile_id, "label": label, "domain": domain}
         if owner:
             entry["is_owner"] = True
         profiles.append(entry)
     reg.setdefault("active", profile_id)
     _write_registry(reg)
+
+
+def domain_of(profile_id: str | None) -> str:
+    """The industry/domain of a profile (selects its seed pack & content vocabulary).
+
+    Defaults to ``"data"`` for legacy profiles created before the domain concept and for
+    unknown ids — so existing single-domain installs behave exactly as before."""
+    for p in list_profiles():
+        if p["id"] == profile_id:
+            return p.get("domain") or "data"
+    return "data"
 
 
 # ── lifecycle ───────────────────────────────────────────────────────────────
@@ -168,8 +179,8 @@ def _seed_missing(root: Path) -> None:
             shutil.copy2(str(seed), str(dest))
 
 
-def create_profile(profile_id: str, label: str | None = None) -> dict:
-    """Create a new, ready-to-edit profile seeded from the committed templates."""
+def create_profile(profile_id: str, label: str | None = None, domain: str = "data") -> dict:
+    """Create a new, ready-to-edit profile seeded from the committed templates for ``domain``."""
     _require_valid(profile_id)
     root = _profile_root(profile_id)
     created = not root.exists()
@@ -178,8 +189,8 @@ def create_profile(profile_id: str, label: str | None = None) -> dict:
     (root / "data" / "inbox").mkdir(parents=True, exist_ok=True)
     (root / "data" / "outbox").mkdir(parents=True, exist_ok=True)
     _seed_missing(root)
-    _register(profile_id, label or profile_id.capitalize())
-    return {"profile": profile_id, "created": created, "root": str(root)}
+    _register(profile_id, label or profile_id.capitalize(), domain=domain)
+    return {"profile": profile_id, "created": created, "root": str(root), "domain": domain}
 
 
 def init_owner() -> dict:

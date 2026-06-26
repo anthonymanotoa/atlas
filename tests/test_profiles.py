@@ -136,3 +136,31 @@ def test_valid_id_rejects_dangerous(bad):
 @pytest.mark.parametrize("good", ["owner", "alex", "alex-2", "a_b", "x1"])
 def test_valid_id_accepts_safe(good):
     assert profiles.valid_id(good) is True
+
+
+# ── domain concept (P-domain-agnostic) ────────────────────────────────────────
+def test_create_profile_persists_domain(tmp_registry):
+    profiles.create_profile("lucy", "Lucy", domain="architecture")
+    assert profiles.domain_of("lucy") == "architecture"
+    assert any(
+        p["id"] == "lucy" and p.get("domain") == "architecture"
+        for p in profiles.list_profiles()
+    )
+
+
+def test_domain_defaults_to_data_when_missing(tmp_registry):
+    profiles.create_profile("bob", "Bob")  # no domain arg
+    assert profiles.domain_of("bob") == "data"
+    assert profiles.domain_of("ghost") == "data"  # unknown profile → safe default
+
+
+def test_cli_create_accepts_domain(tmp_registry):
+    from typer.testing import CliRunner
+
+    from engine.cli import app
+
+    result = CliRunner().invoke(
+        app, ["profiles", "create", "lucy", "--label", "Lucy", "--domain", "architecture"]
+    )
+    assert result.exit_code == 0, result.output
+    assert profiles.domain_of("lucy") == "architecture"

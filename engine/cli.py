@@ -507,17 +507,22 @@ def profiles_init() -> None:
 def profiles_create(
     profile_id: str = typer.Argument(..., help="id corto: minúsculas, dígitos, '-' o '_'."),
     label: str | None = typer.Option(None, "--label", help="Nombre visible en el selector."),
+    domain: str = typer.Option(
+        "data", "--domain", help="Industria/dominio del perfil (selecciona su seed pack)."
+    ),
 ) -> None:
-    """Create a new profile seeded from the templates, ready to edit."""
+    """Create a new profile seeded from the templates for its domain, ready to edit."""
     from engine import profiles
 
     try:
-        res = profiles.create_profile(profile_id, label)
+        res = profiles.create_profile(profile_id, label, domain=domain)
     except ValueError as e:
         console.print(f"[red]✗[/] {e}")
         raise typer.Exit(2) from None
     verb = "Creado" if res["created"] else "Ya existía"
-    console.print(f"[green]✓[/] {verb} perfil [bold]{profile_id}[/] → {res['root']}")
+    console.print(
+        f"[green]✓[/] {verb} perfil [bold]{profile_id}[/] [dim]({res['domain']})[/] → {res['root']}"
+    )
     console.print(
         f"  Edita: profiles/{profile_id}/config/criteria.md · "
         f"profiles/{profile_id}/profile/master_cv.yaml"
@@ -537,7 +542,8 @@ def profiles_list() -> None:
     for p in rows:
         mark = "[green]●[/]" if p["id"] == active else " "
         owner = " [dim](dueño)[/]" if p.get("is_owner") else ""
-        console.print(f"  {mark} [bold]{p['id']}[/]{owner} — {p.get('label', '')}")
+        dom = f" [dim]· {p.get('domain', 'data')}[/]"
+        console.print(f"  {mark} [bold]{p['id']}[/]{owner} — {p.get('label', '')}{dom}")
 
 
 # ── interviews (P3-E) — manual entry + prep-doc generation ─────────────────────
