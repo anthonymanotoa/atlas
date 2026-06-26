@@ -31,6 +31,9 @@ class Criteria(BaseModel):
     seniority: list[str] = Field(default_factory=lambda: ["senior", "lead", "staff", "principal"])
     remote_required: bool = True
     locations_allowed: list[str] = Field(default_factory=lambda: ["worldwide"])
+    onsite_locations: list[str] = Field(default_factory=list)  # when set, a CONFIRMED on-site
+    # posting whose location matches none of these is disqualified; REMOTE postings are exempt
+    # (remote is worldwide). Lets a seeker say "on-site only in Ecuador, but remote from anywhere".
     languages: list[str] = Field(default_factory=lambda: ["en", "es"])
     language_hard: bool = False  # if True, a confidently-detected off-language posting is
     # disqualified (not just down-ranked) — for a single-language seeker (e.g. Spanish-only)
