@@ -200,6 +200,11 @@ def render_docx(cv: dict, out_path: Path, language: str = "en", layout: dict | N
         fn = renderers.get(key)
         if fn:
             fn()
+    # Safety net: never silently drop a populated section the layout's `order` forgot. Each
+    # renderer no-ops when its section is empty, so only real, unordered data gets appended.
+    for key, fn in renderers.items():
+        if key not in order:
+            fn()
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     doc.save(str(out_path))
@@ -383,6 +388,11 @@ def render_pdf(
     for key in order:
         fn = renderers.get(key)
         if fn:
+            fn()
+    # Safety net: append any populated section the layout's `order` forgot (renderers no-op
+    # when empty), so real CV data is never silently dropped.
+    for key, fn in renderers.items():
+        if key not in order:
             fn()
 
     out_path.parent.mkdir(parents=True, exist_ok=True)

@@ -7,6 +7,7 @@ order:
   - projects        # studio + academic projects above work experience (junior)
   - experience
   - education
+  - certs           # courses/certifications (e.g. BIM con Revit), near education
   - licensure
 labels:
   projects:
