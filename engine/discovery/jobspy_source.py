@@ -83,7 +83,7 @@ def _scrape(
         is_remote=is_remote,
         hours_old=hours_old,
     )
-    if site == "indeed":
+    if site == "indeed" and country_indeed:
         kwargs["country_indeed"] = country_indeed
     if site == "linkedin":
         kwargs["linkedin_fetch_description"] = fetch_desc
@@ -97,7 +97,9 @@ def fetch(cfg: dict, search_terms: list[str]) -> dict[str, list[Job]]:
     results_wanted = int(cfg.get("results_wanted", 25))
     hours_old = int(cfg.get("hours_old", 168))
     is_remote = bool(cfg.get("is_remote", True))
-    country_indeed = cfg.get("country_indeed", "USA")
+    # No hardcoded US bias: the Indeed country comes from sources.yaml (each domain pack sets its
+    # own; architecture → Ecuador). Empty → don't pin Indeed to a country.
+    country_indeed = cfg.get("country_indeed") or ""
     linkedin_cap = int(cfg.get("linkedin_cap", 200))
     fetch_desc = bool(cfg.get("linkedin_fetch_description", False))
 
