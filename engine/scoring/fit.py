@@ -124,25 +124,29 @@ def score_job(job: dict, criteria: Criteria, learnings: list[dict] | None = None
     title_pad = f" {title_l} "
     cy = criteria.candidate_years
     stretch_re = _build_stretch_re(criteria.stretch_terms)
-    if any(_has(title_l, t) for t in criteria.junior_terms):
+    # Only treat a junior title as under-qualified when the candidate isn't TARGETING junior roles.
+    # A domain that lists e.g. "junior architect" as a target role wants those postings, so the
+    # junior DQ must not fire on them (while a senior data candidate still rejects "Junior …").
+    targets_junior = any(jt in rt for rt in role_terms for jt in criteria.junior_terms)
+    if not targets_junior and any(_has(title_l, t) for t in criteria.junior_terms):
         disq = True
         reasons.append("junior/intern level (under-qualified)")
     elif criteria.exclude_exec and any(_has(title_pad, t) for t in criteria.exec_terms):
         disq = True
         knockouts.append("over-qualified (exec/management role)")
         reasons.append("exec/management title — over-qualified for an IC track")
-    elif stretch_re and stretch_re.search(title):
+    elif stretch_re and (stretch_m := stretch_re.search(title)):
+        term = stretch_m.group(0).lower()  # the actual matched stretch title (not a fixed label)
         if cy and cy < criteria.stretch_min_years:
             score -= 12
             soft_cap = min(soft_cap, stretch_cap)  # keep it out of the shortlist
-            knockouts.append(f"rol staff/principal (suele pedir +{criteria.stretch_min_years} años)")
+            knockouts.append(f"rol {term} (suele pedir +{criteria.stretch_min_years} años)")
             reasons.append(
-                f"staff/principal title — typically wants ~{criteria.stretch_min_years}+ yrs "
-                f"(you have ~{cy})"
+                f"{term} title — typically wants ~{criteria.stretch_min_years}+ yrs (you have ~{cy})"
             )
         else:
             score += 6
-            reasons.append("staff/principal seniority")
+            reasons.append(f"{term} seniority")
     elif any(_has(title_l, t.strip()) for t in [s.strip() for s in criteria.seniority]) or any(
         _has(title_l, t) for t in criteria.senior_terms
     ):

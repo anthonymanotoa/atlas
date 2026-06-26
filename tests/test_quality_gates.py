@@ -129,7 +129,7 @@ def test_staff_title_is_a_stretch_not_a_bonus():
     senior = score_job(_remote_job("Senior Data Scientist", "python sql. 4+ years."), crit)
     assert senior.score >= crit.shortlist_threshold  # realistic → shortlistable
     assert staff.score < crit.shortlist_threshold  # stretch → browse-only, not shortlisted
-    assert any("staff/principal" in k for k in staff.knockouts)
+    assert any("staff" in k for k in staff.knockouts)  # label derives from the matched term
 
 
 def test_large_years_gap_softcaps_even_a_senior_title():
