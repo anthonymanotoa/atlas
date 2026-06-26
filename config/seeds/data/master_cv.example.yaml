@@ -18,6 +18,13 @@ basics:
   linkedin: "linkedin.com/in/example"
   github: "github.com/example"
   website: "example.com"
+  # Outreach voice — used when drafting cover letters / messages. Optional: if omitted, the
+  # drafts fall back to your `label` above. Fill it for sharper, on-voice outreach.
+  pitch:
+    identity_line: "a senior data scientist moving deeper into AI/ML"
+    role_noun: "data scientist / AI engineer"
+    impact_domain: "experimentation and analytics for high-growth e-commerce"
+    value_verb: "own"
   summary: >
     Senior data scientist with 8+ years turning messy data into shipped products. Replace this
     with a truthful 2–3 sentence summary of who you are and the impact you have had.

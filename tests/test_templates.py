@@ -34,6 +34,8 @@ def test_linkedin_note_respects_180_char_cap():
 
 
 def test_skills_phrase_forms():
-    assert _skills_phrase([]) == "data science and analytics"
+    assert _skills_phrase([]) == "my core skills"  # domain-neutral fallback
+    assert _skills_phrase([], language="es") == "mis competencias clave"
     assert _skills_phrase(["python"]) == "Python"
     assert _skills_phrase(["python", "sql", "aws"]) == "Python, SQL and AWS"  # Oxford-style, n=3
+    assert _skills_phrase(["AutoCAD", "Revit"]) == "AutoCAD and Revit"  # preserves given casing
