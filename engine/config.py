@@ -32,6 +32,8 @@ class Criteria(BaseModel):
     remote_required: bool = True
     locations_allowed: list[str] = Field(default_factory=lambda: ["worldwide"])
     languages: list[str] = Field(default_factory=lambda: ["en", "es"])
+    language_hard: bool = False  # if True, a confidently-detected off-language posting is
+    # disqualified (not just down-ranked) — for a single-language seeker (e.g. Spanish-only)
     salary_floor_usd: float = 0.0
     salary_hard: bool = False  # soft by default
     must_haves: list[str] = Field(default_factory=list)
@@ -100,6 +102,14 @@ def load_criteria() -> Criteria:
     meta, prose = _split_frontmatter(path.read_text())
     meta["prose"] = prose
     return Criteria(**meta)
+
+
+def default_language() -> str:
+    """The profile's primary output language for generated CVs / messages — the first entry of
+    criteria.languages (e.g. 'es' for a Spanish-only profile), defaulting to 'en'. Used so a
+    profile generates in its own language without the caller passing --language every time."""
+    langs = load_criteria().languages
+    return langs[0] if langs else "en"
 
 
 # ── companies (ATS registry) ─────────────────────────────────────────────────

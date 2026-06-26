@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import engine.paths as paths
-from engine.config import load_master_cv, load_ontology
+from engine.config import default_language, load_master_cv, load_ontology
 from engine.cv import parse_check, render, tailor
 from engine.db.models import DB
 
@@ -36,7 +36,7 @@ def render_cv_files(
     db: DB,
     job_id: str,
     *,
-    language: str = "en",
+    language: str | None = None,
     cv_override: dict | None = None,
     make_pdf: bool = True,
 ) -> tuple[Path, Path | None, tailor.TailorResult]:
@@ -45,6 +45,7 @@ def render_cv_files(
 
     This is the shared core of ``build_for_job`` and is also used to *self-heal* a download
     when the stored file went missing (regenerating it from the current master CV)."""
+    language = language or default_language()  # profile's own language unless caller overrides
     if language not in ALLOWED_LANGUAGES:
         raise ValueError(f"unsupported language {language!r}; allowed: {sorted(ALLOWED_LANGUAGES)}")
     job = db.get_job(job_id)
@@ -84,12 +85,13 @@ def build_for_job(
     db: DB,
     job_id: str,
     *,
-    language: str = "en",
+    language: str | None = None,
     cv_override: dict | None = None,
     make_pdf: bool = True,
 ) -> BuildResult:
     """Generate a tailored, parse-safe CV for `job_id`. `cv_override` lets the brain
     pass an LLM-reworded (still truthful) CV dict instead of the deterministic one."""
+    language = language or default_language()  # resolve once; pass the concrete value downstream
     docx_path, pdf_path, result = render_cv_files(
         db, job_id, language=language, cv_override=cv_override, make_pdf=make_pdf
     )

@@ -160,7 +160,7 @@ class InterviewerBody(BaseModel):
 
 
 class PrepLangBody(BaseModel):
-    language: Literal["en", "es"] = "en"
+    language: Literal["en", "es"] | None = None  # None → the profile's own language
 
 
 class PortfolioBody(BaseModel):
@@ -288,14 +288,16 @@ def api_mark_applied(job_id: str, db: DB = Depends(get_db)):
 
 @app.post("/api/jobs/{job_id}/prep", dependencies=[Depends(require_trusted_origin)])
 def api_prep(job_id: str, body: PrepBody, db: DB = Depends(get_db)):
+    from engine.config import default_language
     from engine.cv.build import build_for_job
     from engine.outreach.build import build_outreach, write_package
 
     job = db.get_job(job_id)
     if not job:
         raise HTTPException(404, "job not found")
-    # Create the application in the posting's language (es if the offer is in Spanish, else en).
-    language = body.language or ("es" if job.get("language") == "es" else "en")
+    # Generate in the language the body requests, else the PROFILE's own language (so a
+    # Spanish-only profile always produces its CV/messages in Spanish, not the offer's language).
+    language = body.language or default_language()
     cv = build_for_job(db, job_id, language=language)
     build_outreach(db, job_id, language=language)
     write_package(db, job_id, language=language)
@@ -399,7 +401,9 @@ def api_cv_download(job_id: str, version_id: int, fmt: str = "docx", db: DB = De
     version = next((v for v in db.cv_versions_for(job_id) if v["id"] == version_id), None)
     if not version:
         raise HTTPException(404, "cv version not found")
-    language = version.get("language") or "en"
+    from engine.config import default_language
+
+    language = version.get("language") or default_language()
     p = _outbox_safe(version.get("path_pdf") if fmt == "pdf" else version.get("path_docx"))
 
     # Self-heal: a CV file can be missing (an older prep whose PDF render failed, an outbox

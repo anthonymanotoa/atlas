@@ -42,6 +42,9 @@ locations_allowed:
 languages:
   - es
   - en
+language_hard: false            # true = DESCARTAR ofertas en otro idioma (no solo bajarlas). Útil
+                                # si NO hablas inglés: pon languages: [es] y language_hard: true
+                                # para ver solo ofertas en español.
 must_haves: []                  # entry-level friendly: do not hard-require any one skill
 deal_breakers:                  # disambiguate BUILDING architect from IT/"architect" postings
   - software architect

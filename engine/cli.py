@@ -186,7 +186,7 @@ def top(
 @app.command()
 def tailor(
     job_id: str,
-    language: str = typer.Option("en", help="CV language: en | es"),
+    language: str | None = typer.Option(None, help="CV language: en | es (def: idioma del perfil)"),
     pdf: bool = typer.Option(True, help="Also render a PDF (native, via reportlab)."),
 ) -> None:
     """Generate a parse-safe, JD-tailored CV for a job (DOCX + optional PDF)."""
@@ -266,7 +266,10 @@ def import_cv(
 
 
 @app.command()
-def outreach(job_id: str, language: str = typer.Option("en", help="en | es")) -> None:
+def outreach(
+    job_id: str,
+    language: str | None = typer.Option(None, help="en | es (def: idioma del perfil)"),
+) -> None:
     """Draft all outreach variants for a job (cover/recruiter/HM/referral/cold/note)."""
     from engine.outreach.build import build_outreach
 
@@ -278,7 +281,10 @@ def outreach(job_id: str, language: str = typer.Option("en", help="en | es")) ->
 
 
 @app.command()
-def prep(job_id: str, language: str = typer.Option("en", help="en | es")) -> None:
+def prep(
+    job_id: str,
+    language: str | None = typer.Option(None, help="en | es (def: idioma del perfil)"),
+) -> None:
     """Full prep for one job: tailor CV → draft outreach → write the send-ready package."""
     from engine.cv.build import build_for_job
     from engine.outreach.build import build_outreach, write_package
@@ -328,7 +334,7 @@ def referrals() -> None:
 @app.command()
 def brain(
     limit: int = typer.Option(8, help="Max jobs to fully prepare this run."),
-    language: str = typer.Option("en", help="CV/outreach language: en | es"),
+    language: str | None = typer.Option(None, help="CV/outreach language: en | es (def: perfil)"),
     discover: bool = typer.Option(True, help="Run discovery first."),
     json_out: bool = typer.Option(
         False, "--json", help="Emit the run summary as JSON (for the orchestrator)."
@@ -598,7 +604,10 @@ def interview_list() -> None:
 
 
 @interview_app.command("prep")
-def interview_prep(interview_id: int, language: str = typer.Option("en", help="en | es")) -> None:
+def interview_prep(
+    interview_id: int,
+    language: str | None = typer.Option(None, help="en | es (def: idioma del perfil)"),
+) -> None:
     """Generate the prep doc (likely questions + STAR scaffolds) for an interview."""
     from engine.interview.interview_prep import gen_prep_doc
 

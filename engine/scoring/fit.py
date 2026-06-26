@@ -190,11 +190,17 @@ def score_job(job: dict, criteria: Criteria, learnings: list[dict] | None = None
         score -= min(len(ko) * 5, 10)
         reasons.append(f"knockout flags: {', '.join(ko)}")
 
-    # 8. Off-target language — use the language stored at discovery, else detect now.
+    # 8. Off-target language — use the language stored at discovery, else detect now. Soft
+    #    down-rank by default; a hard single-language seeker (criteria.language_hard) disqualifies
+    #    a confidently-detected off-language posting outright. Undetected postings (lang is None)
+    #    are never filtered — too little signal (e.g. a description-less LinkedIn listing).
     lang = job.get("language") or detect_language(desc or title)
     if lang and lang not in criteria.languages:
         score -= 25
         reasons.append(f"likely {lang}-language posting (off-target)")
+        if criteria.language_hard:
+            disq = True
+            knockouts.append(f"posting en otro idioma ({lang})")
 
     # 9. Freshness — relatively-new postings only; stale ones downranked (DQ if hard).
     if criteria.max_age_days:
