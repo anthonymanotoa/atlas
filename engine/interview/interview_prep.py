@@ -10,7 +10,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import engine.paths as paths
-from engine.config import load_interview_topics, load_master_cv, load_ontology
+from engine.config import default_language, load_interview_topics, load_master_cv, load_ontology
 from engine.cv.match import match_score
 from engine.db.models import DB
 
@@ -157,8 +157,8 @@ def _star_evidence(cv: dict, lang: str) -> list[str]:
     return out
 
 
-def gen_prep_doc(db: DB, interview_id: int, language: str = "en") -> Path:
-    lang = "es" if language == "es" else "en"
+def gen_prep_doc(db: DB, interview_id: int, language: str | None = None) -> Path:
+    lang = "es" if (language or default_language()) == "es" else "en"
     h = _HEAD[lang]
     iv = db.get_interview(interview_id)
     if not iv:

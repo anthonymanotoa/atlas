@@ -10,7 +10,7 @@ import json
 from pathlib import Path
 
 import engine.paths as paths
-from engine.config import load_master_cv
+from engine.config import default_language, load_master_cv
 from engine.cv.tailor import detect_ats
 from engine.db.models import DB
 from engine.outreach.templates import Draft, build_package
@@ -44,7 +44,8 @@ def _apply_method(job: dict) -> str:
     return "email"
 
 
-def build_outreach(db: DB, job_id: str, language: str = "en") -> list[Draft]:
+def build_outreach(db: DB, job_id: str, language: str | None = None) -> list[Draft]:
+    language = language or default_language()  # profile's own language unless caller overrides
     job = db.get_job(job_id)
     if not job:
         raise ValueError(f"job {job_id} not found")
