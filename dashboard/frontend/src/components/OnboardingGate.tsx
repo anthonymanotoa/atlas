@@ -10,13 +10,23 @@ const SEV: Record<string, { variant: "destructive" | "warning" | "secondary"; la
   low: { variant: "secondary", label: "Baja" },
 };
 
-const LINKEDIN_CHECKLIST = [
-  "Titular orientado a IA/ML (no solo 'Data').",
-  "Sección 'Acerca de' con tu propuesta de valor y foco en IA.",
-  "Experiencia con logros cuantificados (mismos que el CV).",
-  "Activa 'Open to work' (visible solo para reclutadores).",
-  "Skills y aptitudes alineadas con el CV.",
-];
+// Domain-aware checklist: when the backend knows the repositioning target we name it,
+// otherwise we fall back to neutral phrasing so no persona is hardcoded.
+function linkedinChecklist(target: string): string[] {
+  const titular = target
+    ? `Titular orientado a ${target} (no solo tu área genérica).`
+    : "Titular orientado a tu rol objetivo (no solo tu área genérica).";
+  const acercaDe = target
+    ? `Sección 'Acerca de' con tu propuesta de valor y foco en ${target}.`
+    : "Sección 'Acerca de' con tu propuesta de valor y tu foco profesional.";
+  return [
+    titular,
+    acercaDe,
+    "Experiencia con logros cuantificados (mismos que el CV).",
+    "Activa 'Open to work' (visible solo para reclutadores).",
+    "Skills y aptitudes alineadas con el CV.",
+  ];
+}
 
 // P1-G: the first step is adapting the CV + LinkedIn. The board stays hidden until
 // the user marks onboarding complete for the active profile. The login (profile
@@ -32,6 +42,10 @@ export function OnboardingGate({
 }) {
   const { audit, cv_present } = status;
   const highs = audit.summary.high;
+  // "hacia <target_label>" when the profile has a repositioning target, else neutral.
+  const target = (status.target_label || "").trim();
+  const towardLabel = target ? `hacia ${target}` : "hacia tu rol objetivo";
+  const checklist = linkedinChecklist(target);
 
   async function complete() {
     await api.completeOnboarding();
@@ -117,7 +131,7 @@ export function OnboardingGate({
             Corré <code className="font-mono">atlas advise</code> y usá la guía{" "}
             <b className="text-foreground">cv-linkedin-advisor</b> (
             <code className="font-mono">advisor/cv_linkedin_advisor.md</code>) en Claude para
-            reposicionar tu CV y LinkedIn hacia IA/ML de forma veraz. Aplicá los cambios en tu{" "}
+            reposicionar tu CV y LinkedIn {towardLabel} de forma veraz. Aplicá los cambios en tu{" "}
             <code className="font-mono">master_cv.yaml</code> y volvé a “Re-evaluar”.
           </div>
         </Card>
@@ -125,7 +139,7 @@ export function OnboardingGate({
         <div className="mt-5">
           <div className="mb-2 text-sm font-semibold">Checklist de LinkedIn</div>
           <ul className="space-y-1.5">
-            {LINKEDIN_CHECKLIST.map((item) => (
+            {checklist.map((item) => (
               <li key={item} className="flex items-start gap-2 text-sm text-muted-foreground">
                 <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-success/70" />
                 {item}
