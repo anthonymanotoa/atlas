@@ -121,10 +121,9 @@ def _proof_section_html(cv: dict, proof_source: str) -> str:
                 + "</div>"
             )
         for p in projects:
-            parts.append(
-                f"<div class='repo'><span class='h'>{_e(p.get('name'))}</span>"
-                f" — {_e(p.get('description'))}</div>"
-            )
+            desc = p.get("description")
+            tail = f" — {_e(desc)}" if desc else ""  # no dangling em-dash when no description
+            parts.append(f"<div class='repo'><span class='h'>{_e(p.get('name'))}</span>{tail}</div>")
         return "".join(parts)
     # default: github proof
     repos = _github_repos(_gh_handle(b.get("github")))
@@ -140,7 +139,7 @@ def _proof_section_html(cv: dict, proof_source: str) -> str:
     return "".join(parts)
 
 
-def _render_html(cv: dict, proof_html: str = "") -> str:
+def _render_html(cv: dict, proof_html: str = "", proof_source: str = "") -> str:
     b = cv.get("basics", {}) or {}
     parts = [
         "<!doctype html><html lang='en'><head><meta charset='utf-8'>",
@@ -183,8 +182,9 @@ def _render_html(cv: dict, proof_html: str = "") -> str:
                 parts.append("<ul>" + "".join(f"<li>{_e(h)}</li>" for h in hls) + "</ul>")
             parts.append("</div>")
 
+    # For visual_gallery the proof block IS the project gallery — don't list projects twice.
     projects = cv.get("projects") or []
-    if projects:
+    if projects and proof_source != "visual_gallery":
         parts.append("<h2>Proyectos</h2>")
         for p in projects:
             parts.append(
@@ -236,5 +236,5 @@ def generate_portfolio(
     out_dir = Path(output_dir) if output_dir else (paths.OUTBOX_DIR / f"portfolio_{version}")
     out_dir.mkdir(parents=True, exist_ok=True)
     path = out_dir / "index.html"
-    path.write_text(_render_html(cv, proof_html), encoding="utf-8")
+    path.write_text(_render_html(cv, proof_html, proof_source), encoding="utf-8")
     return path

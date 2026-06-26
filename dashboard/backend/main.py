@@ -715,11 +715,10 @@ def api_onboarding(db: DB = Depends(get_db)):
     cv = load_master_cv()
     criteria = load_criteria()
     # Domain + a short target label so the UI shows domain-appropriate copy instead of a
-    # hardcoded "reposition toward AI/ML". target_label is the repositioning target if the
-    # profile opted into one, else the CV headline; empty → the UI uses neutral phrasing.
-    target_label = (
-        criteria.repositioning_target or (cv.get("basics") or {}).get("label") or ""
-    ).strip()
+    # hardcoded "reposition toward AI/ML". target_label is ONLY the profile's opted-in
+    # repositioning target; empty → the UI uses neutral "hacia tu rol objetivo" (never the CV
+    # headline, which would read as "reposition toward <your own current title>").
+    target_label = criteria.repositioning_target.strip()
     return {
         "complete": db.meta_get("onboarding_complete") == "1",
         "profile": paths.PROFILE_ID or profiles.OWNER_ID,

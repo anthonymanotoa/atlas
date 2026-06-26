@@ -172,6 +172,16 @@ def test_none_proof_section_is_empty():
     assert _proof_section_html(DATA_CV, "none").strip() == ""
 
 
+def test_visual_gallery_does_not_duplicate_projects(tmp_path):
+    # The visual proof block lists the projects; the standard "Proyectos" section must be
+    # skipped so each project appears exactly once (not in both).
+    path = generate_portfolio(
+        ARCH_CV, version="dedup", output_dir=tmp_path, proof_source="visual_gallery"
+    )
+    html = path.read_text()
+    assert html.count("Rehabilitación patrimonial") == 1
+
+
 def test_generate_portfolio_visual_gallery_does_not_fetch_github(tmp_path, monkeypatch):
     import engine.portfolio.builder as builder
 

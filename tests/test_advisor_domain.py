@@ -37,6 +37,20 @@ def test_core_terms_come_from_criteria_not_hardcoded_data():
     assert "python" not in core_finding.message.lower()
 
 
+def test_core_keyword_covered_by_ontology_alias_not_flagged(monkeypatch):
+    # A core term whose ALIAS appears in the CV (per the ontology) must not be reported missing.
+    import engine.advisor as adv
+
+    monkeypatch.setattr(adv, "load_ontology", lambda: {"machine learning": ["ml"]})
+    cv = {
+        "basics": {"email": "a@b.c", "linkedin": "x"},
+        "skills": ["ML", "Python"],
+        "experience": [{"title": "A", "company": "B", "highlights": ["Shipped 5 models"]}],
+    }
+    findings = adv.audit_cv(cv, Criteria(core_keywords=["machine learning"], repositioning_target=""))
+    assert not any("núcleo" in f.message for f in findings)  # covered via alias 'ml'
+
+
 def test_data_profile_keeps_repositioning_nudge():
     data = Criteria(repositioning_target="AI/ML", core_keywords=["python", "machine learning", "llm"])
     cv = {

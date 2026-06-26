@@ -155,10 +155,18 @@ def audit_cv(master: dict, criteria: Criteria | None = None) -> list[Finding]:
             )
 
     # 6. Core keyword coverage for the profile's target domain (from criteria.core_keywords).
+    # A term is covered if it OR any of its ontology aliases appears in the CV (case-insensitive).
     ont = load_ontology()
     cv_low = blob.lower()
+    forms: dict[str, set[str]] = {}
+    for canon, aliases in ont.items():
+        group = {canon.lower(), *(a.lower() for a in aliases)}
+        for surface in group:
+            forms[surface] = group
     missing = [
-        c for c in criteria.core_keywords if c.lower() not in cv_low and c.lower() not in ont.get(c, [])
+        c
+        for c in criteria.core_keywords
+        if not any(form in cv_low for form in forms.get(c.lower(), {c.lower()}))
     ]
     if missing:
         f.append(

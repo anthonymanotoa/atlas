@@ -35,6 +35,18 @@ def test_architecture_layout_projects_before_experience_and_licensure(tmp_path):
     assert texts.index("HABILIDADES") > texts.index("EXPERIENCIA")
 
 
+def test_empty_proof_source_normalizes_to_none(tmp_path, monkeypatch):
+    # An explicitly-empty proof_source must NOT be treated as the github default (which would
+    # trigger a surprise live api.github.com fetch); it means "no proof section".
+    import engine.paths as paths
+    from engine.config import load_cv_layout
+
+    p = tmp_path / "cv_layout.yaml"
+    p.write_text('proof_source: ""\norder: [summary]\n')
+    monkeypatch.setattr(paths, "CV_LAYOUT_PATH", p)
+    assert load_cv_layout()["proof_source"] == "none"
+
+
 def test_default_layout_keeps_legacy_order(tmp_path):
     out = render_docx(BASE, tmp_path / "cv.docx", language="en", layout=None)
     texts = _headings(out)

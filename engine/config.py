@@ -148,6 +148,10 @@ def load_cv_layout() -> dict:
     data = yaml.safe_load(path.read_text()) or {}
     layout = dict(_DEFAULT_CV_LAYOUT)
     layout.update({k: v for k, v in data.items() if v is not None})
+    # An explicitly-empty proof_source means "no proof section" — never coerce it to the github
+    # default (which would fire a surprise live api.github.com fetch).
+    if not str(layout.get("proof_source") or "").strip():
+        layout["proof_source"] = "none"
     return layout
 
 
