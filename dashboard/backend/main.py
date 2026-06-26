@@ -710,12 +710,21 @@ def api_pending_searches(db: DB = Depends(get_db)):
 @app.get("/api/onboarding")
 def api_onboarding(db: DB = Depends(get_db)):
     from engine.advisor import audit_dict
-    from engine.config import load_master_cv
+    from engine.config import load_criteria, load_master_cv
 
     cv = load_master_cv()
+    criteria = load_criteria()
+    # Domain + a short target label so the UI shows domain-appropriate copy instead of a
+    # hardcoded "reposition toward AI/ML". target_label is the repositioning target if the
+    # profile opted into one, else the CV headline; empty → the UI uses neutral phrasing.
+    target_label = (
+        criteria.repositioning_target or (cv.get("basics") or {}).get("label") or ""
+    ).strip()
     return {
         "complete": db.meta_get("onboarding_complete") == "1",
         "profile": paths.PROFILE_ID or profiles.OWNER_ID,
+        "domain": profiles.domain_of(paths.PROFILE_ID),
+        "target_label": target_label,
         "cv_present": bool(cv),
         "audit": audit_dict(cv),
     }

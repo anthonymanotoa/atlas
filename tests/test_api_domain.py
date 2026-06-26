@@ -1,0 +1,23 @@
+"""The dashboard API exposes the active profile's domain + target label so the UI can drop
+its hardcoded 'reposition toward AI/ML' copy and read the profile instead."""
+
+from __future__ import annotations
+
+from fastapi.testclient import TestClient
+
+
+def test_onboarding_exposes_domain_and_target(atlas_app):
+    with TestClient(atlas_app) as client:
+        data = client.get("/api/onboarding").json()
+    assert data.get("domain") == "data"  # legacy/default profile resolves to 'data'
+    assert "target_label" in data  # short label for "toward X" copy (may be empty)
+
+
+def test_profiles_entries_carry_domain(atlas_app):
+    # list_profiles entries include a 'domain' key once any profile exists; the route shape
+    # always includes the 'active' pointer.
+    with TestClient(atlas_app) as client:
+        data = client.get("/api/profiles").json()
+    assert "profiles" in data and "active" in data
+    for p in data["profiles"]:
+        assert "domain" in p
