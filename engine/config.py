@@ -48,6 +48,34 @@ class Criteria(BaseModel):
     candidate_years: int = 0  # your real years of experience; 0 = off. Powers realistic
     # years-gap scoring (a "12+ yrs" posting is flagged + down-ranked when you have ~5) and
     # demotes Staff/Principal titles (which usually want 8+ yrs) instead of bonusing them.
+    # ── Title-ladder vocabulary (per-domain; defaults preserve the data/IC-track behavior) ──
+    # These were hardcoded constants in engine/scoring/fit.py; promoting them to the profile
+    # lets non-data domains redefine seniority (e.g. architecture: "Principal Architect" is a
+    # normal level, not an over-qualified stretch; "Director of Design" is a valid target).
+    senior_terms: list[str] = Field(default_factory=lambda: ["senior", "sr.", "sr ", "lead"])
+    exec_terms: list[str] = Field(
+        default_factory=lambda: [
+            "director", "vp ", "vp,", "vice president", "head of", "chief", " cto", " ceo",
+            " cfo", " coo", "svp", "evp", "c-level", "managing director",
+        ]
+    )
+    junior_terms: list[str] = Field(
+        default_factory=lambda: [
+            "junior", "jr.", "jr ", "intern", "internship", "entry level", "entry-level",
+            "graduate", "trainee", "becario", "practicante", "working student", "apprentice",
+        ]
+    )
+    stretch_terms: list[str] = Field(
+        default_factory=lambda: ["staff", "principal", "distinguished", "fellow"]
+    )  # titles that usually want many years; penalized below stretch_min_years. Empty = no penalty.
+    stretch_min_years: int = 8  # below this many years, a stretch-title posting is down-ranked
+    # ── Positioning / advisor (per-domain; empty defaults are domain-neutral) ──
+    repositioning_target: str = ""  # e.g. "AI/ML"; empty = advisor won't push any re-framing
+    core_keywords: list[str] = Field(default_factory=list)  # must-appear terms the CV audit checks
+    # ── CV tailoring tuning (promoted from engine/cv constants; defaults unchanged) ──
+    top_jd_keywords: int = 25  # how many JD keywords to extract/rank
+    max_skills: int = 18  # cap on rendered skills
+    max_highlights_per_role: int = 4  # cap on highlights per experience entry
     prose: str = ""  # the Markdown body (for the LLM)
 
     @property
