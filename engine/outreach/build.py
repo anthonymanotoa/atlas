@@ -24,6 +24,7 @@ def _candidate(master: dict) -> dict:
         "headline": b.get("label", ""),
         "linkedin": b.get("linkedin", ""),
         "one_liner": b.get("summary", ""),
+        "pitch": b.get("pitch") or {},  # outreach voice (identity/role/impact/value); optional
     }
 
 

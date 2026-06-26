@@ -596,14 +596,19 @@ def api_portfolio_research():
     """Curated, verified reference portfolios + the patterns behind them + a detailed,
     personalized LLM prompt (built from the user's CV) to commission their own portfolio.
     Everything the user needs to review the examples and brief an LLM, in one place."""
-    from engine.config import load_master_cv
+    from engine.config import load_criteria, load_cv_layout, load_master_cv, load_ontology
     from engine.portfolio.peer_examples import PEER_EXAMPLES, PORTFOLIO_PATTERNS
     from engine.portfolio.prompt import build_portfolio_prompt
 
     return {
         "examples": PEER_EXAMPLES,
         "patterns": PORTFOLIO_PATTERNS,
-        "prompt": build_portfolio_prompt(load_master_cv()),
+        "prompt": build_portfolio_prompt(
+            load_master_cv(),
+            layout=load_cv_layout(),
+            criteria=load_criteria(),
+            ontology=load_ontology(),
+        ),
     }
 
 
@@ -705,12 +710,20 @@ def api_pending_searches(db: DB = Depends(get_db)):
 @app.get("/api/onboarding")
 def api_onboarding(db: DB = Depends(get_db)):
     from engine.advisor import audit_dict
-    from engine.config import load_master_cv
+    from engine.config import load_criteria, load_master_cv
 
     cv = load_master_cv()
+    criteria = load_criteria()
+    # Domain + a short target label so the UI shows domain-appropriate copy instead of a
+    # hardcoded "reposition toward AI/ML". target_label is ONLY the profile's opted-in
+    # repositioning target; empty → the UI uses neutral "hacia tu rol objetivo" (never the CV
+    # headline, which would read as "reposition toward <your own current title>").
+    target_label = criteria.repositioning_target.strip()
     return {
         "complete": db.meta_get("onboarding_complete") == "1",
         "profile": paths.PROFILE_ID or profiles.OWNER_ID,
+        "domain": profiles.domain_of(paths.PROFILE_ID),
+        "target_label": target_label,
         "cv_present": bool(cv),
         "audit": audit_dict(cv),
     }

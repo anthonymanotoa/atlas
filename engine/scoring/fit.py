@@ -16,46 +16,22 @@ from engine.config import Criteria
 from engine.lang import detect_language
 from engine.normalize import norm_company
 
-# Senior IC track (good fit). NOTE: director/head/chief live in EXEC_TERMS, and
-# staff/principal live in STRETCH_TERMS — neither earns a plain seniority bonus, because
-# both are over-qualified for a mid/senior IC pivoting into AI.
-SENIOR_TERMS = ("senior", "sr.", "sr ", "lead")
-# "Stretch" seniority: Staff/Principal/Distinguished/Fellow IC roles normally want 8–12+
-# years. For a candidate with fewer years they're a long shot, so they're flagged and
-# down-ranked rather than bonused (this is the "Staff Engineer wants 15 yrs, I have 5" case).
-_STRETCH_RE = re.compile(r"\b(staff|principal|distinguished|fellow)\b", re.I)
-STRETCH_MIN_YEARS = 8  # below this many years of experience, Staff/Principal is a stretch
-EXEC_TERMS = (
-    "director",
-    "vp ",
-    "vp,",
-    "vice president",
-    "head of",
-    "chief",
-    " cto",
-    " ceo",
-    " cfo",
-    " coo",
-    "svp",
-    "evp",
-    "c-level",
-    "managing director",
-)
-JUNIOR_TERMS = (
-    "junior",
-    "jr.",
-    "jr ",
-    "intern",
-    "internship",
-    "entry level",
-    "entry-level",
-    "graduate",
-    "trainee",
-    "becario",
-    "practicante",
-    "working student",
-    "apprentice",
-)
+# Title-ladder vocabulary (senior / exec / junior / stretch) lives on the per-profile Criteria
+# model (engine/config.py) so non-data domains can redefine it — e.g. in architecture
+# "Principal Architect" is a normal level (not an over-qualified stretch) and "Director of
+# Design" is a valid target. score_job reads criteria.{junior,exec,senior,stretch}_terms.
+
+
+def _build_stretch_re(stretch_terms: list[str]) -> re.Pattern[str] | None:
+    """Word-boundary regex matching any of the profile's 'stretch' seniority titles.
+
+    Returns None when the profile lists no stretch terms (e.g. architecture), so the stretch
+    penalty is skipped entirely rather than firing on a normal senior title."""
+    terms = [t.strip() for t in stretch_terms if t.strip()]
+    if not terms:
+        return None
+    return re.compile(r"\b(" + "|".join(re.escape(t) for t in terms) + r")\b", re.I)
+
 
 _YEARS = re.compile(r"(\d{1,2})\s*\+?\s*(?:years|yrs|años)", re.I)
 
@@ -144,30 +120,35 @@ def score_job(job: dict, criteria: Criteria, learnings: list[dict] | None = None
 
     # 3. Seniority fit — junior is under-qualified (DQ); exec is over-qualified (DQ when
     #    excluded); Staff/Principal is a "stretch" (over-qualified seniority) for a candidate
-    #    with fewer than STRETCH_MIN_YEARS of experience — flagged + down-ranked, not bonused.
+    #    with fewer than criteria.stretch_min_years of experience — flagged + down-ranked.
     title_pad = f" {title_l} "
     cy = criteria.candidate_years
-    if any(_has(title_l, t) for t in JUNIOR_TERMS):
+    stretch_re = _build_stretch_re(criteria.stretch_terms)
+    # Only treat a junior title as under-qualified when the candidate isn't TARGETING junior roles.
+    # A domain that lists e.g. "junior architect" as a target role wants those postings, so the
+    # junior DQ must not fire on them (while a senior data candidate still rejects "Junior …").
+    targets_junior = any(jt in rt for rt in role_terms for jt in criteria.junior_terms)
+    if not targets_junior and any(_has(title_l, t) for t in criteria.junior_terms):
         disq = True
         reasons.append("junior/intern level (under-qualified)")
-    elif criteria.exclude_exec and any(_has(title_pad, t) for t in EXEC_TERMS):
+    elif criteria.exclude_exec and any(_has(title_pad, t) for t in criteria.exec_terms):
         disq = True
         knockouts.append("over-qualified (exec/management role)")
         reasons.append("exec/management title — over-qualified for an IC track")
-    elif _STRETCH_RE.search(title):
-        if cy and cy < STRETCH_MIN_YEARS:
+    elif stretch_re and (stretch_m := stretch_re.search(title)):
+        term = stretch_m.group(0).lower()  # the actual matched stretch title (not a fixed label)
+        if cy and cy < criteria.stretch_min_years:
             score -= 12
             soft_cap = min(soft_cap, stretch_cap)  # keep it out of the shortlist
-            knockouts.append(f"rol staff/principal (suele pedir +{STRETCH_MIN_YEARS} años)")
+            knockouts.append(f"rol {term} (suele pedir +{criteria.stretch_min_years} años)")
             reasons.append(
-                f"staff/principal title — typically wants ~{STRETCH_MIN_YEARS}+ yrs "
-                f"(you have ~{cy})"
+                f"{term} title — typically wants ~{criteria.stretch_min_years}+ yrs (you have ~{cy})"
             )
         else:
             score += 6
-            reasons.append("staff/principal seniority")
+            reasons.append(f"{term} seniority")
     elif any(_has(title_l, t.strip()) for t in [s.strip() for s in criteria.seniority]) or any(
-        _has(title_l, t) for t in SENIOR_TERMS
+        _has(title_l, t) for t in criteria.senior_terms
     ):
         score += 10
         reasons.append("seniority matches")

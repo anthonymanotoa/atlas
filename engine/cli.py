@@ -255,7 +255,9 @@ def import_cv(
         )
         raise typer.Exit(1)
     draft_path.parent.mkdir(parents=True, exist_ok=True)
-    draft_path.write_text(build_draft(text))
+    from engine import profiles
+
+    draft_path.write_text(build_draft(text, domain=profiles.domain_of(paths.PROFILE_ID)))
     console.print(f"[green]✓[/] Draft written: {draft_path}")
     console.print(
         "  Next: ask Claude (Cowork) to map `_source_text` into the schema, review, then save as master_cv.yaml."
@@ -387,7 +389,7 @@ def advise(json_out: bool = typer.Option(False, "--json", help="Emit findings as
         console.print(f"  [{colors[x['severity']]}]●[/] [{x['area']}] {x['message']}")
         console.print(f"     → {x['suggestion']}")
     console.print(
-        "\nPara la mejora completa (IA-forward, LinkedIn), usa la guía "
+        "\nPara la mejora completa (CV + LinkedIn, según tu rol objetivo), usa la guía "
         "[bold]cv-linkedin-advisor[/] (advisor/cv_linkedin_advisor.md)."
     )
 
@@ -507,17 +509,22 @@ def profiles_init() -> None:
 def profiles_create(
     profile_id: str = typer.Argument(..., help="id corto: minúsculas, dígitos, '-' o '_'."),
     label: str | None = typer.Option(None, "--label", help="Nombre visible en el selector."),
+    domain: str = typer.Option(
+        "data", "--domain", help="Industria/dominio del perfil (selecciona su seed pack)."
+    ),
 ) -> None:
-    """Create a new profile seeded from the templates, ready to edit."""
+    """Create a new profile seeded from the templates for its domain, ready to edit."""
     from engine import profiles
 
     try:
-        res = profiles.create_profile(profile_id, label)
+        res = profiles.create_profile(profile_id, label, domain=domain)
     except ValueError as e:
         console.print(f"[red]✗[/] {e}")
         raise typer.Exit(2) from None
     verb = "Creado" if res["created"] else "Ya existía"
-    console.print(f"[green]✓[/] {verb} perfil [bold]{profile_id}[/] → {res['root']}")
+    console.print(
+        f"[green]✓[/] {verb} perfil [bold]{profile_id}[/] [dim]({res['domain']})[/] → {res['root']}"
+    )
     console.print(
         f"  Edita: profiles/{profile_id}/config/criteria.md · "
         f"profiles/{profile_id}/profile/master_cv.yaml"
@@ -537,7 +544,8 @@ def profiles_list() -> None:
     for p in rows:
         mark = "[green]●[/]" if p["id"] == active else " "
         owner = " [dim](dueño)[/]" if p.get("is_owner") else ""
-        console.print(f"  {mark} [bold]{p['id']}[/]{owner} — {p.get('label', '')}")
+        dom = f" [dim]· {p.get('domain', 'data')}[/]"
+        console.print(f"  {mark} [bold]{p['id']}[/]{owner} — {p.get('label', '')}{dom}")
 
 
 # ── interviews (P3-E) — manual entry + prep-doc generation ─────────────────────

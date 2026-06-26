@@ -197,7 +197,7 @@ atlas/
 │   ├── run_brain.py         ←   el pipeline completo (descubrir→puntuar→preparar→redactar)
 │   └── SKILL.md             ←   las instrucciones de la tarea programada de Cowork
 │
-├── advisor/                 ← Asesor de CV + LinkedIn (cómo mejorar tu perfil, reposicionar a IA)
+├── advisor/                 ← Asesor de CV + LinkedIn (cómo mejorar tu perfil hacia tu rol objetivo)
 │
 ├── dashboard/               ← El tablero web local
 │   ├── backend/main.py      ←   API en FastAPI que lee la BD y la sirve como JSON en localhost
@@ -277,15 +277,22 @@ contraseñas: es un *selector* de perfil, no un control de acceso (la app solo e
   el dueño.
 
 ```
-uv run atlas profiles list                            ver perfiles y cuál está activo
-uv run atlas profiles create <id> --label "Nombre"    crear un perfil nuevo (sembrado y listo para editar)
-uv run atlas --profile <id> <comando>                 correr un comando para un perfil concreto
-uv run atlas profiles init                            (una sola vez) migrar tus datos actuales al perfil "owner"
+uv run atlas profiles list                                  ver perfiles, dominio y cuál está activo
+uv run atlas profiles create <id> --label "Nombre" --domain <dominio>    crear un perfil nuevo
+uv run atlas --profile <id> <comando>                       correr un comando para un perfil concreto
+uv run atlas profiles init                                  (una sola vez) migrar tus datos al perfil "owner"
 ```
 
 > La primera vez, `./scripts/run.sh` corre `atlas profiles init` solo: mueve tus datos
 > actuales al perfil **owner** sin perder nada. Cada perfil nuevo edita su propio
 > `profiles/<id>/config/criteria.md` y `profiles/<id>/profile/master_cv.yaml`.
+
+> **Cualquier industria, no solo data.** Cada perfil tiene un **dominio** que elige su *seed pack*
+> (`config/seeds/<dominio>/`): la ontología de skills, los criterios, el orden del CV, los bancos
+> de entrevista y la voz del outreach se adaptan a esa industria. Vienen incluidos `data` (default)
+> y `architecture`; cualquier otro cae al pack neutro `default` y se edita a mano. Ejemplo:
+> `uv run atlas profiles create lucy --label "Lucy Paladines" --domain architecture`. Para añadir
+> una industria nueva, copia `config/seeds/default/` a `config/seeds/<tu-dominio>/` y edítalo.
 
 **Pruebas** (siempre vía RTK):
 

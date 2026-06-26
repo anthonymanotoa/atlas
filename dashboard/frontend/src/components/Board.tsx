@@ -109,7 +109,7 @@ function JobCard({
         {job.knockout_flags && job.knockout_flags.length > 0 && (
           <span
             className="inline-flex items-center text-warning"
-            title="Filtros del puesto (clearance/ciudadanía)"
+            title="Filtros del puesto (p. ej. requisitos de elegibilidad)"
           >
             <KnockoutIcon className="size-3" />
           </span>

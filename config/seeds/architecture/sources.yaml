@@ -1,0 +1,66 @@
+# Discovery source configuration — Architecture / AEC. Tuned for $0, low-volume, account-safe.
+# Architecture is a small-firm, portfolio-by-email industry: most roles never touch a corporate
+# ATS, and many on-site jobs are valid. So DON'T force remote-only here. Edit search_terms /
+# locations to taste. Keep volume modest so LinkedIn stays under its ~10-page (≈250 result)
+# rate-limit wall and you never need proxies.
+
+search_terms:
+  - architect
+  - architectural designer
+  - junior architect
+  - bim modeler
+  - revit modeler
+  - draftsperson
+  - architectural visualizer
+  - archviz artist
+
+# Direct ATS feeds (Greenhouse/Lever/Ashby/SmartRecruiters) — kept on, but expect THIN yield:
+# most AEC firms are small and hire by email, not via corporate ATS. The reliable spine here is
+# the specialist boards and human/relational channels, not ATS tokens.
+ats:
+  enabled: true
+
+# JobSpy aggregator. Indeed is rock-solid (no rate limit); LinkedIn is guest/no-login
+# (account-safe, IP-throttle only) and hard-capped. Google/ZipRecruiter omitted (broken).
+jobspy:
+  enabled: true
+  sites: [indeed, linkedin]
+  results_wanted: 25            # per site, per term
+  hours_old: 168               # last 7 days
+  is_remote: false             # architecture has on-site roles — do NOT filter them out
+  country_indeed: Ecuador      # Indeed requires a country; set to your local market
+  linkedin_fetch_description: false   # only hydrate full descriptions for shortlisted
+  linkedin_cap: 200            # stop well before the ~250 wall
+  linkedin_delay_ms: 2500      # pace between LinkedIn scrape calls (±20% jitter); slower = safer
+  google_search_term: ""       # left empty; Google Jobs is currently unreliable
+
+# Himalayas — free, no-auth, remote-first JSON API. Useful for the remote/nearshore BIM & archviz
+# lane only; on-site local roles will not appear here, so don't rely on it as primary.
+himalayas:
+  enabled: true
+  limit: 50
+
+# Adzuna — free official API (needs ADZUNA_APP_ID / ADZUNA_APP_KEY in .env). Multi-country
+# + salary data. Disabled until you add free keys; harmless to leave on (skips if unset).
+adzuna:
+  enabled: true
+  countries: [us, gb, es]
+  results_per_country: 20
+
+# Global pacing / safety knobs.
+limits:
+  per_source_timeout_s: 45
+  max_jobs_per_run: 1500
+
+# Per-domain httpx pacing (ATS feeds + free APIs via engine/discovery/http.py).
+# min_delay_ms = minimum spacing between requests to the same domain (±20% jitter).
+# Keys are matched as substrings of the request host. "Slower is fine, never banned."
+# NOTE: this does NOT cover the logged-in LinkedIn browsing done via Claude-in-Chrome —
+# that path is paced by the supervised skill's human-speed guardrails (docs/RATE_LIMITING.md).
+rate_limits:
+  greenhouse.io: { min_delay_ms: 400 }
+  lever.co: { min_delay_ms: 400 }
+  ashbyhq.com: { min_delay_ms: 400 }
+  smartrecruiters.com: { min_delay_ms: 400 }
+  himalayas.app: { min_delay_ms: 300 }
+  adzuna.com: { min_delay_ms: 500 }

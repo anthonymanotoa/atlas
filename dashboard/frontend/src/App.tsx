@@ -49,7 +49,14 @@ import { Toaster } from "./components/ui/sonner";
 import { Tabs, TabsList, TabsTrigger } from "./components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "./components/ui/tooltip";
 
-const SEARCH_SOURCES = "LinkedIn · Indeed · Greenhouse · Lever · Ashby · Himalayas · Adzuna";
+// The discovery sources shown in search progress copy come from the active profile's REAL
+// source_health (so they match whatever industry/board set is configured), with a neutral
+// fallback before the first overview load.
+const SEARCH_SOURCES_FALLBACK = "las fuentes activas de tu perfil";
+function searchSourcesLabel(ov: Overview | null): string {
+  const names = (ov?.source_health || []).map((s) => s.source).filter(Boolean);
+  return names.length > 0 ? names.join(" · ") : SEARCH_SOURCES_FALLBACK;
+}
 
 export default function App() {
   const [ov, setOv] = useState<Overview | null>(null);
@@ -134,7 +141,7 @@ export default function App() {
     if (searching) return;
     setSearching(true);
     const tid = toast.loading("Buscando vacantes nuevas…", {
-      description: `Consultando fuentes y puntuando contra tu CV. ${SEARCH_SOURCES}`,
+      description: `Consultando fuentes y puntuando contra tu CV. ${searchSourcesLabel(ov)}`,
     });
     try {
       await api.discover();
@@ -154,7 +161,7 @@ export default function App() {
     } finally {
       setSearching(false);
     }
-  }, [searching, load]);
+  }, [searching, load, ov]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -385,7 +392,7 @@ export default function App() {
                 Buscando vacantes nuevas… <span className="tabular-nums">{searchSeconds}s</span>
               </div>
               <div className="truncate text-[0.78rem] text-muted-foreground">
-                Consultando fuentes y puntuando contra tu CV · {SEARCH_SOURCES}
+                Consultando fuentes y puntuando contra tu CV · {searchSourcesLabel(ov)}
               </div>
               <div className="mt-2 h-1 w-full overflow-hidden rounded-full bg-secondary">
                 <div className="h-full w-1/3 animate-[indet_1.2s_ease-in-out_infinite] rounded-full bg-[linear-gradient(90deg,var(--primary),var(--accent2))]" />

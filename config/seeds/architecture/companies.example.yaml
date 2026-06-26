@@ -1,0 +1,28 @@
+# Per-company ATS registry — Architecture / AEC. The discovery runner iterates these rows and
+# hits the right keyless JSON endpoint.
+#
+# IMPORTANT (architecture-specific): most architecture firms are SMALL and do NOT use a corporate
+# ATS (Greenhouse/Lever/Ashby/SmartRecruiters/Workday). They hire by email with a PDF CV +
+# portfolio, or by referral/invitation. So this list is intentionally EMPTY by default — for AEC
+# the high-yield channels are the specialist boards (Archinect, Dezeen Jobs, RIBA Jobs, AIA Career
+# Center, Architizer, CGarchitect for archviz) and direct/relational outreach, not ATS tokens.
+#
+# Add a row ONLY for the rare target firm that genuinely runs one of the supported ATS platforms
+# (typically large multidisciplinary engineering/AEC groups). For everyone else, target them via
+# the boards above and a researched cold/spec email — that is where architecture hiring happens.
+#
+# Find the token by looking at a firm's careers URL, or run:
+#   atlas resolve-ats https://<firm>.com/careers
+#
+#   ats: greenhouse      token = slug in boards.greenhouse.io/<token>
+#   ats: lever           token = slug in jobs.lever.co/<token>   (eu: true for EU tenants)
+#   ats: ashby           token = name in jobs.ashbyhq.com/<token>  (CASE-SENSITIVE)
+#   ats: smartrecruiters token = slug in jobs.smartrecruiters.com/<token>
+#   ats: workday         instance = tenant in <tenant>.<wdN>.myworkdayjobs.com;
+#                        token = site slug after the tenant; careers_url carries the wd-cluster
+
+companies: []
+#   - company: [Large AEC group with a real ATS]
+#     ats: greenhouse
+#     token: examplefirm
+#     careers_url: https://boards.greenhouse.io/examplefirm

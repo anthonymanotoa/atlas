@@ -59,18 +59,37 @@ def _pretty(skill: str) -> str:
             out.append(w.upper())
         elif "/" in w:
             out.append(w.upper())  # a/b -> A/B
-        else:
+        elif w.islower():
             out.append(w.capitalize())
+        else:
+            out.append(w)  # preserve given casing (AutoCAD, BIM, ArchiCAD, McKinsey)
     return " ".join(out)
 
 
-def _skills_phrase(matched: list[str], n: int = 3) -> str:
+def _skills_phrase(matched: list[str], n: int = 3, language: str = "en") -> str:
     top = [_pretty(s) for s in matched[:n]]
     if not top:
-        return "data science and analytics"
+        return "mis competencias clave" if language == "es" else "my core skills"
+    joiner = " y " if language == "es" else " and "
     if len(top) == 1:
         return top[0]
-    return ", ".join(top[:-1]) + f" and {top[-1]}"
+    return ", ".join(top[:-1]) + joiner + top[-1]
+
+
+def _pitch_of(candidate: dict) -> dict:
+    """Resolve the candidate's outreach 'pitch' with domain-neutral fallbacks from the headline.
+
+    pitch = {identity_line, role_noun, impact_domain, value_verb}. Absent fields fall back to the
+    CV headline so non-data candidates never inherit the old 'senior data scientist' persona."""
+    p = candidate.get("pitch") or {}
+    headline = (candidate.get("headline") or "").strip()
+    role_noun = (p.get("role_noun") or headline or "professional").strip()
+    return {
+        "role_noun": role_noun,
+        "identity_line": (p.get("identity_line") or headline or f"a {role_noun}").strip(),
+        "impact_domain": (p.get("impact_domain") or "").strip(),
+        "value_verb": (p.get("value_verb") or "").strip(),
+    }
 
 
 def build_package(
@@ -85,51 +104,52 @@ def build_package(
     role = job.get("title", "")
     me = candidate.get("name", "")
     mine = _first_name(me)
-    skills = _skills_phrase(matched)
+    skills = _skills_phrase(matched, language=language)
+    pitch = _pitch_of(candidate)
     cname = _first_name((contact or {}).get("name"))
     li = candidate.get("linkedin", "")
 
     if language == "es":
         greet = f"Hola {cname}" if cname else "Hola"
-        return _es(company, role, me, mine, skills, greet, li, contact)
+        return _es(company, role, me, mine, skills, greet, li, contact, pitch)
     greet = f"Hi {cname}" if cname else "Hi there"
-    return _en(company, role, me, mine, skills, greet, li, contact)
+    return _en(company, role, me, mine, skills, greet, li, contact, pitch)
 
 
 # ── English ───────────────────────────────────────────────────────────────────
-def _en(company, role, me, mine, skills, greet, li, contact) -> list[Draft]:
+def _en(company, role, me, mine, skills, greet, li, contact, pitch) -> list[Draft]:
+    ident, rn, pd = pitch["identity_line"], pitch["role_noun"], pitch["impact_domain"]
+    pv = pitch["value_verb"] or "work on"
+    impact = f" In my current work I {pv} {pd}." if pd else ""
+    blurb = f" {pv[0].upper()}{pv[1:]} {pd}." if pd else ""
     cover = (
-        f"I'm applying for the {role} role at {company}. I'm a senior data scientist "
-        f"moving deeper into AI/ML, with strong hands-on experience in {skills}. In my "
-        f"current role I own experimentation and analytics for high-growth e-commerce, "
-        f"shipping work that drives real decisions. {company}'s focus is a strong fit for "
-        f"how I work — remote, data-driven, and fast. I'd welcome the chance to discuss how "
-        f"I can contribute. Thank you for your consideration.\n\n{me}\n{li}"
+        f"I'm applying for the {role} role at {company}. I'm {ident}, with strong hands-on "
+        f"experience in {skills}.{impact} {company}'s focus is a strong fit for how I work. "
+        f"I'd welcome the chance to discuss how I can contribute. Thank you for your "
+        f"consideration.\n\n{me}\n{li}"
     )
     cold = _word_cap(
         f"{greet}, I saw the {role} opening at {company} and it lines up closely with my "
-        f"background — a senior data scientist now building with AI/LLMs, strong in {skills}. "
-        f"I've spent the last few years owning experimentation and analytics for high-growth "
-        f"e-commerce. Would it be worth a quick chat about the role?\n\nThanks,\n{me}\n{li}"
+        f"background — I'm {ident}, strong in {skills}.{impact} Would it be worth a quick chat "
+        f"about the role?\n\nThanks,\n{me}\n{li}"
     )
     recruiter = (
-        f"{greet}, I'm interested in the {role} role at {company}. Quick fit: senior data "
-        f"scientist / AI engineer, strong in {skills}, fully remote and available to interview "
-        f"on short notice. Happy to send anything helpful for the screen. Thanks for your time!\n\n{me}"
+        f"{greet}, I'm interested in the {role} role at {company}. Quick fit: {rn}, strong in "
+        f"{skills}, available to interview on short notice. Happy to send anything helpful for "
+        f"the screen. Thanks for your time!\n\n{me}"
     )
     hm = (
-        f"{greet}, I came across the {role} opening and wanted to reach out directly. From "
-        f"what I can see, your team is investing in data/AI to move faster — that's exactly "
-        f"where I add value: {skills}, with a track record of turning analysis into decisions. "
-        f"I'd love to learn what success looks like for this role in the first 6 months.\n\n{me}\n{li}"
+        f"{greet}, I came across the {role} opening and wanted to reach out directly. I'm {ident} "
+        f"— that's exactly where I add value: {skills}, with a track record of turning work into "
+        f"results. I'd love to learn what success looks like for this role in the first "
+        f"6 months.\n\n{me}\n{li}"
     )
     referral = (
         f"{greet}, hope you're doing well! I'm exploring a move and {company} is high on my "
         f"list — they have a {role} opening that fits me well. Would you be open to referring me "
         f"or pointing me to the right person? No pressure at all if it's not a good moment.\n\n"
         f"To make it easy, here's a blurb you can forward:\n"
-        f"———\n{me} — senior data scientist / AI engineer (remote). Strong in {skills}; owns "
-        f"experimentation & analytics for high-growth e-commerce. Applying for {role} at {company}. "
+        f"———\n{me} — {rn}. Strong in {skills}.{blurb} Applying for {role} at {company}. "
         f"LinkedIn: {li}\n———\n\nThank you so much,\n{mine}"
     )
     note = _linkedin_note(company, role, "en")
@@ -161,40 +181,38 @@ def _en(company, role, me, mine, skills, greet, li, contact) -> list[Draft]:
 
 
 # ── Spanish ───────────────────────────────────────────────────────────────────
-def _es(company, role, me, mine, skills, greet, li, contact) -> list[Draft]:
+def _es(company, role, me, mine, skills, greet, li, contact, pitch) -> list[Draft]:
+    ident, rn, pd = pitch["identity_line"], pitch["role_noun"], pitch["impact_domain"]
+    pv = pitch["value_verb"] or "trabajo en"
+    impact = f" En mi trabajo actual {pv} {pd}." if pd else ""
+    blurb = f" {pv[0].upper()}{pv[1:]} {pd}." if pd else ""
     cover = (
-        f"Me postulo a la posición de {role} en {company}. Soy data scientist senior con un "
-        f"enfoque creciente en IA/ML, con experiencia sólida en {skills}. Actualmente lidero "
-        f"experimentación y analítica para e-commerce de alto crecimiento, entregando trabajo "
-        f"que impulsa decisiones reales. El enfoque de {company} encaja muy bien con mi forma de "
-        f"trabajar: remoto, basado en datos y ágil. Me encantaría conversar sobre cómo aportar. "
-        f"Gracias por su consideración.\n\n{me}\n{li}"
+        f"Me postulo a la posición de {role} en {company}. Soy {ident}, con experiencia sólida "
+        f"en {skills}.{impact} El enfoque de {company} encaja muy bien con mi forma de trabajar. "
+        f"Me encantaría conversar sobre cómo aportar. Gracias por su consideración.\n\n{me}\n{li}"
     )
     cold = _word_cap(
-        f"{greet}, vi la vacante de {role} en {company} y encaja mucho con mi perfil: data "
-        f"scientist senior que ahora construye con IA/LLMs, con base sólida en {skills}. Los "
-        f"últimos años he liderado experimentación y analítica para e-commerce de alto "
-        f"crecimiento. ¿Valdría la pena una breve conversación?\n\nGracias,\n{me}\n{li}"
+        f"{greet}, vi la vacante de {role} en {company} y encaja mucho con mi perfil: soy {ident}, "
+        f"con base sólida en {skills}.{impact} ¿Valdría la pena una breve conversación?\n\n"
+        f"Gracias,\n{me}\n{li}"
     )
     recruiter = (
-        f"{greet}, me interesa la posición de {role} en {company}. Fit rápido: data scientist "
-        f"/ AI engineer senior, sólido en {skills}, 100% remoto y disponible para entrevistar pronto. "
-        f"Con gusto envío lo que sea útil para el screening. ¡Gracias por tu tiempo!\n\n{me}"
+        f"{greet}, me interesa la posición de {role} en {company}. Fit rápido: {rn}, sólido en "
+        f"{skills}, disponible para entrevistar pronto. Con gusto envío lo que sea útil para el "
+        f"screening. ¡Gracias por tu tiempo!\n\n{me}"
     )
     hm = (
-        f"{greet}, vi la vacante de {role} y quise escribirte directamente. Por lo que veo, tu "
-        f"equipo está invirtiendo en datos/IA para moverse más rápido — ahí es justo donde aporto "
-        f"valor: {skills}, con historial de convertir análisis en decisiones. Me encantaría saber "
-        f"cómo se ve el éxito en este rol en los primeros 6 meses.\n\n{me}\n{li}"
+        f"{greet}, vi la vacante de {role} y quise escribirte directamente. Soy {ident} — ahí es "
+        f"justo donde aporto valor: {skills}, con historial de convertir el trabajo en resultados. "
+        f"Me encantaría saber cómo se ve el éxito en este rol en los primeros 6 meses.\n\n{me}\n{li}"
     )
     referral = (
         f"{greet}, ¡espero que estés muy bien! Estoy explorando un cambio y {company} está "
-        f"entre mis favoritas — tienen una vacante de {role} que encaja conmigo. ¿Estarías dispuesto/a "
-        f"a referirme o indicarme a la persona indicada? Sin presión si no es buen momento.\n\n"
-        f"Para hacerlo fácil, aquí va un texto que puedes reenviar:\n"
-        f"———\n{me} — data scientist / AI engineer senior (remoto). Sólido en {skills}; lidera "
-        f"experimentación y analítica para e-commerce de alto crecimiento. Postulando a {role} en "
-        f"{company}. LinkedIn: {li}\n———\n\nMil gracias,\n{mine}"
+        f"entre mis favoritas — tienen una vacante de {role} que encaja conmigo. ¿Estarías "
+        f"dispuesto/a a referirme o indicarme a la persona indicada? Sin presión si no es buen "
+        f"momento.\n\nPara hacerlo fácil, aquí va un texto que puedes reenviar:\n"
+        f"———\n{me} — {rn}. Sólido en {skills}.{blurb} Postulando a {role} en {company}. "
+        f"LinkedIn: {li}\n———\n\nMil gracias,\n{mine}"
     )
     note = _linkedin_note(company, role, "es")
     return [

@@ -9,7 +9,20 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { Separator } from "./ui/separator";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 
-const ROUNDS = ["phone", "technical", "system_design", "hiring_manager", "final", "other"];
+// Round values stay stable (the backend/prep keys on them), but each gets a human label so the
+// selector doesn't expose raw enum keys. `system_design` is a software-specific stage; it's
+// offered alongside the generic rounds rather than presented as universal — `other` covers the rest.
+const ROUNDS: { value: string; label: string }[] = [
+  { value: "phone", label: "Telefónica / screening" },
+  { value: "technical", label: "Técnica / específica del rol" },
+  { value: "system_design", label: "Diseño de sistemas (software)" },
+  { value: "hiring_manager", label: "Hiring manager" },
+  { value: "final", label: "Final" },
+  { value: "other", label: "Otra" },
+];
+const ROUND_LABEL: Record<string, string> = Object.fromEntries(
+  ROUNDS.map((r) => [r.value, r.label]),
+);
 
 // P3-E: manual interview entry + per-interviewer capture + deterministic prep doc.
 // Interviewer research is supervised (open the LinkedIn URL yourself); we just store it.
@@ -51,8 +64,8 @@ export function InterviewPanel({ jobId }: { jobId: string }) {
             </SelectTrigger>
             <SelectContent>
               {ROUNDS.map((r) => (
-                <SelectItem key={r} value={r}>
-                  {r}
+                <SelectItem key={r.value} value={r.value}>
+                  {r.label}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -71,7 +84,7 @@ export function InterviewPanel({ jobId }: { jobId: string }) {
             <Separator className="mb-2" />
             <div className="flex items-center justify-between">
               <div>
-                <b>{iv.round || "entrevista"}</b>{" "}
+                <b>{(iv.round && ROUND_LABEL[iv.round]) || iv.round || "entrevista"}</b>{" "}
                 <span className="text-muted-foreground">{iv.scheduled_at || "sin fecha"}</span>
               </div>
               <Tooltip>
@@ -81,8 +94,9 @@ export function InterviewPanel({ jobId }: { jobId: string }) {
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>
-                  Genera el doc de preparación: preguntas probables (conductuales + técnicas), temas
-                  a repasar (gaps del JD) y tu evidencia STAR real. Sale de tu CV + la oferta.
+                  Genera el doc de preparación: preguntas probables (conductuales + específicas del
+                  rol), temas a repasar (gaps del JD) y tu evidencia STAR real. Sale de tu CV + la
+                  oferta.
                 </TooltipContent>
               </Tooltip>
             </div>

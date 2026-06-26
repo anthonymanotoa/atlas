@@ -48,6 +48,34 @@ class Criteria(BaseModel):
     candidate_years: int = 0  # your real years of experience; 0 = off. Powers realistic
     # years-gap scoring (a "12+ yrs" posting is flagged + down-ranked when you have ~5) and
     # demotes Staff/Principal titles (which usually want 8+ yrs) instead of bonusing them.
+    # ── Title-ladder vocabulary (per-domain; defaults preserve the data/IC-track behavior) ──
+    # These were hardcoded constants in engine/scoring/fit.py; promoting them to the profile
+    # lets non-data domains redefine seniority (e.g. architecture: "Principal Architect" is a
+    # normal level, not an over-qualified stretch; "Director of Design" is a valid target).
+    senior_terms: list[str] = Field(default_factory=lambda: ["senior", "sr.", "sr ", "lead"])
+    exec_terms: list[str] = Field(
+        default_factory=lambda: [
+            "director", "vp ", "vp,", "vice president", "head of", "chief", " cto", " ceo",
+            " cfo", " coo", "svp", "evp", "c-level", "managing director",
+        ]
+    )
+    junior_terms: list[str] = Field(
+        default_factory=lambda: [
+            "junior", "jr.", "jr ", "intern", "internship", "entry level", "entry-level",
+            "graduate", "trainee", "becario", "practicante", "working student", "apprentice",
+        ]
+    )
+    stretch_terms: list[str] = Field(
+        default_factory=lambda: ["staff", "principal", "distinguished", "fellow"]
+    )  # titles that usually want many years; penalized below stretch_min_years. Empty = no penalty.
+    stretch_min_years: int = 8  # below this many years, a stretch-title posting is down-ranked
+    # ── Positioning / advisor (per-domain; empty defaults are domain-neutral) ──
+    repositioning_target: str = ""  # e.g. "AI/ML"; empty = advisor won't push any re-framing
+    core_keywords: list[str] = Field(default_factory=list)  # must-appear terms the CV audit checks
+    # ── CV tailoring tuning (promoted from engine/cv constants; defaults unchanged) ──
+    top_jd_keywords: int = 25  # how many JD keywords to extract/rank
+    max_skills: int = 18  # cap on rendered skills
+    max_highlights_per_role: int = 4  # cap on highlights per experience entry
     prose: str = ""  # the Markdown body (for the LLM)
 
     @property
@@ -95,6 +123,45 @@ def load_companies() -> list[CompanyTarget]:
 # ── sources ──────────────────────────────────────────────────────────────────
 def load_sources() -> dict[str, Any]:
     path = example_fallback(paths.SOURCES_PATH)
+    if not path.exists():
+        return {}
+    return yaml.safe_load(path.read_text()) or {}
+
+
+# ── CV layout (per-domain section order / labels / portfolio proof-source) ────
+_DEFAULT_CV_LAYOUT: dict = {
+    # The legacy data layout — used when a profile ships no cv_layout.yaml.
+    "order": ["summary", "skills", "experience", "education", "certs", "projects"],
+    "labels": {},  # {section_key: {en: "...", es: "..."}} heading overrides
+    "proof_source": "github",  # github | visual_gallery | none — used by the portfolio builder
+}
+
+
+def load_cv_layout() -> dict:
+    """Per-profile CV section order, heading overrides, and portfolio proof-source.
+
+    Falls back to the legacy data layout when no cv_layout.yaml is present, so existing
+    profiles render exactly as before."""
+    path = example_fallback(paths.CV_LAYOUT_PATH)
+    if not path.exists():
+        return dict(_DEFAULT_CV_LAYOUT)
+    data = yaml.safe_load(path.read_text()) or {}
+    layout = dict(_DEFAULT_CV_LAYOUT)
+    layout.update({k: v for k, v in data.items() if v is not None})
+    # An explicitly-empty proof_source means "no proof section" — never coerce it to the github
+    # default (which would fire a surprise live api.github.com fetch).
+    if not str(layout.get("proof_source") or "").strip():
+        layout["proof_source"] = "none"
+    return layout
+
+
+# ── interview question banks (per-domain) ────────────────────────────────────
+def load_interview_topics() -> dict:
+    """Per-profile interview banks: {behavioral, role_topics, default_tech}.
+
+    Empty dict when no interview_topics.yaml is present — interview_prep then falls back to its
+    embedded data banks, so existing profiles are unchanged."""
+    path = example_fallback(paths.INTERVIEW_TOPICS_PATH)
     if not path.exists():
         return {}
     return yaml.safe_load(path.read_text()) or {}

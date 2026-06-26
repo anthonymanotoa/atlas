@@ -81,7 +81,33 @@ def _extract_docx(path: Path) -> str:
     return "\n".join(line for line in lines if line.strip()).strip()
 
 
-def build_draft(source_text: str) -> str:
-    """A YAML draft: the master_cv scaffold + the raw extracted text, for Cowork+human to map."""
-    doc = {**_SCAFFOLD, "_source_text": source_text}
+def _scaffold_for(domain: str | None) -> dict:
+    """The empty master_cv scaffold for a domain. Architecture surfaces the extra fields a
+    regulated, portfolio-driven profile needs (pitch, portfolio link, licensure/registration)
+    so the Cowork mapper knows to fill them. Other domains get the neutral base scaffold."""
+    sc: dict = {
+        "basics": dict(_SCAFFOLD["basics"]),
+        "skills": [],
+        "experience": [],
+        "education": [],
+        "certifications": [],
+        "projects": [],
+    }
+    if domain == "architecture":
+        sc["basics"]["portfolio"] = ""  # near-mandatory in architecture
+        sc["basics"]["pitch"] = {
+            "identity_line": "",
+            "role_noun": "",
+            "impact_domain": "",
+            "value_verb": "",
+        }
+        # items: {title, issuer, status} — e.g. título de Arquitecta, registro SENESCYT/CAE
+        sc["licensure"] = []
+    return sc
+
+
+def build_draft(source_text: str, domain: str | None = None) -> str:
+    """A YAML draft: the (per-domain) master_cv scaffold + the raw extracted text, for Cowork+human
+    to map. ``domain`` selects which fields the scaffold surfaces (defaults to the neutral base)."""
+    doc = {**_scaffold_for(domain), "_source_text": source_text}
     return _HEADER + yaml.safe_dump(doc, allow_unicode=True, sort_keys=False)

@@ -33,7 +33,7 @@ const FEATURES: Feature[] = [
     title: "Auditoría de CV",
     what: "Te da un score de tu CV maestro y recomendaciones concretas de qué editar.",
     behind:
-      "Revisa tu master_cv.yaml contra buenas prácticas (logros cuantificados, foco IA/ML, claridad, longitud, keywords) y clasifica los hallazgos en alta/media/baja con una sugerencia por cada uno. Determinista; mismo motor que `atlas advise`.",
+      "Revisa tu master_cv.yaml contra buenas prácticas (logros cuantificados, el posicionamiento hacia tu rol objetivo, claridad, longitud, keywords) y clasifica los hallazgos en alta/media/baja con una sugerencia por cada uno. Determinista; mismo motor que `atlas advise`.",
     how: '📄 Botón "Auditoría de CV" (arriba a la derecha) → editás master_cv.yaml → "Re-evaluar" · CLI: atlas advise',
   },
   {
@@ -41,7 +41,7 @@ const FEATURES: Feature[] = [
     title: "Buscar vacantes",
     what: "Trae vacantes nuevas de todas las fuentes y las puntúa contra tu CV.",
     behind:
-      "Scrapers/APIs deterministas (LinkedIn, Indeed, Greenhouse, Lever, Ashby, Himalayas, Adzuna) → dedupe → scoring por reglas (fit) + cobertura de keywords del CV (match) → preselecciona las que pasan el umbral. Sin IA: reproducible y gratis.",
+      "Scrapers/APIs deterministas sobre las fuentes activas de tu perfil → dedupe → scoring por reglas (fit) + cobertura de keywords del CV (match) → preselecciona las que pasan el umbral. Sin IA: reproducible y gratis.",
     how: 'Botón "Buscar" (tarda ~1–2 min) · CLI: atlas discover && atlas score',
   },
   {
@@ -57,7 +57,7 @@ const FEATURES: Feature[] = [
     title: "Entrevistas",
     what: "Agendás una ronda y genera un documento de preparación.",
     behind:
-      "Cruza tu CV con las keywords del puesto: preguntas probables (conductuales + técnicas) por tipo de ronda, temas a repasar (gaps del JD) y tu evidencia STAR tomada de tus bullets reales. La investigación de cada entrevistador la hacés vos (te deja los enlaces).",
+      "Cruza tu CV con las keywords del puesto: preguntas probables (conductuales + específicas del rol) por tipo de ronda, temas a repasar (gaps del JD) y tu evidencia STAR tomada de tus bullets reales. La investigación de cada entrevistador la hacés vos (te deja los enlaces).",
     how: "Detalle → Entrevistas → Agregar → Generar prep · CLI: atlas interview add/prep",
   },
   {

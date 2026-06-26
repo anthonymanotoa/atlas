@@ -33,6 +33,7 @@ ul{margin:.4rem 0 .4rem 1.1rem;padding:0}
 .skills span{display:inline-block;background:#f1f2f6;border-radius:6px;padding:2px 8px;margin:2px;font-size:.82rem}
 .repo{font-size:.9rem;margin:.3rem 0}
 .repo a{color:var(--accent);text-decoration:none}
+.repo .h{font-weight:600}
 footer{margin-top:3rem;color:#aaa;font-size:.75rem}
 """
 
@@ -80,7 +81,65 @@ def _github_repos(username: str | None, *, limit: int = 6) -> list[dict]:
         return []
 
 
-def _render_html(cv: dict, repos: list[dict]) -> str:
+def _visual_links(b: dict) -> list[tuple[str, str]]:
+    """External portfolio links a visual candidate would showcase (label, url), in priority order."""
+    out: list[tuple[str, str]] = []
+    for label, key in [
+        ("Portfolio", "portfolio"),
+        ("Website", "website"),
+        ("Behance", "behance"),
+        ("Issuu", "issuu"),
+        ("LinkedIn", "linkedin"),
+    ]:
+        val = b.get(key)
+        if val:
+            out.append((label, str(val)))
+    return out
+
+
+def _proof_section_html(cv: dict, proof_source: str) -> str:
+    """The portfolio's 'proof' block, chosen by proof_source.
+
+    - "github"        → fetch + render public repos (the legacy data behavior).
+    - "visual_gallery"→ link the candidate's external portfolio (Behance/Issuu/site) + list
+                         their projects as a visual gallery. NO api.github.com call.
+    - "none"          → no proof block at all.
+    """
+    b = cv.get("basics", {}) or {}
+    if proof_source == "none":
+        return ""
+    if proof_source == "visual_gallery":
+        links = _visual_links(b)
+        projects = cv.get("projects") or []
+        if not links and not projects:
+            return ""
+        parts = ["<h2>Portafolio visual</h2>"]
+        if links:
+            parts.append(
+                "<div class='contact'>"
+                + " · ".join(f"<a href='{_e(url)}'>{_e(label)}</a>" for label, url in links)
+                + "</div>"
+            )
+        for p in projects:
+            desc = p.get("description")
+            tail = f" — {_e(desc)}" if desc else ""  # no dangling em-dash when no description
+            parts.append(f"<div class='repo'><span class='h'>{_e(p.get('name'))}</span>{tail}</div>")
+        return "".join(parts)
+    # default: github proof
+    repos = _github_repos(_gh_handle(b.get("github")))
+    if not repos:
+        return ""
+    parts = ["<h2>GitHub</h2>"]
+    for repo in repos:
+        stars = f" ★{repo['stars']}" if repo["stars"] else ""
+        parts.append(
+            f"<div class='repo'><a href='{_e(repo['url'])}'>{_e(repo['name'])}</a>{stars}"
+            f" — {_e(repo['desc'])}</div>"
+        )
+    return "".join(parts)
+
+
+def _render_html(cv: dict, proof_html: str = "", proof_source: str = "") -> str:
     b = cv.get("basics", {}) or {}
     parts = [
         "<!doctype html><html lang='en'><head><meta charset='utf-8'>",
@@ -123,8 +182,9 @@ def _render_html(cv: dict, repos: list[dict]) -> str:
                 parts.append("<ul>" + "".join(f"<li>{_e(h)}</li>" for h in hls) + "</ul>")
             parts.append("</div>")
 
+    # For visual_gallery the proof block IS the project gallery — don't list projects twice.
     projects = cv.get("projects") or []
-    if projects:
+    if projects and proof_source != "visual_gallery":
         parts.append("<h2>Proyectos</h2>")
         for p in projects:
             parts.append(
@@ -132,14 +192,8 @@ def _render_html(cv: dict, repos: list[dict]) -> str:
                 f"<div>{_e(p.get('description'))}</div></div>"
             )
 
-    if repos:
-        parts.append("<h2>GitHub</h2>")
-        for repo in repos:
-            stars = f" ★{repo['stars']}" if repo["stars"] else ""
-            parts.append(
-                f"<div class='repo'><a href='{_e(repo['url'])}'>{_e(repo['name'])}</a>{stars}"
-                f" — {_e(repo['desc'])}</div>"
-            )
+    if proof_html:
+        parts.append(proof_html)
 
     edu = cv.get("education") or []
     if edu:
@@ -161,15 +215,26 @@ def generate_portfolio(
     version: str = "v1",
     include_github: bool = False,
     output_dir: Path | None = None,
+    proof_source: str | None = None,
 ) -> Path:
-    """Render master_cv.yaml → a standalone index.html. Returns the file path."""
-    repos = (
-        _github_repos(_gh_handle((cv.get("basics", {}) or {}).get("github")))
-        if include_github
-        else []
+    """Render master_cv.yaml → a standalone index.html. Returns the file path.
+
+    `proof_source` (github | visual_gallery | none) drives the proof block; when omitted it
+    is read from the active profile's cv_layout.yaml. For the github path the proof block is
+    only rendered when `include_github` is set (network is opt-in, as before); visual_gallery
+    is offline and always renders.
+    """
+    if proof_source is None:
+        from engine.config import load_cv_layout
+
+        proof_source = load_cv_layout().get("proof_source", "github")
+    proof_html = (
+        _proof_section_html(cv, proof_source)
+        if (proof_source != "github" or include_github)
+        else ""
     )
     out_dir = Path(output_dir) if output_dir else (paths.OUTBOX_DIR / f"portfolio_{version}")
     out_dir.mkdir(parents=True, exist_ok=True)
     path = out_dir / "index.html"
-    path.write_text(_render_html(cv, repos), encoding="utf-8")
+    path.write_text(_render_html(cv, proof_html, proof_source), encoding="utf-8")
     return path

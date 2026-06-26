@@ -38,6 +38,8 @@ CRITERIA_PATH: Path = CONFIG_DIR / "criteria.md"
 COMPANIES_PATH: Path = CONFIG_DIR / "companies.yaml"
 SOURCES_PATH: Path = CONFIG_DIR / "sources.yaml"
 ONTOLOGY_PATH: Path = CONFIG_DIR / "ontology.yaml"
+CV_LAYOUT_PATH: Path = CONFIG_DIR / "cv_layout.yaml"
+INTERVIEW_TOPICS_PATH: Path = CONFIG_DIR / "interview_topics.yaml"
 MASTER_CV_PATH: Path = PROFILE_DIR / "master_cv.yaml"
 
 
@@ -59,7 +61,7 @@ def _apply(profile_id: str | None) -> None:
     """Recompute every path global for ``profile_id`` (or the legacy layout if None)."""
     global PROFILE_ID, PROFILE_ROOT, DATA_DIR, DB_PATH, INBOX_DIR, OUTBOX_DIR
     global CONFIG_DIR, PROFILE_DIR, CRITERIA_PATH, COMPANIES_PATH, SOURCES_PATH
-    global ONTOLOGY_PATH, MASTER_CV_PATH
+    global ONTOLOGY_PATH, CV_LAYOUT_PATH, INTERVIEW_TOPICS_PATH, MASTER_CV_PATH
 
     PROFILE_ID = profile_id
     if profile_id is None:
@@ -83,6 +85,8 @@ def _apply(profile_id: str | None) -> None:
     COMPANIES_PATH = CONFIG_DIR / "companies.yaml"
     SOURCES_PATH = CONFIG_DIR / "sources.yaml"
     ONTOLOGY_PATH = CONFIG_DIR / "ontology.yaml"
+    CV_LAYOUT_PATH = CONFIG_DIR / "cv_layout.yaml"
+    INTERVIEW_TOPICS_PATH = CONFIG_DIR / "interview_topics.yaml"
     MASTER_CV_PATH = PROFILE_DIR / "master_cv.yaml"
 
 

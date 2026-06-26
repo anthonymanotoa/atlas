@@ -1,0 +1,42 @@
+# Neutral discovery config. Replace search_terms with YOUR target roles and tune the knobs.
+# Tuned for $0, low-volume, account-safe discovery.
+
+search_terms: []          # e.g. ["<tu rol objetivo>"] — Atlas searches these across the sources below
+
+# Direct ATS feeds (Greenhouse/Lever/Ashby/SmartRecruiters).
+ats:
+  enabled: true
+
+# JobSpy aggregator (Indeed + guest LinkedIn). Set is_remote per your criteria.
+jobspy:
+  enabled: true
+  sites: [indeed, linkedin]
+  results_wanted: 25
+  hours_old: 168
+  is_remote: false              # don't assume remote; flip to true for remote-only searches
+  country_indeed: ""            # set your Indeed country (Indeed requires one)
+  linkedin_fetch_description: false
+  linkedin_cap: 200
+  linkedin_delay_ms: 2500
+  google_search_term: ""
+
+himalayas:
+  enabled: true
+  limit: 50
+
+adzuna:
+  enabled: true
+  countries: [us, gb]
+  results_per_country: 20
+
+limits:
+  per_source_timeout_s: 45
+  max_jobs_per_run: 1500
+
+rate_limits:
+  greenhouse.io: { min_delay_ms: 400 }
+  lever.co: { min_delay_ms: 400 }
+  ashbyhq.com: { min_delay_ms: 400 }
+  smartrecruiters.com: { min_delay_ms: 400 }
+  himalayas.app: { min_delay_ms: 300 }
+  adzuna.com: { min_delay_ms: 500 }

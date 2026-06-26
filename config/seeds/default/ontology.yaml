@@ -1,0 +1,5 @@
+# Neutral skills gazetteer (canonical -> [aliases/acronyms]). Empty by default.
+# Add YOUR field's skills so keyword extraction, CV↔JD matching and tailoring work.
+# An empty gazetteer means JD-keyword matching is opt-in (it simply won't surface skill hits).
+skills: {}
+#  "Example Skill": [alias1, acronym1]

@@ -1,0 +1,42 @@
+# Neutral master CV template — copy to profile/master_cv.yaml and replace EVERY value with
+# your own, truthful data. Atlas never invents content; tailoring only reorders/selects what
+# you put here. Keep dates as "Mon YYYY" (e.g. "Jan 2022") and "Present" for current roles.
+
+basics:
+  name: "<Tu Nombre>"
+  label: "<Tu título / rol objetivo>"   # default headline; `atlas tailor` overrides it per job
+  email: "<tu@email.com>"
+  phone: "<+país número>"
+  location: "<Ciudad, País>"
+  linkedin: ""
+  website: ""
+  # Outreach voice — used when drafting cover letters / messages (fallbacks to neutral if absent).
+  pitch:
+    identity_line: "<una línea de quién eres profesionalmente>"
+    role_noun: "<sustantivo de tu rol, p. ej. 'analista'>"
+    impact_domain: "<en qué generas impacto>"
+    value_verb: "<qué haces, p. ej. 'diseño y entrego'>"
+  summary: >
+    <2–3 frases veraces sobre quién eres y el impacto que has tenido.>
+
+skills: []          # lista plana de tus skills reales (canónicas)
+
+experience:
+  - title: "<Rol>"
+    company: "<Empresa>"
+    location: "<Ciudad / Remoto>"
+    start: "<Mon YYYY>"
+    end: "Present"
+    skills: []
+    highlights:
+      - "<Logro con verbo de acción + contexto + resultado real.>"
+
+education:
+  - degree: "<Título>"
+    area: "<Área>"
+    institution: "<Institución>"
+    start: "<YYYY>"
+    end: "<YYYY>"
+
+certifications: []
+projects: []

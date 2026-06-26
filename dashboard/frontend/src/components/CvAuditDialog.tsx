@@ -120,8 +120,8 @@ export function CvAuditDialog({
               </div>
               <div className="mt-1.5 text-muted-foreground">
                 Editá tu <code className="font-mono">master_cv.yaml</code> aplicando las sugerencias
-                de arriba (usá solo hechos reales) y pulsá “Re-evaluar”. Para una mejora guiada
-                IA-forward de CV + LinkedIn, usá la guía{" "}
+                de arriba (usá solo hechos reales) y pulsá “Re-evaluar”. Para una mejora guiada de CV
+                + LinkedIn según tu rol objetivo, usá la guía{" "}
                 <b className="text-foreground">cv-linkedin-advisor</b> en Claude.
               </div>
             </Card>

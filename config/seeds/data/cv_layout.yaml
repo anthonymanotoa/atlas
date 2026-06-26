@@ -1,0 +1,3 @@
+# Legacy data CV layout (explicit; identical to the engine default).
+order: [summary, skills, experience, education, certs, projects]
+proof_source: github

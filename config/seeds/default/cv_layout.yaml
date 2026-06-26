@@ -1,0 +1,4 @@
+# Neutral CV layout (matches the engine default). Reorder sections or add `licensure`
+# for regulated professions; set proof_source to github | visual_gallery | none.
+order: [summary, skills, experience, education, certs, projects]
+proof_source: none

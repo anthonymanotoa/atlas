@@ -108,9 +108,8 @@ export function PortfolioViewer() {
           <Sparkles className="size-3.5" /> Portafolios de referencia que revisé
         </h2>
         <p className="mb-3 text-sm text-muted-foreground">
-          Investigué y filtré portafolios de gente con un perfil como el tuyo (Data Scientist / AI
-          Engineer, retención y experimentación). Descarté los flojos o con links rotos. Estos son
-          los buenos — ábrelos y fíjate en qué robar de cada uno.
+          Investigué y filtré portafolios de gente con un perfil como el tuyo. Descarté los flojos o
+          con links rotos. Estos son los buenos — ábrelos y fíjate en qué robar de cada uno.
         </p>
         <div className="grid gap-3 sm:grid-cols-2">
           {(research?.examples || []).map((ex) => (

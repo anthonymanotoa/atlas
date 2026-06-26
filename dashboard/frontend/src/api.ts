@@ -87,7 +87,7 @@ export type Referral = {
   title?: string;
   linkedin_url?: string;
 };
-export type Profile = { id: string; label: string; is_owner?: boolean };
+export type Profile = { id: string; label: string; domain?: string; is_owner?: boolean };
 export type CsvColumn = { id: string; label: string };
 export type SocialMention = {
   id: number;
@@ -105,6 +105,10 @@ export type Finding = { severity: string; area: string; message: string; suggest
 export type OnboardingStatus = {
   complete: boolean;
   profile: string;
+  // Domain context so the UI can phrase copy per-industry instead of hardcoding "AI/ML".
+  // `target_label` is the repositioning target / CV headline; empty → use neutral phrasing.
+  domain?: string;
+  target_label?: string;
   cv_present: boolean;
   audit: { findings: Finding[]; summary: { high: number; med: number; low: number } };
 };

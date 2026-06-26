@@ -2,8 +2,9 @@
 
 This produces the structured findings the `cv-linkedin-advisor` skill builds on. The
 deterministic checks catch the mechanical issues (placeholders, unquantified bullets,
-missing AI-forward framing, parse-safety); the LLM skill does the truthful repositioning
-using the user's Claude memories + recent projects.
+missing target-domain framing, parse-safety); the LLM skill does the truthful repositioning
+using the user's Claude memories + recent projects. The "target domain" is the profile's, not
+hardcoded — positioning nudges are driven by criteria.repositioning_target / core_keywords.
 """
 
 from __future__ import annotations
@@ -11,22 +12,10 @@ from __future__ import annotations
 import re
 from dataclasses import asdict, dataclass
 
-from engine.config import load_ontology
+from engine.config import Criteria, load_criteria, load_ontology
 
 _DIGIT = re.compile(r"\d")
 _PLACEHOLDER = re.compile(r"<[^>]+>")
-AI_TERMS = (
-    "ai",
-    "llm",
-    "genai",
-    "generative",
-    "machine learning",
-    "ml ",
-    "prompt",
-    "rag",
-    "agent",
-    "language model",
-)
 
 
 @dataclass
@@ -37,12 +26,19 @@ class Finding:
     suggestion: str
 
 
-def _has_ai(text: str) -> bool:
+def _mentions_any(text: str, terms: list[str]) -> bool:
+    """True if `text` contains any of `terms` (case-insensitive substring)."""
     t = text.lower()
-    return any(term in t for term in AI_TERMS)
+    return any(term.lower() in t for term in terms)
 
 
-def audit_cv(master: dict) -> list[Finding]:
+def audit_cv(master: dict, criteria: Criteria | None = None) -> list[Finding]:
+    """Audit a CV against best practices for the profile's domain.
+
+    Domain-specific opinions are driven by `criteria`: positioning nudges only fire when
+    `criteria.repositioning_target` is set, and 'core terms' come from `criteria.core_keywords`."""
+    criteria = criteria or load_criteria()
+    target = criteria.repositioning_target.strip()
     f: list[Finding] = []
     basics = master.get("basics", {}) or {}
     blob = _flatten(master)
@@ -91,7 +87,7 @@ def audit_cv(master: dict) -> list[Finding]:
                 "high",
                 "resumen",
                 "No hay resumen profesional.",
-                "Escribe 40–90 palabras con tu propuesta de valor y enfoque en IA.",
+                "Escribe 40–90 palabras con tu propuesta de valor.",
             )
         )
     elif words > 110:
@@ -103,13 +99,13 @@ def audit_cv(master: dict) -> list[Finding]:
                 "Recórtalo a ~40–90 palabras.",
             )
         )
-    if summary and not _has_ai(summary):
+    if target and summary and not _mentions_any(summary, criteria.core_keywords):
         f.append(
             Finding(
                 "med",
-                "posicionamiento IA",
-                "El resumen no menciona IA/LLM/ML pese a tu pivote.",
-                "Reposiciona hacia IA/ML: nombra LLMs, GenAI o agentes de forma veraz.",
+                f"posicionamiento {target}",
+                f"El resumen no refleja tu objetivo ({target}).",
+                f"Reposiciónalo hacia {target} de forma veraz, nombrando tus skills clave.",
             )
         )
 
@@ -124,13 +120,13 @@ def audit_cv(master: dict) -> list[Finding]:
                 "Lista 12–18 skills canónicas que realmente tengas.",
             )
         )
-    if not any(_has_ai(s) for s in skills):
+    if target and not any(_mentions_any(s, criteria.core_keywords) for s in skills):
         f.append(
             Finding(
                 "med",
-                "posicionamiento IA",
-                "No hay skills de IA en la lista.",
-                "Añade las de IA que domines (LLMs, GenAI, RAG, Prompt Engineering).",
+                f"posicionamiento {target}",
+                f"No hay skills de {target} en la lista.",
+                f"Añade las de {target} que domines, de forma veraz.",
             )
         )
 
@@ -158,19 +154,20 @@ def audit_cv(master: dict) -> list[Finding]:
                 )
             )
 
-    # 6. Ontology coverage for a DS/AI target.
+    # 6. Core keyword coverage for the profile's target domain (from criteria.core_keywords).
+    # A term is covered if it OR any of its ontology aliases appears in the CV (case-insensitive).
     ont = load_ontology()
     cv_low = blob.lower()
-    core = [
-        "python",
-        "sql",
-        "machine learning",
-        "large language models",
-        "a/b testing",
-        "statistics",
-        "generative ai",
+    forms: dict[str, set[str]] = {}
+    for canon, aliases in ont.items():
+        group = {canon.lower(), *(a.lower() for a in aliases)}
+        for surface in group:
+            forms[surface] = group
+    missing = [
+        c
+        for c in criteria.core_keywords
+        if not any(form in cv_low for form in forms.get(c.lower(), {c.lower()}))
     ]
-    missing = [c for c in core if c not in cv_low and c not in ont.get(c, [])]
     if missing:
         f.append(
             Finding(
@@ -192,8 +189,8 @@ def _flatten(obj) -> str:
     return str(obj)
 
 
-def audit_dict(master: dict) -> dict:
-    findings = audit_cv(master)
+def audit_dict(master: dict, criteria: Criteria | None = None) -> dict:
+    findings = audit_cv(master, criteria)
     by_sev = {"high": 0, "med": 0, "low": 0}
     for x in findings:
         by_sev[x.severity] = by_sev.get(x.severity, 0) + 1
