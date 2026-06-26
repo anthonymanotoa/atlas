@@ -111,6 +111,12 @@ export function PortfolioViewer() {
           Investigué y filtré portafolios de gente con un perfil como el tuyo. Descarté los flojos o
           con links rotos. Estos son los buenos — ábrelos y fíjate en qué robar de cada uno.
         </p>
+        {research && research.examples.length === 0 && (
+          <Card className="p-4 text-sm text-muted-foreground">
+            Todavía no hay portafolios de referencia curados para tu dominio. Mientras tanto, usa el
+            prompt de arriba (ya personalizado con tu CV) y guarda abajo tus propias referencias.
+          </Card>
+        )}
         <div className="grid gap-3 sm:grid-cols-2">
           {(research?.examples || []).map((ex) => (
             <Card key={ex.url} className="flex flex-col gap-2 p-3.5">
@@ -154,7 +160,7 @@ export function PortfolioViewer() {
       </section>
 
       {/* 3 — The cross-cutting playbook */}
-      {research && (
+      {research && Object.keys(research.patterns).length > 0 && (
         <section>
           <h2 className="mb-3 flex items-center gap-1.5 text-caption text-muted-foreground uppercase">
             <Lightbulb className="size-3.5" /> Qué hacen los mejores (el patrón)

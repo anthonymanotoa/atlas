@@ -601,12 +601,14 @@ def api_portfolio_research():
     personalized LLM prompt (built from the user's CV) to commission their own portfolio.
     Everything the user needs to review the examples and brief an LLM, in one place."""
     from engine.config import load_criteria, load_cv_layout, load_master_cv, load_ontology
-    from engine.portfolio.peer_examples import PEER_EXAMPLES, PORTFOLIO_PATTERNS
+    from engine.portfolio.peer_examples import load_references
     from engine.portfolio.prompt import build_portfolio_prompt
+    from engine.profiles import domain_of
 
+    references = load_references(domain_of(paths.PROFILE_ID))
     return {
-        "examples": PEER_EXAMPLES,
-        "patterns": PORTFOLIO_PATTERNS,
+        "examples": references["examples"],
+        "patterns": references["patterns"],
         "prompt": build_portfolio_prompt(
             load_master_cv(),
             layout=load_cv_layout(),

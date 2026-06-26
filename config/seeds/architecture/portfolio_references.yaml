@@ -1,0 +1,151 @@
+# Reference portfolios + the cross-cutting patterns behind them — ARCHITECTURE domain.
+#
+# Researched and link-verified for an EARLY-CAREER architect with real on-site experience
+# (technical documentation, residencia de obra, municipal permitting) plus interests in heritage
+# rehabilitation and sustainable design. Architecture portfolios are VISUAL and live on
+# Behance / Issuu / personal sites — never GitHub. Atlas never clones a peer's site; it points at
+# the live link + an honest read of what to learn. Discarded any dead/weak/off-topic links.
+#
+# Loaded by domain via engine/portfolio/peer_examples.py. Field names are the API/UI contract:
+#   peer_name · url · role_match · key_strengths[] · what_to_steal[]
+
+examples:
+  - peer_name: "Mohamed Arifin — Architecture Portfolio 2025 (Behance)"
+    url: "https://www.behance.net/gallery/216714509/Architecture-Portfolio-2025"
+    role_match: >-
+      Coincidencia por HERRAMIENTAS y nivel: su stack declarado (AutoCAD, Revit, SketchUp,
+      Lumion, D5 Render) es casi idéntico al tuyo, y es un portafolio compacto de arquitecto
+      temprano. Buen molde para ver cómo se ordena un dossier con tu mismo software, aunque su
+      estética es más glossy que técnica.
+    key_strengths:
+      - "Grid de Behance limpio y uniforme: láminas con recortes consistentes y portada fuerte."
+      - "Mezcla plantas/cortes con renders en la misma secuencia, sin separar 'lo técnico' de 'lo bonito'."
+      - "Muestra el software de forma sobria (listado), nunca con barras de porcentaje."
+    what_to_steal:
+      - "Repetir un mismo ratio de imagen lámina a lámina para que el scroll se sienta editorial."
+      - "Abrir cada proyecto con una portada-render a sangre y un título grande; debajo, el set técnico."
+      - "Listar el software como texto al pie del about, no como gráfico de niveles."
+
+  - peer_name: "Judy Davila Suárez — Portafolio Arquitectura (Cuenca, Ecuador · Behance)"
+    url: "https://www.behance.net/gallery/176260713/Portafolio-Arquitectura"
+    role_match: >-
+      Coincidencia casi EXACTA de perfil: arquitecta de Cuenca (Ecuador), portafolio en español,
+      con un proyecto de rehabilitación y trabajo de patrimonio. Es la referencia regional y
+      patrimonial más cercana a ti.
+    key_strengths:
+      - "Contexto local andino y en español: vocabulario y tipologías que compartes (Loja/Cuenca)."
+      - "Incluye un proyecto de rehabilitación, no solo obra nueva — raro y valioso para tu nicho patrimonial."
+      - "Usa esquemas/diagramas para explicar la lógica del proyecto, no solo renders."
+    what_to_steal:
+      - "Dar a la rehabilitación patrimonial una lámina propia con: estado actual → diagnóstico → propuesta."
+      - "Apoyarte en esquemas/axonometrías explosionadas para contar la intervención, no en muros de texto."
+      - "Mantener todo en español y con referencias locales: es una ventaja, no algo a 'corregir' al inglés."
+
+  - peer_name: "Darya Zhukouskaya — Architecture Portfolio 2024 (sostenibilidad · Behance)"
+    url: "https://www.behance.net/gallery/190491721/Architecture-Portfolio-2024"
+    role_match: >-
+      Coincidencia por TEMA (sostenibilidad) y por la BARRA visual. Es más senior que tú, así que
+      sirve para fijar el listón de calidad de un dossier sostenible muy pulido, no para copiar el
+      nivel de producción.
+    key_strengths:
+      - "Portafolio sobrio y consistente, con la sostenibilidad como hilo conductor declarado."
+      - "Curaduría apretada: pocas láminas, mucho aire, cada imagen gana su espacio."
+      - "Diagramas ambientales (asoleamiento, ventilación) integrados al relato del proyecto."
+    what_to_steal:
+      - "Convertir tu tesis (aislante de arcilla + cal + cascarilla de arroz) en una ficha de producto: diagrama de capas, datos térmicos, fotos del material."
+      - "Usar diagramas bioclimáticos simples (sol, viento, masa térmica) para 'demostrar' la sostenibilidad, no solo afirmarla."
+      - "⚠️ Anti-patrón: no imites su densidad de renders fotorrealistas; sin un equipo detrás, mejor menos renders pero impecables que muchos a medias."
+
+  - peer_name: "Belén Rodríguez — Portafolio Arquitectónico (estudiante · Issuu)"
+    url: "https://issuu.com/belenrmm/docs/portafolio_final_bel_n_rodr_guez_m"
+    role_match: >-
+      Coincidencia por NIVEL y formato: portafolio académico de estudiante en español, publicado
+      como flipbook de Issuu — exactamente el formato PDF-navegable que necesitas para arquitectura
+      (no GitHub). Buen molde de dossier junior honesto.
+    key_strengths:
+      - "Autodefinición clara como estudiante: proyectos académicos como cuerpo principal, sin inflar la experiencia."
+      - "Formato Issuu = el mismo PDF descargable/embebible que esperan los estudios de arquitectura."
+      - "Selección de 'proyectos destacados', no todo lo que hizo en la carrera."
+    what_to_steal:
+      - "Publicar el portafolio como flipbook de Issuu Y como PDF descargable (<5 MB) enlazado desde el about."
+      - "Encabezar con 'proyectos seleccionados': 4–6 proyectos profundos, no 12 superficiales."
+      - "Mantener una retícula y márgenes idénticos en todas las páginas del PDF para que se lea como un libro."
+
+  - peer_name: "Carlos Guerrero — Portafolio Estudiante de Arquitectura 2018–2021 (Issuu)"
+    url: "https://issuu.com/carlosgdgm/docs/portafolio_practicas_2022_cg"
+    role_match: >-
+      Coincidencia por ETAPA: portafolio de prácticas/estudiante en español, bilingüe en el título
+      (ES/EN). Útil porque combina trabajo académico con prácticas, igual que tú sumas 4+ años de
+      obra real a un título reciente.
+    key_strengths:
+      - "Mezcla proyectos académicos con trabajo de prácticas: relato realista de alguien que ya pisó obra."
+      - "Bilingüe en lo justo (título), pensando en abrir puertas sin abandonar el español."
+      - "Recorte curado a 'trabajos seleccionados', con anexo aparte."
+    what_to_steal:
+      - "Separar un bloque de 'Experiencia profesional / obra' del bloque académico, para que tu residencia de obra y trámites destaquen."
+      - "Añadir un anexo final con láminas técnicas (detalles constructivos, presupuestos, cómputos) sin ensuciar el cuerpo principal."
+      - "Título y secciones bilingües ES/EN para postular también a remoto, manteniendo el contenido en español."
+
+  - peer_name: "Hamilton Snowber Architects — sitio personal (referencia de diseño web)"
+    url: "https://www.hamiltonsnowber.com"
+    role_match: >-
+      Coincidencia AESTÉTICA, no de perfil (es un estudio establecido en EE. UU.). Es el modelo de
+      'sitio personal limpio': sirve para fijar cómo debería verse tu versión web si pasas de
+      Issuu/Behance a un dominio propio.
+    key_strengths:
+      - "Layout muy directo: grilla de proyectos con navegación clara (transformados, obra nueva, en proceso)."
+      - "Cero ruido: la imagen manda, el texto es mínimo."
+      - "Navegación obvia entre proyectos, sin menús recargados."
+    what_to_steal:
+      - "Si haces web propia, copiar el patrón imagen-grande + navegación simple de proyectos."
+      - "Reducir el copy: una frase de concepto por proyecto, el resto lo cuentan las imágenes."
+      - "Agrupar por estado del proyecto (construido / en proceso / académico) para ordenar trabajo desigual."
+
+  - peer_name: "Issuu — Categoría Portafolios de Arquitectura (colección de referencia)"
+    url: "https://issuu.com/categories/portfolio/architecture"
+    role_match: >-
+      Fuente de REFERENCIA estable (no un individuo). Colección curada con 'top picks' y escuelas
+      como Bartlett y SCI-Arc; ideal para estudiar decenas de dossieres en el mismo formato Issuu
+      que tú usarás, y calibrar tu listón.
+    key_strengths:
+      - "Enorme volumen de portafolios reales en formato flipbook, filtrables por populares/recientes."
+      - "Incluye selecciones de escuelas top, útiles como vara de medir."
+      - "Enlace estable de categoría: difícil que muera, a diferencia de un doc individual."
+    what_to_steal:
+      - "Estudiar 8–10 'top picks' y anotar el orden de secciones que se repite (portada → about → proyectos → contacto)."
+      - "Identificar qué portadas te frenan al hacer scroll y replicar ese gancho en tu propia portada."
+      - "⚠️ Anti-patrón: muchos docs aquí abusan de texto y baja resolución; úsalos para detectar qué NO hacer, no solo qué copiar."
+
+patterns:
+  secciones:
+    - "Portada / hero: una imagen potente (render o foto de obra) + nombre + 'Arquitecta' + año de titulación; sin texto de relleno."
+    - "Sobre mí (about) breve: 3–4 líneas — titulación (UTPL 2026), 4+ años en obra, foco en rehabilitación patrimonial y diseño sostenible."
+    - "Software / habilidades: listado sobrio de herramientas (AutoCAD, ArchiCAD, Revit/BIM, D5, Lumion, SketchUp, Illustrator/Photoshop). NUNCA barras ni porcentajes."
+    - "Proyectos seleccionados: 4–6 proyectos, cada uno con su propia secuencia interna; primero el más fuerte (la tesis)."
+    - "Bloque de experiencia / obra: láminas dedicadas a documentación técnica, residencia de obra, trámites municipales, presupuestos y cómputos."
+    - "Contacto + descarga: email, ciudad/disponibilidad (reubicación y remoto en español), y un PDF/CV descargable (<5 MB)."
+  como_mostrar_proyectos:
+    - "Portada del proyecto: una imagen ancha (render o foto) con el nombre y una línea de concepto."
+    - "Ficha mínima: programa/tipología, año, ubicación, tu rol y escala (m²)."
+    - "Tu aporte explícito: qué hiciste tú (levantamiento, documentación, residencia de obra, trámite), distinto del trabajo de equipo."
+    - "Set de dibujos técnicos: planta + corte + un detalle constructivo, a escala y legibles."
+    - "Renders/fotos: 1–3 imágenes que comuniquen atmósfera, sin saturar."
+    - "Diagramas: esquemas de concepto, bioclimáticos (sol/viento/masa térmica) o de intervención patrimonial (estado→diagnóstico→propuesta)."
+    - "Concepto en una frase: una sola idea por proyecto; el resto lo cuentan las imágenes."
+  diseno:
+    - "Imagen primero: el portafolio se gana o se pierde en la imagen; el texto es soporte."
+    - "Retícula consistente: misma cuadrícula y márgenes en todas las láminas para que se lea como un libro."
+    - "Ratios de imagen uniformes: evita recortes inconsistentes que rompen el ritmo del scroll."
+    - "Espacio en blanco generoso: enmarca la obra; el hueco es jerarquía, no algo a rellenar."
+    - "Tipografía: una o dos fuentes, sobrias; jerarquía clara entre título de proyecto, ficha y pies."
+    - "Peso: PDF <5 MB descargable + versión web/Issuu navegable; imágenes optimizadas pero nítidas."
+    - "Coherencia cromática: una paleta tranquila acorde al discurso sostenible/patrimonial."
+  errores_a_evitar:
+    - "Barras o porcentajes de habilidades (skill bars): se ven amateur; lista las herramientas como texto."
+    - "Muros de texto: descripciones largas que nadie lee; una frase de concepto basta."
+    - "Imágenes en baja resolución o pixeladas: matan la credibilidad en un dossier visual."
+    - "Sin dibujos técnicos: solo renders glossy hace dudar de tu capacidad real de documentar y construir."
+    - "Recortes/relaciones de aspecto inconsistentes que rompen la retícula."
+    - "Demasiados proyectos superficiales: mejor 4–6 profundos que 12 a medias."
+    - "Enlaces muertos o PDF de 40 MB que no carga: verifica que el link viva y que el archivo sea liviano."
+    - "Esconder la obra real (residencia, trámites, presupuestos): es tu diferencial frente a recién egresados solo-académicos; muéstrala."
