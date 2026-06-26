@@ -430,7 +430,9 @@ export default function App() {
             </nav>
 
             {view === "portfolio" ? (
-              <PortfolioViewer />
+              // Key on the active profile so switching profiles refetches the portfolio,
+              // peers and (domain-scoped) references instead of showing stale data.
+              <PortfolioViewer key={activeProfile} />
             ) : (
               <>
                 {ov?.downtime_hours ? (
