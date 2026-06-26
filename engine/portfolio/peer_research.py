@@ -40,10 +40,31 @@ def add_peer(
     )
 
 
-def research_queries(role_match: str) -> dict[str, str]:
-    """Ready-to-paste queries for the supervised Chrome session (no requests made here)."""
+# Where peers in a given domain actually publish their portfolios. Driven by the profile's
+# proof_source so an architect's search hits Behance/Issuu, not code-hosting domains.
+_PROOF_HOSTS: dict[str, list[str]] = {
+    "github": ["github.io", "vercel.app"],
+    "visual_gallery": ["behance.net", "issuu.com", "cargo.site"],
+    "none": [],
+}
+
+
+def _proof_hosts(proof_source: str | None) -> list[str]:
+    """Host filter for the 'portfolios' search, keyed by proof_source (defaults to github)."""
+    return _PROOF_HOSTS.get(proof_source or "github", _PROOF_HOSTS["github"])
+
+
+def research_queries(role_match: str, *, proof_source: str | None = None) -> dict[str, str]:
+    """Ready-to-paste queries for the supervised Chrome session (no requests made here).
+
+    `proof_source` (from cv_layout.yaml) chooses where to look for peer portfolios:
+    code hosts for "github", visual hosts (Behance/Issuu/Cargo) for "visual_gallery".
+    """
     role = (role_match or "").strip()
+    hosts = _proof_hosts(proof_source)
+    site_filter = " ".join(f"OR site:{h}" for h in hosts).removeprefix("OR ")
+    portfolios = f"{role} portfolio {site_filter}".strip() if hosts else f"{role} portfolio"
     return {
-        "portfolios": f"{role} portfolio site:github.io OR site:vercel.app",
+        "portfolios": portfolios,
         "linkedin_peers": f"site:linkedin.com/in {role}",
     }
