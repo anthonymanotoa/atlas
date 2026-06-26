@@ -1,0 +1,44 @@
+# Per-company ATS registry. The discovery runner iterates these rows and hits the
+# right keyless JSON endpoint. Add the remote-first companies you actually target.
+#
+# Find the token by looking at a company's careers URL, or run:
+#   atlas resolve-ats https://<company>.com/careers
+#
+#   ats: greenhouse      token = slug in boards.greenhouse.io/<token>
+#   ats: lever           token = slug in jobs.lever.co/<token>   (eu: true for EU tenants)
+#   ats: ashby           token = name in jobs.ashbyhq.com/<token>  (CASE-SENSITIVE)
+#   ats: smartrecruiters token = slug in jobs.smartrecruiters.com/<token>
+#   ats: workday         instance = tenant in <tenant>.<wdN>.myworkdayjobs.com;
+#                        token = site slug after the tenant; careers_url carries the wd-cluster
+#                        e.g. instance: nvidia, token: NVIDIAExternalCareerSite,
+#                             careers_url: https://nvidia.wd5.myworkdayjobs.com/NVIDIAExternalCareerSite
+#
+# The starter rows below are real public boards used to validate the pipeline.
+# Replace them with your own targets — `atlas discover` logs per-source health so
+# any stale token surfaces immediately.
+
+companies:
+  - company: Lever (demo board)
+    ats: lever
+    token: leverdemo
+    careers_url: https://jobs.lever.co/leverdemo
+
+  - company: Ashby
+    ats: ashby
+    token: Ashby
+    careers_url: https://jobs.ashbyhq.com/Ashby
+
+  - company: Ramp
+    ats: ashby
+    token: Ramp
+    careers_url: https://jobs.ashbyhq.com/Ramp
+
+  - company: Airbnb
+    ats: greenhouse
+    token: airbnb
+    careers_url: https://boards.greenhouse.io/airbnb
+
+  - company: GitLab
+    ats: greenhouse
+    token: gitlab
+    careers_url: https://boards.greenhouse.io/gitlab

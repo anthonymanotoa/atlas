@@ -1,0 +1,90 @@
+# Data-Science + AI skills gazetteer: canonical skill -> [aliases / acronyms / surface forms].
+# Used by keyword extraction (match a JD's surface form) and by CV tailoring (inject the
+# canonical skill in the exact form the JD uses, with dual-form acronyms where relevant).
+# Keep aliases lowercase; matching is case-insensitive and word-boundary aware.
+
+skills:
+  # ── Languages ──
+  python: [py]
+  sql: [postgresql, postgres, mysql, t-sql, pl/sql, ansi sql]
+  r: [rstats, r language]
+  scala: []
+  java: []
+  bash: [shell scripting, shell]
+
+  # ── ML / DS core ──
+  machine learning: [ml]
+  deep learning: [dl, neural networks]
+  natural language processing: [nlp]
+  computer vision: [cv, image recognition]
+  scikit-learn: [sklearn, sci-kit learn]
+  xgboost: [gradient boosting, gbm]
+  lightgbm: []
+  tensorflow: [tf, keras]
+  pytorch: [torch]
+  pandas: [pandas dataframe]
+  numpy: []
+  statsmodels: []
+  feature engineering: []
+  model evaluation: [model validation, cross-validation]
+  time series: [time-series forecasting, forecasting]
+  recommender systems: [recommendation engine]
+
+  # ── Experimentation / analytics ──
+  a/b testing: [ab testing, split testing, experimentation, controlled experiments]
+  causal inference: [causal analysis]
+  statistics: [statistical analysis, statistical modeling, hypothesis testing]
+  experimentation: [online experiments]
+  cohort analysis: []
+  funnel analysis: []
+  segmentation: [clustering, customer segmentation]
+  attribution: [marketing attribution]
+
+  # ── AI / LLM (the pivot) ──
+  large language models: [llm, llms, gpt, language models]
+  generative ai: [genai, gen ai, generative models]
+  prompt engineering: [prompting]
+  retrieval augmented generation: [rag]
+  llm agents: [ai agents, agentic, agent frameworks]
+  langchain: []
+  llamaindex: [llama index]
+  vector databases: [vector db, pinecone, weaviate, embeddings store]
+  embeddings: [text embeddings, semantic search]
+  fine-tuning: [fine tuning, model fine-tuning]
+  mlops: [ml ops, model deployment, model monitoring]
+
+  # ── Cloud (name specific services, not just the provider) ──
+  amazon web services: [aws]
+  aws s3: [s3]
+  aws sagemaker: [sagemaker]
+  aws redshift: [redshift]
+  google cloud platform: [gcp]
+  bigquery: [big query]
+  microsoft azure: [azure]
+  snowflake: []
+  databricks: [spark, apache spark, pyspark]
+
+  # ── Data engineering / tooling ──
+  dbt: [data build tool]
+  airflow: [apache airflow]
+  etl: [elt, data pipelines]
+  data modeling: [dimensional modeling]
+  git: [github, gitlab, version control]
+  docker: [containers, containerization]
+  kubernetes: [k8s]
+  fastapi: []
+  rest api: [api development, restful api]
+
+  # ── BI / viz ──
+  tableau: []
+  power bi: [powerbi, microsoft power bi]
+  looker: [looker studio]
+  data visualization: [dataviz, dashboards]
+  excel: [advanced excel, google sheets]
+
+  # ── Soft / domain ──
+  stakeholder management: [cross-functional, stakeholder communication]
+  data storytelling: [storytelling with data]
+  product analytics: [product data science]
+  growth analytics: [growth]
+  e-commerce: [ecommerce, retail analytics]

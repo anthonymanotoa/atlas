@@ -22,14 +22,24 @@ def restore_paths():
 
 @pytest.fixture
 def tmp_registry(tmp_path, monkeypatch):
-    """Point the profiles module's repo root + registry at a tmp tree with seeds."""
-    (tmp_path / "config").mkdir()
-    (tmp_path / "profile").mkdir()
-    (tmp_path / "config" / "criteria.example.md").write_text("---\nroles: []\n---\n# crit")
-    (tmp_path / "config" / "companies.example.yaml").write_text("companies: []\n")
-    (tmp_path / "config" / "sources.yaml").write_text("sources: {}\n")
-    (tmp_path / "config" / "ontology.yaml").write_text("skills: {}\n")
-    (tmp_path / "profile" / "master_cv.example.yaml").write_text("basics: {}\n")
+    """Point the profiles module's repo root + registry at a tmp tree with per-domain seed packs."""
+
+    def _pack(domain: str, *, criteria: str, ontology: str) -> None:
+        d = tmp_path / "config" / "seeds" / domain
+        d.mkdir(parents=True)
+        (d / "criteria.example.md").write_text(criteria)
+        (d / "companies.example.yaml").write_text("companies: []\n")
+        (d / "sources.yaml").write_text("sources: {}\n")
+        (d / "ontology.yaml").write_text(ontology)
+        (d / "master_cv.example.yaml").write_text("basics: {}\n")
+
+    _pack("data", criteria="---\nroles: []\n---\n# crit", ontology="skills:\n  Python: [py]\n")
+    _pack(
+        "architecture",
+        criteria="---\nroles: [architect]\n---\n# arch",
+        ontology="skills:\n  Revit: [rvt]\n",
+    )
+    _pack("default", criteria="---\nroles: []\n---\n# default", ontology="skills: {}\n")
     profiles_dir = tmp_path / "profiles"
     monkeypatch.setattr(profiles, "REPO_ROOT", tmp_path)
     monkeypatch.setattr(profiles, "PROFILES_DIR", profiles_dir)
@@ -164,3 +174,27 @@ def test_cli_create_accepts_domain(tmp_registry):
     )
     assert result.exit_code == 0, result.output
     assert profiles.domain_of("lucy") == "architecture"
+
+
+# ── per-domain seed packs ──────────────────────────────────────────────────────
+def _seeded_ontology(profile_id: str) -> dict:
+    import yaml
+
+    path = profiles.PROFILES_DIR / profile_id / "config" / "ontology.yaml"
+    return (yaml.safe_load(path.read_text()) or {}).get("skills") or {}
+
+
+def test_data_profile_seeds_its_pack(tmp_registry):
+    profiles.create_profile("d", "D", domain="data")
+    assert "Python" in _seeded_ontology("d")  # data pack keeps the DS gazetteer
+
+
+def test_architecture_profile_seeds_its_pack(tmp_registry):
+    profiles.create_profile("a", "A", domain="architecture")
+    ont = _seeded_ontology("a")
+    assert "Revit" in ont and "Python" not in ont  # AEC pack, not DS
+
+
+def test_unknown_domain_falls_back_to_default_pack(tmp_registry):
+    profiles.create_profile("u", "U", domain="bogus")
+    assert _seeded_ontology("u") == {}  # default pack ships an empty ontology

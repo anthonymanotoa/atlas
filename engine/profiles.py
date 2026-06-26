@@ -24,14 +24,18 @@ _ID_RE = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
 # is ever shown the cryptic "Dueño". (The owner used to be hardcoded as "Dueño".)
 _PLACEHOLDER_LABELS = {"", "dueño", "dueno", "owner", "mi perfil", "owner profile"}
 
-# (destination relative to a profile root, seed relative to the repo root). Seeds let a
-# brand-new profile boot on the committed examples, ready to edit.
-_SEEDS: list[tuple[str, str]] = [
-    ("config/criteria.md", "config/criteria.example.md"),
-    ("config/companies.yaml", "config/companies.example.yaml"),
-    ("config/sources.yaml", "config/sources.yaml"),
-    ("config/ontology.yaml", "config/ontology.yaml"),
-    ("profile/master_cv.yaml", "profile/master_cv.example.yaml"),
+# (destination relative to a profile root, filename within the domain seed pack). A brand-new
+# profile boots on its domain's committed pack under `config/seeds/<domain>/`, ready to edit.
+# Per file, the profile's own domain pack is tried first, then the neutral `default` pack.
+# cv_layout.yaml / interview_topics.yaml are optional (only some packs ship them).
+_SEED_FILES: list[tuple[str, str]] = [
+    ("config/criteria.md", "criteria.example.md"),
+    ("config/companies.yaml", "companies.example.yaml"),
+    ("config/sources.yaml", "sources.yaml"),
+    ("config/ontology.yaml", "ontology.yaml"),
+    ("config/cv_layout.yaml", "cv_layout.yaml"),
+    ("config/interview_topics.yaml", "interview_topics.yaml"),
+    ("profile/master_cv.yaml", "master_cv.example.yaml"),
 ]
 
 
@@ -167,14 +171,23 @@ def _profile_root(profile_id: str) -> Path:
     return PROFILES_DIR / profile_id
 
 
-def _seed_missing(root: Path) -> None:
-    """Copy committed seeds into the profile for any files it doesn't have yet."""
-    for dest_rel, seed_rel in _SEEDS:
+def _seed_source(domain: str, name: str) -> Path | None:
+    """The pack file `name` for `domain`, falling back to the neutral `default` pack."""
+    for d in (domain, "default"):
+        cand = REPO_ROOT / "config" / "seeds" / d / name
+        if cand.exists():
+            return cand
+    return None
+
+
+def _seed_missing(root: Path, domain: str = "data") -> None:
+    """Copy the domain's committed pack into the profile for any files it doesn't have yet."""
+    for dest_rel, name in _SEED_FILES:
         dest = root / dest_rel
         if dest.exists():
             continue
-        seed = REPO_ROOT / seed_rel
-        if seed.exists():
+        seed = _seed_source(domain, name)
+        if seed:
             dest.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(str(seed), str(dest))
 
@@ -188,7 +201,7 @@ def create_profile(profile_id: str, label: str | None = None, domain: str = "dat
     (root / "profile").mkdir(parents=True, exist_ok=True)
     (root / "data" / "inbox").mkdir(parents=True, exist_ok=True)
     (root / "data" / "outbox").mkdir(parents=True, exist_ok=True)
-    _seed_missing(root)
+    _seed_missing(root, domain)
     _register(profile_id, label or profile_id.capitalize(), domain=domain)
     return {"profile": profile_id, "created": created, "root": str(root), "domain": domain}
 

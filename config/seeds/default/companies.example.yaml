@@ -1,0 +1,7 @@
+# Target companies whose ATS Atlas reads directly (Greenhouse / Lever / Ashby / SmartRecruiters).
+# Empty by default — add the firms you care about. Only relevant for industries that use these
+# ATS vendors; many fields (architecture, trades, local SMEs) hire by email/PDF instead.
+companies: []
+#  - company: "Example Co"
+#    ats: greenhouse        # greenhouse | lever | ashby | smartrecruiters
+#    token: "exampleco"     # board token / site slug
