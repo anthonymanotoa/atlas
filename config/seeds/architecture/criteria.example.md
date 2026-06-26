@@ -34,7 +34,12 @@ seniority:
   - senior
   - lead
 remote_required: false          # architecture has on-site roles; do NOT auto-reject in-person
-locations_allowed:
+onsite_locations: []            # si lo llenas (p. ej. [ecuador, ", ec", loja, quito, guayaquil]),
+                                # las ofertas PRESENCIALES fuera de esas ubicaciones se DESCARTAN,
+                                # pero las REMOTAS quedan exentas (mundo entero). Útil para
+                                # "presencial solo en mi país, remoto desde cualquier parte".
+                                # Nota: las ofertas EC vienen como "Ciudad, Prov, EC" → incluye ", ec".
+locations_allowed:              # informativo
   - ecuador
   - latin america
   - remote

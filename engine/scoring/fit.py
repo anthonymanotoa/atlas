@@ -118,6 +118,18 @@ def score_job(job: dict, criteria: Criteria, learnings: list[dict] | None = None
         else:
             reasons.append("remote status unknown")
 
+    # 2b. On-site location gate — when criteria.onsite_locations is set, a CONFIRMED on-site
+    #     posting must be in one of them; REMOTE postings are exempt (remote is worldwide). An
+    #     undetermined posting (remote unknown, or no location) is not filtered (too little signal).
+    is_remote_job = is_remote == 1 or is_remote is True or wt == "remote"
+    onsite_confirmed = (is_remote in (0, False)) or (wt in ("onsite", "hybrid"))
+    if criteria.onsite_locations and onsite_confirmed and not is_remote_job:
+        loc = (job.get("location") or "").lower()
+        if loc and not any(a.lower() in loc for a in criteria.onsite_locations):
+            disq = True
+            knockouts.append("presencial fuera de tus ubicaciones")
+            reasons.append(f"on-site outside your locations ({job.get('location')})")
+
     # 3. Seniority fit — junior is under-qualified (DQ); exec is over-qualified (DQ when
     #    excluded); Staff/Principal is a "stretch" (over-qualified seniority) for a candidate
     #    with fewer than criteria.stretch_min_years of experience — flagged + down-ranked.
