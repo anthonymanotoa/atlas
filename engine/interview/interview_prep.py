@@ -10,11 +10,13 @@ from __future__ import annotations
 from pathlib import Path
 
 import engine.paths as paths
-from engine.config import load_master_cv, load_ontology
+from engine.config import load_interview_topics, load_master_cv, load_ontology
 from engine.cv.match import match_score
 from engine.db.models import DB
 
-_BEHAVIORAL = {
+# Embedded DATA banks — the fallback when a profile ships no interview_topics.yaml. A non-data
+# profile (e.g. architecture) overrides these via its pack's interview_topics.yaml.
+_DEFAULT_BEHAVIORAL = {
     "en": [
         "Tell me about yourself and your path toward AI/ML.",
         "Walk me through a project you're proud of — your specific contribution and its impact.",
@@ -32,7 +34,7 @@ _BEHAVIORAL = {
 }
 
 # (keywords matched in title+desc) -> (en questions, es questions)
-_ROLE_TOPICS: list[tuple[tuple[str, ...], list[str], list[str]]] = [
+_DEFAULT_ROLE_TOPICS: list[tuple[tuple[str, ...], list[str], list[str]]] = [
     (
         ("data scien", "machine learning", "ml engineer", "applied scien"),
         [
@@ -109,10 +111,30 @@ _HEAD = {
 }
 
 
-def _role_questions(title: str, desc: str, lang: str) -> list[str]:
+def _behavioral(lang: str, topics: dict | None = None) -> list[str]:
+    """Behavioral questions from the profile's interview_topics.yaml, else the data default."""
+    topics = topics if topics is not None else load_interview_topics()
+    loaded = (topics.get("behavioral") or {}).get(lang)
+    return loaded if loaded else _DEFAULT_BEHAVIORAL[lang]
+
+
+def _default_tech(lang: str, topics: dict | None = None) -> list[str]:
+    topics = topics if topics is not None else load_interview_topics()
+    loaded = (topics.get("default_tech") or {}).get(lang)
+    return loaded if loaded else _DEFAULT_TECH[lang]
+
+
+def _role_questions(title: str, desc: str, lang: str, topics: dict | None = None) -> list[str]:
+    topics = topics if topics is not None else load_interview_topics()
     hay = f"{title} {desc}".lower()
     out: list[str] = []
-    for keywords, en_q, es_q in _ROLE_TOPICS:
+    loaded = topics.get("role_topics")
+    if loaded:  # per-profile banks: list of {keywords, en, es}
+        for rt in loaded:
+            if any(k in hay for k in (rt.get("keywords") or [])):
+                out.extend(rt.get(lang) or [])
+        return out or _default_tech(lang, topics)
+    for keywords, en_q, es_q in _DEFAULT_ROLE_TOPICS:  # embedded data fallback
         if any(k in hay for k in keywords):
             out.extend(en_q if lang == "en" else es_q)
     return out or _DEFAULT_TECH[lang]
@@ -145,6 +167,7 @@ def gen_prep_doc(db: DB, interview_id: int, language: str = "en") -> Path:
     interviewers = db.interviewers_for(interview_id)
     cv = load_master_cv()
     ontology = load_ontology()
+    topics = load_interview_topics()
     learnings = db.learnings_for_company(job.get("company", ""))
 
     title, desc = job.get("title", ""), job.get("description", "") or ""
@@ -170,9 +193,9 @@ def gen_prep_doc(db: DB, interview_id: int, language: str = "en") -> Path:
         "",
         f"## {h['behavioral']}",
     ]
-    lines += [f"- {q}" for q in _BEHAVIORAL[lang]]
+    lines += [f"- {q}" for q in _behavioral(lang, topics)]
     lines += ["", f"## {h['role']}"]
-    lines += [f"- {q}" for q in _role_questions(title, desc, lang)]
+    lines += [f"- {q}" for q in _role_questions(title, desc, lang, topics)]
 
     topics = _topics_to_review(job, cv, ontology)
     if topics:

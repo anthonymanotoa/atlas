@@ -1,0 +1,43 @@
+# Interview question banks for ARCHITECTURE (overrides the engine's embedded data banks).
+behavioral:
+  es:
+    - "Cuéntame sobre ti y tu camino en la arquitectura."
+    - "Háblame de un proyecto de tu portafolio del que estés orgulloso — tu aporte específico y su impacto."
+    - "Cuéntame de una restricción difícil (sitio, presupuesto, normativa, patrimonio) y cómo la resolviste."
+    - "Describe un proyecto que no salió como esperabas. ¿Qué aprendiste?"
+    - "¿Por qué este estudio y este rol en particular?"
+  en:
+    - "Tell me about yourself and your path in architecture."
+    - "Walk me through a portfolio project you're proud of — your specific contribution and its impact."
+    - "Tell me about a tough constraint (site, budget, code, heritage) and how you resolved it."
+    - "Describe a project that didn't go as planned. What did you learn?"
+    - "Why this studio and this role specifically?"
+
+# (keywords matched in the posting's title+description) -> question banks per language.
+role_topics:
+  - keywords: [architect, architectural, designer, bim, revit, archicad, draft, drawing, document]
+    es:
+      - "Explícame las fases de un proyecto (concepto → desarrollo → detalle técnico → obra) y tu aporte en cada una."
+      - "¿Cómo organizas y nombras un set de planos / documentación de obra?"
+      - "¿Cómo coordinas un modelo BIM entre disciplinas y resuelves interferencias?"
+      - "¿Cómo aseguras que un dibujo cumpla la normativa y sea constructible?"
+    en:
+      - "Walk me through project phases (concept → DD → technical detailing → construction) and your contribution at each."
+      - "How do you organize and name a drawing set / construction documents?"
+      - "How do you coordinate a BIM model across disciplines and resolve clashes?"
+      - "How do you make sure a drawing is code-compliant and buildable?"
+  - keywords: [visualiz, render, archviz, lumion, enscape, twinmotion, 3d artist]
+    es:
+      - "¿Cómo llevas un modelo a un render final (materiales, iluminación, post-producción)?"
+      - "¿Cómo equilibras realismo y tiempo de render en un proyecto con plazos?"
+    en:
+      - "How do you take a model to a final render (materials, lighting, post-production)?"
+      - "How do you balance realism and render time under deadlines?"
+
+default_tech:
+  es:
+    - "Explícame un proyecto de punta a punta (sitio/programa → diseño → entrega)."
+    - "¿Qué software usas en cada fase y por qué esa elección?"
+  en:
+    - "Walk me through a project end-to-end (site/brief → design → delivery)."
+    - "Which software do you use at each phase, and why that choice?"

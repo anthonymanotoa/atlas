@@ -151,6 +151,18 @@ def load_cv_layout() -> dict:
     return layout
 
 
+# ── interview question banks (per-domain) ────────────────────────────────────
+def load_interview_topics() -> dict:
+    """Per-profile interview banks: {behavioral, role_topics, default_tech}.
+
+    Empty dict when no interview_topics.yaml is present — interview_prep then falls back to its
+    embedded data banks, so existing profiles are unchanged."""
+    path = example_fallback(paths.INTERVIEW_TOPICS_PATH)
+    if not path.exists():
+        return {}
+    return yaml.safe_load(path.read_text()) or {}
+
+
 # ── ontology (skills gazetteer) ──────────────────────────────────────────────
 def load_ontology() -> dict[str, list[str]]:
     """canonical skill -> [aliases/acronyms]. Used by keyword extraction + tailoring."""
