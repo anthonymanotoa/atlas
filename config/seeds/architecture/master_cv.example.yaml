@@ -1,0 +1,124 @@
+# Atlas — master CV template (ARQUITECTURA / AEC).
+#
+# Plantilla de ejemplo: TODOS los datos de abajo son placeholders neutrales. Cópiala a
+# profile/master_cv.yaml y reemplaza cada valor con TUS datos reales y VERACES:
+#   cp config/seeds/architecture/master_cv.example.yaml profile/master_cv.yaml
+#
+# profile/master_cv.yaml está gitignored. Atlas NUNCA inventa contenido — `atlas tailor` solo
+# reordena/selecciona lo que pongas aquí, así que cuanto más rico y exacto sea este archivo,
+# mejores serán los CV adaptados. Fechas como "Mon YYYY" (p. ej. "Jan 2022") y "Present" para
+# lo actual — el renderer parse-safe espera ese formato.
+#
+# NOTA DE ARQUITECTURA: el CV acompaña a un PORTAFOLIO (casi obligatorio) y suele pesar más.
+# Para recién graduados, Educación + Proyectos/Taller van POR ENCIMA de la experiencia laboral.
+# Nivel de software SIEMPRE en texto plano — NUNCA barras, estrellas ni porcentajes.
+
+basics:
+  name: "Arq. Nombre Apellido"
+  label: "Arquitecta/o"                   # headline por defecto; `atlas tailor` lo adapta por oferta
+  email: "nombre.apellido@example.com"
+  phone: "+593 99 000 0000"
+  location: "Loja, Ecuador"
+  linkedin: "linkedin.com/in/example"
+  github: ""                              # opcional; en arquitectura no es relevante
+  website: ""
+  portfolio: ""                           # ← link al portafolio. CASI OBLIGATORIO en arquitectura:
+                                          #   el revisor salta del CV al portafolio. Ponlo también
+                                          #   en el header. Sin portafolio, la aplicación está
+                                          #   incompleta — construirlo es la prioridad #1.
+  # Bloque de outreach/carta. Atlas lo usa para redactar carta + cold/spec email con investigación
+  # de la firma (entregable de primera clase en una industria relacional). Texto veraz y neutral.
+  pitch:
+    identity_line: "arquitecta junior enfocada en BIM y visualización"
+    role_noun: "arquitecta"
+    impact_domain: "diseño residencial y rehabilitación patrimonial"
+    value_verb: "diseño y documento"
+  summary: >
+    Declaración profesional de 3-4 frases, adaptada al rol: años/titulación, skills clave
+    (Revit, AutoCAD, visualización), nichos (p. ej. rehabilitación patrimonial, diseño
+    residencial) y rasgos. Reemplázala con un resumen veraz y específico.
+
+# Registro / credenciales. En Ecuador el TÍTULO UNIVERSITARIO CONFIERE el título "Arquitecto/a":
+# puedes nombrarte así desde la graduación. Lo que se declara con precisión es el ESTADO de
+# registro para ejercer (SENESCYT; registro municipal/GAD para planos sellados). El CAE (Colegio
+# de Arquitectos) es OPCIONAL — la colegiación NO es obligatoria. NO implicar una licencia que no
+# se tiene; al aplicar al extranjero, "Architect" puede estar protegido (usar etiqueta funcional).
+licensure:
+  - title: "Arquitecta/o"
+    issuer: "[Universidad emisora]"
+    status: "Título conferido por la universidad"     # en Ecuador el grado confiere el título
+  - title: "Registro de título SENESCYT"
+    issuer: "SENESCYT (Ecuador)"
+    status: "En trámite"                               # o "Registro N.º [...]" cuando lo tengas
+  - title: "Colegiación CAE (opcional)"
+    issuer: "Colegio de Arquitectos del Ecuador (CAE)"
+    status: "No afiliada/o — colegiación no obligatoria"   # señal de credibilidad, no requisito
+
+# Lista plana de tus skills REALES, con nivel en TEXTO PLANO (Principiante / Intermedio /
+# Avanzado / Experto). `atlas tailor` reordena para subir las que matchean la oferta y nunca
+# agrega una que no listes. NUNCA uses barras/porcentajes/estrellas.
+skills:
+  - "Revit (Avanzado)"
+  - "AutoCAD (Avanzado)"
+  - "ArchiCAD (Intermedio)"
+  - "SketchUp (Avanzado)"
+  - "Lumion (Avanzado)"
+  - "D5 Render (Intermedio)"
+  - "Adobe Photoshop (Avanzado)"
+  - "Adobe Illustrator (Intermedio)"
+  - "Adobe InDesign (Intermedio)"
+  - "Documentación de obra / Construction Documents (Intermedio)"
+  - "BIM (Intermedio)"
+
+experience:
+  - title: "Dibujante de arquitectura"
+    company: "[Estudio / Firma]"
+    location: "Loja, Ecuador"
+    start: "Jan 2024"
+    end: "Present"
+    skills: ["AutoCAD", "Revit", "Construction Documents"]   # tags para rankear vs. la oferta
+    highlights:
+      # Empieza cada bullet por lo que TÚ hiciste (verbo + contexto + resultado cuantificado),
+      # no por describir el edificio. Liga las herramientas a entregables.
+      - "Produje planos y documentación de obra en AutoCAD y Revit para [N] proyectos residenciales."
+      - "Coordiné [N] láminas de detalle constructivo, reduciendo observaciones de revisión en 0%."
+
+# Proyectos académicos / de taller como entradas de PRIMERA CLASE — para un junior, esto ES la
+# experiencia. Cada uno con rol específico, herramientas, restricciones reales y resultado
+# cuantificado. Remite al portafolio para lo visual; no dupliques.
+projects:
+  - name: "Rehabilitación patrimonial — [Edificio / Sector]"
+    typology: "Patrimonio / rehabilitación"      # metadato: tipología
+    scale_m2: 0                                   # metadato: superficie en m² (placeholder)
+    role: "Diseño de concepto y modelado BIM"     # metadato: tu rol específico
+    description: "Proyecto de taller de rehabilitación patrimonial — nicho distintivo y comercializable."
+    highlights:
+      - "Lideré el concepto bajo restricciones de [sitio / clima / patrimonio], desarrollando 0 láminas."
+      - "Modelé el estado actual e intervención en Revit y presenté en 0 entregas/críticas."
+  - name: "Vivienda unifamiliar — [Proyecto residencial]"
+    typology: "Residencial"
+    scale_m2: 0
+    role: "Diseño y visualización"
+    description: "Proyecto académico de diseño residencial; presentación con render en tiempo real."
+    highlights:
+      - "Diseñé la planta y volumetría para un programa de 0 m² en un lote con [restricción]."
+      - "Generé visualizaciones en Lumion/D5 Render y armé el set de presentación en InDesign."
+
+education:
+  - degree: "Arquitecta/o"
+    area: "Arquitectura"
+    institution: "[Universidad]"
+    start: "2020"
+    end: "2026"
+
+certifications:
+  - name: "[Curso / certificación relevante, p. ej. BIM con Revit]"
+    issuer: "[Emisor]"
+    date: "2025"
+
+# Idiomas — declara con HONESTIDAD el nivel (clave para roles remotos internacionales que piden B2+).
+languages:
+  - language: "Español"
+    fluency: "Nativo"
+  - language: "Inglés"
+    fluency: "Básico"

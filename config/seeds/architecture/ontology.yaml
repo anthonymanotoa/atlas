@@ -1,0 +1,51 @@
+# Architecture / AEC skills gazetteer: canonical skill -> [aliases / acronyms / surface forms].
+# Used by keyword extraction (match a JD's surface form) and by CV tailoring (inject the
+# canonical skill in the exact form the JD uses, with dual-form acronyms where relevant).
+# Keep aliases lowercase; matching is case-insensitive and word-boundary aware.
+
+skills:
+  # ── BIM authoring / CAD ──
+  revit: [autodesk revit, revit architecture, rvt]
+  autocad: [auto cad, autodesk autocad, acad, dwg drafting]
+  archicad: [archi cad, graphisoft archicad]
+  sketchup: [sketch up, trimble sketchup, su]
+  rhino: [rhinoceros, rhino 3d, rhino3d]
+  grasshopper: [grasshopper 3d, gh]
+  dynamo: [dynamo bim, autodesk dynamo]
+
+  # ── Visualization / real-time rendering ──
+  lumion: []
+  enscape: [enscape 3d]
+  twinmotion: [twin motion]
+  d5 render: [d5render, d5]
+  v-ray: [vray, v ray, vray rendering]
+
+  # ── BIM coordination / process ──
+  navisworks: [autodesk navisworks, navisworks manage, clash detection]
+  bim: [building information modeling, building information modelling, modelado bim]
+  iso 19650: [iso19650, bim level 2, common data environment, cde]
+
+  # ── Sustainability / certification ──
+  leed: [leed accredited, leed ap, leed green associate, sustainable design]
+
+  # ── Adobe / presentation ──
+  adobe photoshop: [photoshop, ps, adobe ps]
+  adobe illustrator: [illustrator, ai, adobe ai]
+  adobe indesign: [indesign, id, adobe id, layout / maquetación]
+
+  # ── Documentation / drawing ──
+  construction documents: [construction documentation, cd set, documentación de obra, working drawings, planos de construcción]
+  technical drawing: [technical drawings, detailing, drafting, dibujo técnico, detalles constructivos]
+
+  # ── Design phases / work stages ──
+  schematic design: [sd, anteproyecto, concept design, esquema básico]
+  design development: [dd, desarrollo de diseño, design dev]
+  project phases: [work stages, riba stages, riba plan of work, fases del proyecto, etapas de proyecto]
+
+  # ── Typologies / domain ──
+  heritage rehabilitation: [heritage restoration, heritage conservation, rehabilitación patrimonial, restauración patrimonial, adaptive reuse, conservation]
+  residential design: [residential architecture, housing design, diseño residencial, vivienda]
+
+  # ── 3D / visualization output ──
+  3d modeling: [3d modelling, 3d modeler, modelado 3d, modeling]
+  architectural visualization: [architectural rendering, archviz, arch viz, visualization, rendering, renders, visualización arquitectónica]
