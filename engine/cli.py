@@ -255,7 +255,9 @@ def import_cv(
         )
         raise typer.Exit(1)
     draft_path.parent.mkdir(parents=True, exist_ok=True)
-    draft_path.write_text(build_draft(text))
+    from engine import profiles
+
+    draft_path.write_text(build_draft(text, domain=profiles.domain_of(paths.PROFILE_ID)))
     console.print(f"[green]✓[/] Draft written: {draft_path}")
     console.print(
         "  Next: ask Claude (Cowork) to map `_source_text` into the schema, review, then save as master_cv.yaml."
