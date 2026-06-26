@@ -1,0 +1,18 @@
+# CV section order/labels + portfolio proof-source for ARCHITECTURE.
+# Portfolio-driven, junior-friendly: studio/academic projects ARE the experience early-career,
+# so they sit above work experience; a Licensure/Registration section carries the title/SENESCYT.
+order:
+  - summary
+  - skills          # software (Revit/AutoCAD/…) matters and is scanned early
+  - projects        # studio + academic projects above work experience (junior)
+  - experience
+  - education
+  - licensure
+labels:
+  projects:
+    es: "Proyectos Seleccionados"
+    en: "Selected Projects"
+  licensure:
+    es: "Licenciatura y Registro"
+    en: "Licensure & Registration"
+proof_source: visual_gallery   # Behance/Issuu/image gallery — architects don't have a GitHub

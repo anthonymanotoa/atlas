@@ -13,6 +13,10 @@ from docx import Document
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.shared import Pt, RGBColor
 
+from engine.config import load_cv_layout
+
+DEFAULT_ORDER = ["summary", "skills", "experience", "education", "certs", "projects"]
+
 HEADINGS = {
     "en": {
         "summary": "Professional Summary",
@@ -21,6 +25,7 @@ HEADINGS = {
         "education": "Education",
         "certs": "Certifications",
         "projects": "Projects",
+        "licensure": "Licensure & Registration",
     },
     "es": {
         "summary": "Resumen Profesional",
@@ -29,8 +34,25 @@ HEADINGS = {
         "education": "Educación",
         "certs": "Certificaciones",
         "projects": "Proyectos",
+        "licensure": "Licenciatura y Registro",
     },
 }
+
+
+def _heading(key: str, language: str, layout: dict) -> str:
+    """Section heading for `key`, honoring per-profile cv_layout.yaml label overrides."""
+    base = HEADINGS.get(language, HEADINGS["en"]).get(key, key.title())
+    override = (layout.get("labels") or {}).get(key) or {}
+    return override.get(language) or override.get("en") or base
+
+
+def _licensure_line(it: dict) -> str:
+    """One Licensure/Registration entry → 'Title — Issuer — Status' (architecture, etc.)."""
+    return " — ".join(
+        p
+        for p in [it.get("title") or it.get("name"), it.get("issuer"), it.get("status") or it.get("date")]
+        if p
+    )
 
 
 def _section(doc: Document, text: str) -> None:
@@ -55,8 +77,9 @@ def _contact_line(basics: dict) -> str:
     return "  |  ".join(p for p in parts if p)
 
 
-def render_docx(cv: dict, out_path: Path, language: str = "en") -> Path:
-    h = HEADINGS.get(language, HEADINGS["en"])
+def render_docx(cv: dict, out_path: Path, language: str = "en", layout: dict | None = None) -> Path:
+    layout = layout or load_cv_layout()
+    order = layout.get("order") or DEFAULT_ORDER
     basics = cv.get("basics", {}) or {}
     doc = Document()
     normal = doc.styles["Normal"]
@@ -81,44 +104,46 @@ def render_docx(cv: dict, out_path: Path, language: str = "en") -> Path:
     cp = doc.add_paragraph(_contact_line(basics))
     cp.alignment = WD_ALIGN_PARAGRAPH.CENTER
 
-    # Summary
-    if basics.get("summary"):
-        _section(doc, h["summary"])
-        doc.add_paragraph(" ".join(basics["summary"].split()))
+    def head(key: str) -> None:
+        _section(doc, _heading(key, language, layout))
 
-    # Skills (single inline line — no tables/columns)
-    skills = cv.get("skills") or []
-    if skills:
-        _section(doc, h["skills"])
-        doc.add_paragraph("  ·  ".join(skills))
+    def summary() -> None:
+        if basics.get("summary"):
+            head("summary")
+            doc.add_paragraph(" ".join(basics["summary"].split()))
 
-    # Experience (reverse-chron as authored)
-    exp = cv.get("experience") or []
-    if exp:
-        _section(doc, h["experience"])
+    def skills() -> None:
+        items = cv.get("skills") or []
+        if items:
+            head("skills")
+            doc.add_paragraph("  ·  ".join(items))  # single inline line — no tables/columns
+
+    def experience() -> None:
+        exp = cv.get("experience") or []
+        if not exp:
+            return
+        head("experience")
         for e in exp:
-            head = doc.add_paragraph()
-            hr = head.add_run(f"{e.get('title', '')} — {e.get('company', '')}")
+            hp = doc.add_paragraph()
+            hr = hp.add_run(f"{e.get('title', '')} — {e.get('company', '')}")
             hr.bold = True
             meta = "  |  ".join(
                 p
-                for p in [
-                    e.get("location"),
-                    f"{e.get('start', '')} – {e.get('end', '')}".strip(" –"),
-                ]
+                for p in [e.get("location"), f"{e.get('start', '')} – {e.get('end', '')}".strip(" –")]
                 if p
             )
             if meta:
-                mp = head.add_run(f"\n{meta}")
-                mp.italic = True
-                mp.font.size = Pt(10)
+                mr = hp.add_run(f"\n{meta}")
+                mr.italic = True
+                mr.font.size = Pt(10)
             for hl in e.get("highlights") or []:
                 doc.add_paragraph(" ".join(hl.split()), style="List Bullet")
 
-    # Education
-    edu = cv.get("education") or []
-    if edu:
-        _section(doc, h["education"])
+    def education() -> None:
+        edu = cv.get("education") or []
+        if not edu:
+            return
+        head("education")
         for ed in edu:
             line = " ".join(
                 p
@@ -137,25 +162,44 @@ def render_docx(cv: dict, out_path: Path, language: str = "en") -> Path:
                 dr = p.add_run(f"  ({dates})")
                 dr.font.size = Pt(10)
 
-    # Certifications
-    certs = [c for c in (cv.get("certifications") or []) if c.get("name")]
-    if certs:
-        _section(doc, h["certs"])
-        for c in certs:
+    def certs() -> None:
+        rows = [c for c in (cv.get("certifications") or []) if c.get("name")]
+        if not rows:
+            return
+        head("certs")
+        for c in rows:
             txt = " — ".join(p for p in [c.get("name"), c.get("issuer"), c.get("date")] if p)
             doc.add_paragraph(txt, style="List Bullet")
 
-    # Projects
-    projects = cv.get("projects") or []
-    if projects:
-        _section(doc, h["projects"])
-        for pr in projects:
+    def licensure() -> None:
+        rows = [it for it in (cv.get("licensure") or []) if it.get("title") or it.get("name")]
+        if not rows:
+            return
+        head("licensure")
+        for it in rows:
+            doc.add_paragraph(_licensure_line(it), style="List Bullet")
+
+    def projects() -> None:
+        rows = cv.get("projects") or []
+        if not rows:
+            return
+        head("projects")
+        for pr in rows:
             p = doc.add_paragraph()
             p.add_run(pr.get("name", "")).bold = True
             if pr.get("description"):
                 doc.add_paragraph(" ".join(pr["description"].split()))
             for hl in pr.get("highlights") or []:
                 doc.add_paragraph(" ".join(hl.split()), style="List Bullet")
+
+    renderers = {
+        "summary": summary, "skills": skills, "experience": experience, "education": education,
+        "certs": certs, "licensure": licensure, "projects": projects,
+    }
+    for key in order:
+        fn = renderers.get(key)
+        if fn:
+            fn()
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     doc.save(str(out_path))
@@ -166,7 +210,9 @@ def _esc(s: str) -> str:
     return (s or "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
-def render_pdf(cv: dict, out_path: Path, language: str = "en") -> Path | None:
+def render_pdf(
+    cv: dict, out_path: Path, language: str = "en", layout: dict | None = None
+) -> Path | None:
     """Render a clean single-column PDF (reportlab — no LibreOffice/Word needed)."""
     from reportlab.lib.enums import TA_CENTER
     from reportlab.lib.pagesizes import LETTER
@@ -174,7 +220,8 @@ def render_pdf(cv: dict, out_path: Path, language: str = "en") -> Path | None:
     from reportlab.lib.units import inch
     from reportlab.platypus import ListFlowable, ListItem, Paragraph, SimpleDocTemplate
 
-    h = HEADINGS.get(language, HEADINGS["en"])
+    layout = layout or load_cv_layout()
+    order = layout.get("order") or DEFAULT_ORDER
     basics = cv.get("basics", {}) or {}
     # NOTE: reportlab's ParagraphStyle defaults `leading` to a FIXED 12pt when omitted (it is
     # NOT auto-scaled to the font size). So any style with fontSize > ~11 MUST set `leading`
@@ -246,18 +293,21 @@ def render_pdf(cv: dict, out_path: Path, language: str = "en") -> Path | None:
             leftIndent=10,
         )
 
-    if basics.get("summary"):
-        story += [
-            Paragraph(h["summary"].upper(), head_s),
-            Paragraph(_esc(" ".join(basics["summary"].split())), body_s),
-        ]
-    if cv.get("skills"):
-        story += [
-            Paragraph(h["skills"].upper(), head_s),
-            Paragraph("  ·  ".join(_esc(s) for s in cv["skills"]), body_s),
-        ]
-    if cv.get("experience"):
-        story.append(Paragraph(h["experience"].upper(), head_s))
+    def hd(key: str):
+        return Paragraph(_heading(key, language, layout).upper(), head_s)
+
+    def summary():
+        if basics.get("summary"):
+            story.extend([hd("summary"), Paragraph(_esc(" ".join(basics["summary"].split())), body_s)])
+
+    def skills():
+        if cv.get("skills"):
+            story.extend([hd("skills"), Paragraph("  ·  ".join(_esc(s) for s in cv["skills"]), body_s)])
+
+    def experience():
+        if not cv.get("experience"):
+            return
+        story.append(hd("experience"))
         for e in cv["experience"]:
             story.append(
                 Paragraph(f"{_esc(e.get('title', ''))} — {_esc(e.get('company', ''))}", role_s)
@@ -274,9 +324,12 @@ def render_pdf(cv: dict, out_path: Path, language: str = "en") -> Path | None:
                 story.append(Paragraph(meta, meta_s))
             if e.get("highlights"):
                 story.append(bullets(e["highlights"]))
-    edu = cv.get("education") or []
-    if edu:
-        story.append(Paragraph(h["education"].upper(), head_s))
+
+    def education():
+        edu = cv.get("education") or []
+        if not edu:
+            return
+        story.append(hd("education"))
         for ed in edu:
             line = " ".join(
                 p
@@ -292,26 +345,45 @@ def render_pdf(cv: dict, out_path: Path, language: str = "en") -> Path | None:
             story.append(
                 Paragraph(f"<b>{_esc(line)}</b>" + (f"  ({dates})" if dates else ""), body_s)
             )
-    certs = [c for c in (cv.get("certifications") or []) if c.get("name")]
-    if certs:
-        story.append(Paragraph(h["certs"].upper(), head_s))
+
+    def certs():
+        rows = [c for c in (cv.get("certifications") or []) if c.get("name")]
+        if not rows:
+            return
+        story.append(hd("certs"))
         story.append(
             bullets(
-                [
-                    " — ".join(p for p in [c.get("name"), c.get("issuer"), c.get("date")] if p)
-                    for c in certs
-                ]
+                [" — ".join(p for p in [c.get("name"), c.get("issuer"), c.get("date")] if p) for c in rows]
             )
         )
-    projects = cv.get("projects") or []
-    if projects:
-        story.append(Paragraph(h["projects"].upper(), head_s))
-        for pr in projects:
+
+    def licensure():
+        rows = [it for it in (cv.get("licensure") or []) if it.get("title") or it.get("name")]
+        if not rows:
+            return
+        story.append(hd("licensure"))
+        story.append(bullets([_licensure_line(it) for it in rows]))
+
+    def projects():
+        rows = cv.get("projects") or []
+        if not rows:
+            return
+        story.append(hd("projects"))
+        for pr in rows:
             story.append(Paragraph(f"<b>{_esc(pr.get('name', ''))}</b>", body_s))
             if pr.get("description"):  # parity with render_docx — PDF previously dropped this
                 story.append(Paragraph(_esc(" ".join(pr["description"].split())), body_s))
             if pr.get("highlights"):
                 story.append(bullets(pr["highlights"]))
+
+    renderers = {
+        "summary": summary, "skills": skills, "experience": experience, "education": education,
+        "certs": certs, "licensure": licensure, "projects": projects,
+    }
+    for key in order:
+        fn = renderers.get(key)
+        if fn:
+            fn()
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     doc = SimpleDocTemplate(

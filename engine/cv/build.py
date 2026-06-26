@@ -10,10 +10,11 @@ from engine.config import load_master_cv, load_ontology
 from engine.cv import parse_check, render, tailor
 from engine.db.models import DB
 
-# Languages the renderer supports. Also a hard guard: `language` is interpolated into the
-# output filename (cv_{language}.docx), so anything outside this set is rejected before it
-# can introduce path separators / traversal into the write path.
-ALLOWED_LANGUAGES = {"en", "es"}
+# Languages the renderer actually has templates for — derived from render.HEADINGS rather than a
+# hardcoded literal, so adding a translation (a new market) is enough to support it. Also a hard
+# guard: `language` is interpolated into the output filename (cv_{language}.docx), so anything
+# outside this set is rejected before it can introduce path separators / traversal.
+ALLOWED_LANGUAGES = set(render.HEADINGS)
 
 
 @dataclass

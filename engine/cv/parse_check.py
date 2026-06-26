@@ -12,7 +12,8 @@ from pathlib import Path
 
 from docx import Document
 
-from engine.cv.render import HEADINGS
+from engine.config import load_cv_layout
+from engine.cv.render import HEADINGS, _heading
 
 _DATE = re.compile(
     r"(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{4}|\b(19|20)\d{2}\b", re.I
@@ -25,7 +26,11 @@ def extract_text(docx_path: Path) -> str:
     return "\n".join(p.text for p in doc.paragraphs)
 
 
-def check(docx_path: Path, cv: dict, language: str = "en") -> tuple[bool, list[str]]:
+def check(
+    docx_path: Path, cv: dict, language: str = "en", layout: dict | None = None
+) -> tuple[bool, list[str]]:
+    layout = layout or load_cv_layout()
+    order = layout.get("order") or list(HEADINGS["en"])
     doc = Document(str(docx_path))
     text = "\n".join(p.text for p in doc.paragraphs)
     low = text.lower()
@@ -37,10 +42,12 @@ def check(docx_path: Path, cv: dict, language: str = "en") -> tuple[bool, list[s
     if not _EMAIL.search(text):
         issues.append("no email parsed (check it's in the body, not a header)")
 
-    h = HEADINGS.get(language, HEADINGS["en"])
-    for key in ("summary", "skills", "experience"):
-        if h[key].lower() not in low:
-            issues.append(f"missing section heading: {h[key]}")
+    # Require the core headings, but only those the profile's layout actually includes (so a
+    # domain that drops, say, a dedicated Skills section isn't flagged for "missing" it).
+    for key in (k for k in ("summary", "skills", "experience") if k in order):
+        label = _heading(key, language, layout)
+        if label.lower() not in low:
+            issues.append(f"missing section heading: {label}")
     if not _DATE.search(text):
         issues.append("no parseable dates (use 'Mon YYYY')")
     if doc.tables:

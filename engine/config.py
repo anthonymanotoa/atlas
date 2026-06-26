@@ -128,6 +128,29 @@ def load_sources() -> dict[str, Any]:
     return yaml.safe_load(path.read_text()) or {}
 
 
+# ── CV layout (per-domain section order / labels / portfolio proof-source) ────
+_DEFAULT_CV_LAYOUT: dict = {
+    # The legacy data layout — used when a profile ships no cv_layout.yaml.
+    "order": ["summary", "skills", "experience", "education", "certs", "projects"],
+    "labels": {},  # {section_key: {en: "...", es: "..."}} heading overrides
+    "proof_source": "github",  # github | visual_gallery | none — used by the portfolio builder
+}
+
+
+def load_cv_layout() -> dict:
+    """Per-profile CV section order, heading overrides, and portfolio proof-source.
+
+    Falls back to the legacy data layout when no cv_layout.yaml is present, so existing
+    profiles render exactly as before."""
+    path = example_fallback(paths.CV_LAYOUT_PATH)
+    if not path.exists():
+        return dict(_DEFAULT_CV_LAYOUT)
+    data = yaml.safe_load(path.read_text()) or {}
+    layout = dict(_DEFAULT_CV_LAYOUT)
+    layout.update({k: v for k, v in data.items() if v is not None})
+    return layout
+
+
 # ── ontology (skills gazetteer) ──────────────────────────────────────────────
 def load_ontology() -> dict[str, list[str]]:
     """canonical skill -> [aliases/acronyms]. Used by keyword extraction + tailoring."""
