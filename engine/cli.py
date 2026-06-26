@@ -387,7 +387,7 @@ def advise(json_out: bool = typer.Option(False, "--json", help="Emit findings as
         console.print(f"  [{colors[x['severity']]}]●[/] [{x['area']}] {x['message']}")
         console.print(f"     → {x['suggestion']}")
     console.print(
-        "\nPara la mejora completa (IA-forward, LinkedIn), usa la guía "
+        "\nPara la mejora completa (CV + LinkedIn, según tu rol objetivo), usa la guía "
         "[bold]cv-linkedin-advisor[/] (advisor/cv_linkedin_advisor.md)."
     )
 

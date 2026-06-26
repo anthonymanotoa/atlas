@@ -54,6 +54,16 @@ exclude_exec: true            # drop Director/VP/Head/Chief roles (over-qualifie
 max_years_required: 12        # 0 = off; flag postings demanding more years than this
 company_blocklist: []         # never surface these companies (matched case/suffix-insensitively)
 #  - acme
+# ── Domain positioning (advisor) — empty = neutral; the data track is AI-forward ──
+repositioning_target: "AI/ML"   # advisor nudges the CV toward this (truthfully); "" disables it
+core_keywords:                  # must-appear terms the CV audit checks for this domain
+  - python
+  - sql
+  - machine learning
+  - large language models
+  - a/b testing
+  - statistics
+  - generative ai
 ---
 
 # Mis criterios de búsqueda (notas para el cerebro de Atlas)
