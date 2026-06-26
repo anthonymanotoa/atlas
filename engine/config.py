@@ -89,12 +89,25 @@ class Criteria(BaseModel):
 
 
 def _split_frontmatter(text: str) -> tuple[dict[str, Any], str]:
-    if text.lstrip().startswith("---"):
-        body = text.lstrip()
-        parts = body.split("---", 2)
-        if len(parts) >= 3:
-            meta = yaml.safe_load(parts[1]) or {}
-            return meta, parts[2].strip()
+    """Split a `---` fenced YAML frontmatter from the trailing Markdown prose.
+
+    Only a line that is *exactly* `---` (after stripping) counts as a fence. This avoids
+    truncating the YAML when a `---` appears mid-line inside it — e.g. in a comment like
+    `# --- section ---` or a quoted multiline string — which would otherwise silently drop
+    every field after it back to its model default.
+    """
+    lines = text.splitlines()
+    # The opening fence must be the first non-blank line.
+    start = next((i for i, ln in enumerate(lines) if ln.strip()), None)
+    if start is None or lines[start].strip() != "---":
+        return {}, text.strip()
+    # Find the closing fence: the next bare `---` line after the opener.
+    for end in range(start + 1, len(lines)):
+        if lines[end].strip() == "---":
+            yaml_block = "\n".join(lines[start + 1 : end])
+            prose = "\n".join(lines[end + 1 :]).strip()
+            meta = yaml.safe_load(yaml_block) or {}
+            return meta, prose
     return {}, text.strip()
 
 
