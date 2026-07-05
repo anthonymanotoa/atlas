@@ -57,7 +57,7 @@ function SelectContent({
         position={position}
         className={cn(
           // z-[95] keeps the dropdown above Sheets/Dialogs (z-50) when nested inside them.
-          "relative z-[95] max-h-(--radix-select-content-available-height) min-w-32 origin-(--radix-select-content-transform-origin) overflow-hidden rounded-lg border border-border bg-popover text-popover-foreground shadow-[var(--shadow-lg),var(--highlight-top)]",
+          "relative z-[95] max-h-(--radix-select-content-available-height) min-w-32 origin-(--radix-select-content-transform-origin) overflow-hidden rounded-md border border-border bg-popover text-popover-foreground shadow-[var(--shadow-lg),var(--highlight-top)]",
           "animate-in fade-in-0 zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95",
           "data-[side=bottom]:slide-in-from-top-2 data-[side=top]:slide-in-from-bottom-2",
           position === "popper" &&
