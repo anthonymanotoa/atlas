@@ -1,13 +1,15 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { OnboardingGate } from "../components/OnboardingGate";
-import { Skeleton } from "../components/ui/skeleton";
+import { LoadingState } from "../components/ui/states";
 import { qk } from "../hooks/keys";
 import { useOnboarding } from "../hooks/useOnboarding";
 
 export function OnboardingPage() {
   const onboardingQ = useOnboarding();
   const qc = useQueryClient();
-  if (onboardingQ.isPending) return <Skeleton className="mx-auto mt-8 h-96 max-w-[760px]" />;
+  if (onboardingQ.isPending) {
+    return <LoadingState rows={2} className="mx-auto max-w-[760px]" />;
+  }
   if (!onboardingQ.data) return null;
   return (
     <OnboardingGate

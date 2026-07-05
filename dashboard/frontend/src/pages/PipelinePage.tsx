@@ -9,7 +9,7 @@ import { NeedsAction } from "../components/NeedsAction";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
 import { DowntimeIcon } from "../components/ui/icons";
-import { Skeleton } from "../components/ui/skeleton";
+import { ErrorState, LoadingState } from "../components/ui/states";
 import { useBoard, useSetJobState } from "../hooks/useBoard";
 import { useOverview } from "../hooks/useOverview";
 
@@ -76,18 +76,8 @@ export function PipelinePage() {
     );
   }
 
-  if (boardQ.isPending || overviewQ.isPending) {
-    return (
-      <div className="space-y-4">
-        <Skeleton className="h-24 w-full" />
-        <div className="flex gap-3">
-          <Skeleton className="h-64 flex-1" />
-          <Skeleton className="h-64 flex-1" />
-          <Skeleton className="h-64 flex-1" />
-        </div>
-      </div>
-    );
-  }
+  if (boardQ.isPending || overviewQ.isPending) return <LoadingState rows={4} />;
+  if (boardQ.isError) return <ErrorState onRetry={() => boardQ.refetch()} />;
 
   return (
     <>

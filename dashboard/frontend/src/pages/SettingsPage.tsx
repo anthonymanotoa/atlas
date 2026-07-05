@@ -7,7 +7,7 @@ import { Checkbox } from "../components/ui/checkbox";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { Separator } from "../components/ui/separator";
-import { Skeleton } from "../components/ui/skeleton";
+import { ErrorState, LoadingState } from "../components/ui/states";
 import { useCsvColumns, useCvLibrary, useSetSetting, useSettings } from "../hooks/useSettings";
 import { useProfiles, useRenameProfile } from "../hooks/useProfiles";
 import { copy } from "../lib";
@@ -40,11 +40,12 @@ export function SettingsPage() {
   }, [profilesQ.data]);
 
   if (settingsQ.isPending || columnsQ.isPending || profilesQ.isPending) {
+    return <LoadingState rows={3} className="mx-auto max-w-[640px]" />;
+  }
+  if (settingsQ.isError) {
     return (
-      <div className="mx-auto max-w-[640px] space-y-4">
-        <Skeleton className="h-20 w-full" />
-        <Skeleton className="h-20 w-full" />
-        <Skeleton className="h-40 w-full" />
+      <div className="mx-auto max-w-[640px]">
+        <ErrorState onRetry={() => settingsQ.refetch()} />
       </div>
     );
   }

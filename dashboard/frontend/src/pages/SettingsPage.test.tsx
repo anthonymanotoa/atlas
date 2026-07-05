@@ -81,4 +81,17 @@ describe("SettingsPage", () => {
     await userEvent.click(screen.getByRole("button", { name: "Guardar diseño" }));
     expect(api.setSetting).toHaveBeenCalledWith("csv_columns", JSON.stringify(["title"]));
   });
+
+  it("si /api/settings falla muestra ErrorState y Reintentar recupera al éxito", async () => {
+    api.settings.mockRejectedValueOnce(new Error("500"));
+    renderRoutes("/settings");
+    expect(await screen.findByText("No se pudo cargar")).toBeInTheDocument();
+    const retryBtn = screen.getByRole("button", { name: "Reintentar" });
+
+    api.settings.mockResolvedValueOnce({ download_dir: "/tmp/atlas" });
+    await userEvent.click(retryBtn);
+
+    expect(await screen.findByText("Nombre de tu perfil")).toBeInTheDocument();
+    expect(screen.queryByText("No se pudo cargar")).not.toBeInTheDocument();
+  });
 });

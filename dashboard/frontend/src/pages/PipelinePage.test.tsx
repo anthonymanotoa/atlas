@@ -80,4 +80,11 @@ describe("PipelinePage", () => {
     await userEvent.click(screen.getByRole("button", { name: /Restaurar/ }));
     expect(api.setState).toHaveBeenCalledWith("j1", "shortlisted");
   });
+
+  it("si /api/board falla muestra ErrorState accionable", async () => {
+    api.board.mockRejectedValue(new Error("500"));
+    renderRoutes("/pipeline");
+    expect(await screen.findByText("No se pudo cargar")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Reintentar" })).toBeInTheDocument();
+  });
 });

@@ -148,4 +148,17 @@ describe("JobDetailPage — página /jobs/:id con tabs", () => {
     await userEvent.click(await screen.findByRole("button", { name: /Generar borradores/ }));
     await waitFor(() => expect(api.prep).toHaveBeenCalledWith("job-1", undefined));
   });
+
+  it("si /api/job falla muestra ErrorState y Reintentar vuelve a pedirlo (recupera al éxito)", async () => {
+    api.job.mockRejectedValueOnce(new Error("500"));
+    renderRoutes("/jobs/job-1");
+    expect(await screen.findByText("No se pudo cargar la vacante")).toBeInTheDocument();
+    const retryBtn = screen.getByRole("button", { name: "Reintentar" });
+
+    api.job.mockResolvedValueOnce(jobDetail());
+    await userEvent.click(retryBtn);
+
+    expect(await screen.findByText("Senior Data Scientist")).toBeInTheDocument();
+    expect(screen.queryByText("No se pudo cargar la vacante")).not.toBeInTheDocument();
+  });
 });

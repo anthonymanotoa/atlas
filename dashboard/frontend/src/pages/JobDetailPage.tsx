@@ -26,6 +26,7 @@ import { Card } from "../components/ui/card";
 import { MatchIcon, ReferralIcon, SalaryIcon } from "../components/ui/icons";
 import { ScoreRing } from "../components/ui/score-ring";
 import { Skeleton } from "../components/ui/skeleton";
+import { ErrorState } from "../components/ui/states";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../components/ui/tooltip";
 import { useJob, useMarkApplied, usePrepJob } from "../hooks/useJob";
@@ -52,15 +53,8 @@ export function JobDetailPage() {
   }
   if (jobQ.isError || !jobQ.data) {
     return (
-      <div className="mx-auto max-w-[860px] py-10 text-center text-sm text-muted-foreground">
-        No se pudo cargar la vacante.{" "}
-        <button
-          type="button"
-          className="text-primary hover:underline"
-          onClick={() => jobQ.refetch()}
-        >
-          Reintentar
-        </button>
+      <div className="mx-auto max-w-[860px]">
+        <ErrorState title="No se pudo cargar la vacante" onRetry={() => jobQ.refetch()} />
       </div>
     );
   }

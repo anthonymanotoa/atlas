@@ -1,22 +1,26 @@
 import { AnalyticsStrip } from "../components/AnalyticsStrip";
-import { Skeleton } from "../components/ui/skeleton";
+import { EmptyState, ErrorState, LoadingState } from "../components/ui/states";
 import { useOverview } from "../hooks/useOverview";
 
 export function AnalyticsPage() {
   const overviewQ = useOverview();
-  if (overviewQ.isPending) {
-    return (
-      <div className="space-y-3">
-        <Skeleton className="h-24 w-full" />
-        <Skeleton className="h-40 w-full" />
-      </div>
-    );
-  }
+  if (overviewQ.isPending) return <LoadingState rows={3} />;
+  if (overviewQ.isError) return <ErrorState onRetry={() => overviewQ.refetch()} />;
   if (!overviewQ.data) return null;
+
+  const ov = overviewQ.data.overview;
   return (
     <>
       <h1 className="mb-4 text-h1">Analítica</h1>
-      <AnalyticsStrip ov={overviewQ.data.overview} />
+      <AnalyticsStrip ov={ov} />
+      {ov.total_jobs === 0 && ov.funnel.length === 0 && (
+        <div className="mt-4">
+          <EmptyState
+            title="Sin datos todavía"
+            description="Corre una búsqueda para poblar el embudo."
+          />
+        </div>
+      )}
     </>
   );
 }
