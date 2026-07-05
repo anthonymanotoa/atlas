@@ -251,5 +251,9 @@ def geo_scope_covers(scope: str, country: str, regions: list[str]) -> bool:
     accept = {r.strip().lower() for r in regions if r and r.strip().lower() != "worldwide"}
     if parts & accept:
         return True
+    # EMEA (Europe, Middle East, Africa) covers EU region candidates: since the gazetteer has
+    # no separate Middle-East/Africa region bucket, "eu" is the only genuine geographic subset.
+    if "emea" in parts and creg == "eu":
+        return True
     # A country token that lies inside an acceptable region ("br" ⊂ "latam").
     return any(COUNTRY_TO_REGION.get(p) in accept for p in parts if COUNTRY_TO_REGION.get(p))

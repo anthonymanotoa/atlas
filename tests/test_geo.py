@@ -45,3 +45,16 @@ def test_covers_acceptable_regions():
     assert geo_scope_covers("br", "ec", ["latam"]) is True
     # "worldwide" in acceptable_regions does NOT whitelist restricted scopes.
     assert geo_scope_covers("us", "ec", ["worldwide"]) is False
+
+
+def test_covers_emea_region_for_eu_countries():
+    # EMEA scope covers EU-region candidates (Germany is in EU region).
+    assert geo_scope_covers("emea", "de", []) is True
+    # EMEA does NOT cover non-EU regions (Mexico is latam, not covered by EMEA).
+    assert geo_scope_covers("emea", "mx", []) is False
+    # EMEA does NOT cover NA (US/Canada).
+    assert geo_scope_covers("emea", "us", []) is False
+    # EMEA does NOT cover APAC.
+    assert geo_scope_covers("emea", "sg", []) is False
+    # EMEA in acceptable_regions works as before (explicit intersection).
+    assert geo_scope_covers("emea", "ec", ["emea"]) is True
