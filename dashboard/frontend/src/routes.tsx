@@ -1,14 +1,11 @@
 import { Navigate, type RouteObject } from "react-router";
 import { AppShell } from "./components/AppShell";
 import { AnalyticsPage } from "./pages/AnalyticsPage";
+import { JobDetailPage } from "./pages/JobDetailPage";
 import { OnboardingPage } from "./pages/OnboardingPage";
 import { PipelinePage } from "./pages/PipelinePage";
 import { PortfolioPage } from "./pages/PortfolioPage";
 import { SettingsPage } from "./pages/SettingsPage";
-
-// /jobs/:id nace apuntando al DetailDrawer sobre el pipeline (paridad) y la
-// Task 8 lo reemplaza por la página completa JobDetailPage.
-import { JobDetailRoute } from "./pages/PipelinePage";
 
 export const routes: RouteObject[] = [
   {
@@ -17,7 +14,7 @@ export const routes: RouteObject[] = [
     children: [
       { index: true, element: <Navigate to="/pipeline" replace /> },
       { path: "pipeline", element: <PipelinePage /> },
-      { path: "jobs/:id", element: <JobDetailRoute /> },
+      { path: "jobs/:id", element: <JobDetailPage /> },
       { path: "analytics", element: <AnalyticsPage /> },
       { path: "portfolio", element: <PortfolioPage /> },
       { path: "settings", element: <SettingsPage /> },

@@ -1,11 +1,9 @@
 import { RotateCcw, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
-import { useNavigate, useParams } from "react-router";
+import { useNavigate } from "react-router";
 import { toast } from "sonner";
-import { useQueryClient } from "@tanstack/react-query";
 import type { Job } from "../api";
 import { Board } from "../components/Board";
-import { DetailDrawer } from "../components/DetailDrawer"; // temporal — Task 8 lo reemplaza
 import { FilterBar, type Filters } from "../components/FilterBar";
 import { NeedsAction } from "../components/NeedsAction";
 import { Button } from "../components/ui/button";
@@ -141,24 +139,6 @@ export function PipelinePage() {
           )}
         </div>
       )}
-    </>
-  );
-}
-
-// Ruta temporal /jobs/:id: pipeline de fondo + DetailDrawer encima (paridad
-// exacta con v1). La Task 8 borra este componente y monta JobDetailPage.
-export function JobDetailRoute() {
-  const { id } = useParams<{ id: string }>();
-  const navigate = useNavigate();
-  const qc = useQueryClient();
-  return (
-    <>
-      <PipelinePage />
-      <DetailDrawer
-        jobId={id ?? null}
-        onClose={() => navigate("/pipeline")}
-        onChanged={() => qc.invalidateQueries()}
-      />
     </>
   );
 }

@@ -11,7 +11,14 @@ import {
 import { useState } from "react";
 import type { ReactNode } from "react";
 import type { JobDetail } from "../../api";
-import { countryLabel, freshLabel, langLabel, salaryLabel, stripHtml, workplaceLabel } from "../../lib";
+import {
+  countryLabel,
+  freshLabel,
+  langLabel,
+  salaryLabel,
+  stripHtml,
+  workplaceLabel,
+} from "../../lib";
 import { Badge } from "../ui/badge";
 import { Card } from "../ui/card";
 
