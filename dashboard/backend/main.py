@@ -802,7 +802,7 @@ _DIST = REPO_ROOT / "dashboard" / "frontend" / "dist"
 
 @app.get("/{full_path:path}", include_in_schema=False)
 def spa(full_path: str) -> FileResponse:
-    if full_path.startswith("api/"):
+    if full_path.split("/", 1)[0] == "api":
         raise HTTPException(status_code=404, detail="Not found")
     if full_path:
         candidate = (_DIST / full_path).resolve()

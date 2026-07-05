@@ -325,6 +325,21 @@ def test_spa_fallback_unknown_api_route_is_404_not_index(atlas_app, tmp_path, mo
         assert client.get("/api/definitely-not-a-route").status_code == 404
 
 
+def test_spa_fallback_api_like_route_serves_index(atlas_app, tmp_path, monkeypatch):
+    """Routes like /apikeys (not /api/*) should serve index.html, not 404."""
+    import dashboard.backend.main as backend
+
+    dist = tmp_path / "dist"
+    dist.mkdir()
+    (dist / "index.html").write_text("<html>atlas-spa</html>")
+    monkeypatch.setattr(backend, "_DIST", dist)
+
+    with TestClient(atlas_app) as client:
+        resp = client.get("/apikeys")
+        assert resp.status_code == 200, "apikeys should be treated as a client route"
+        assert "atlas-spa" in resp.text
+
+
 def test_spa_fallback_without_built_dist_is_404(atlas_app, tmp_path, monkeypatch):
     import dashboard.backend.main as backend
 
