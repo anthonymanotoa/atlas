@@ -288,3 +288,46 @@ def test_discover_endpoint_runs_deterministic_pipeline(atlas_app, monkeypatch):
         # The BackgroundTask runs within the request cycle under TestClient.
         assert calls["discover"] == 1 and calls["score"] == 1
         assert client.get("/api/discover/status").json() == {"running": False}
+
+
+# ── SPA fallback (Atlas v2 F1): el router de frontend necesita deep links ────
+
+
+def test_spa_fallback_serves_index_for_client_routes(atlas_app, tmp_path, monkeypatch):
+    import dashboard.backend.main as backend
+
+    dist = tmp_path / "dist"
+    (dist / "assets").mkdir(parents=True)
+    (dist / "index.html").write_text("<html>atlas-spa</html>")
+    (dist / "assets" / "app.js").write_text("console.log(1)")
+    monkeypatch.setattr(backend, "_DIST", dist)
+
+    with TestClient(atlas_app) as client:
+        for path in ("/", "/pipeline", "/jobs/abc123", "/settings", "/onboarding"):
+            resp = client.get(path)
+            assert resp.status_code == 200, path
+            assert "atlas-spa" in resp.text, path
+        # los archivos reales del build se sirven tal cual
+        resp = client.get("/assets/app.js")
+        assert resp.status_code == 200
+        assert "console.log" in resp.text
+
+
+def test_spa_fallback_unknown_api_route_is_404_not_index(atlas_app, tmp_path, monkeypatch):
+    import dashboard.backend.main as backend
+
+    dist = tmp_path / "dist"
+    dist.mkdir()
+    (dist / "index.html").write_text("<html>atlas-spa</html>")
+    monkeypatch.setattr(backend, "_DIST", dist)
+
+    with TestClient(atlas_app) as client:
+        assert client.get("/api/definitely-not-a-route").status_code == 404
+
+
+def test_spa_fallback_without_built_dist_is_404(atlas_app, tmp_path, monkeypatch):
+    import dashboard.backend.main as backend
+
+    monkeypatch.setattr(backend, "_DIST", tmp_path / "no-dist")
+    with TestClient(atlas_app) as client:
+        assert client.get("/pipeline").status_code == 404

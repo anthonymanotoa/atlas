@@ -17,7 +17,6 @@ from urllib.parse import urlsplit
 from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response
-from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 import engine.paths as paths
@@ -794,8 +793,25 @@ def api_switch_profile(body: ProfileBody):
     return {"ok": True, "active": body.id}
 
 
-# ── Serve the built frontend (if present) ────────────────────────────────────
-# Mounted LAST so it never shadows the /api/* routes.
+# ── Serve the built frontend (SPA) ───────────────────────────────────────────
+# Catch-all definido AL FINAL para no sombrear /api/*. Sirve archivos reales del
+# build cuando existen y hace fallback a index.html para las rutas del router
+# (deep links /pipeline, /jobs/:id, …). Lee _DIST en call-time (testeable).
 _DIST = REPO_ROOT / "dashboard" / "frontend" / "dist"
-if _DIST.exists():
-    app.mount("/", StaticFiles(directory=str(_DIST), html=True), name="static")
+
+
+@app.get("/{full_path:path}", include_in_schema=False)
+def spa(full_path: str) -> FileResponse:
+    if full_path.startswith("api/"):
+        raise HTTPException(status_code=404, detail="Not found")
+    if full_path:
+        candidate = (_DIST / full_path).resolve()
+        if candidate.is_file() and candidate.is_relative_to(_DIST.resolve()):
+            return FileResponse(str(candidate))
+    index = _DIST / "index.html"
+    if not index.is_file():
+        raise HTTPException(
+            status_code=404,
+            detail="Frontend no compilado — corre scripts/run.sh (o npm run build).",
+        )
+    return FileResponse(str(index))
