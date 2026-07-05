@@ -39,7 +39,7 @@
   --destructive-foreground: oklch(0.98 0.01 25);
 
   --border: oklch(0.32 0.018 258);
-  --input: oklch(0.30 0.018 258);
+  --input: oklch(0.3 0.018 258);
   --ring: oklch(0.64 0.19 262);
 
   /* app shell v2 */

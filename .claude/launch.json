@@ -6,6 +6,12 @@
       "runtimeExecutable": "uv",
       "runtimeArgs": ["run", "uvicorn", "dashboard.backend.main:app", "--host", "127.0.0.1", "--port", "8787"],
       "port": 8787
+    },
+    {
+      "name": "atlas-frontend",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--prefix", "dashboard/frontend"],
+      "port": 5173
     }
   ]
 }
