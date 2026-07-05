@@ -26,7 +26,6 @@ import { cn } from "../lib";
 import { CommandPalette } from "./CommandPalette";
 import { CvAuditDialog } from "./CvAuditDialog";
 import { HelpGuide } from "./HelpGuide";
-import { SettingsModal } from "./SettingsModal"; // Task 6 lo reemplaza por /settings
 import { Button } from "./ui/button";
 import { Card } from "./ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog";
@@ -58,7 +57,6 @@ export function AppShell() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const [cvOpen, setCvOpen] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
   const [briefOpen, setBriefOpen] = useState(false);
   const [brief, setBrief] = useState("");
 
@@ -155,14 +153,20 @@ export function AppShell() {
           ))}
         </nav>
         <div className="mt-auto flex flex-col gap-1">
-          <button
-            type="button"
-            onClick={() => setSettingsOpen(true)}
-            className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-sidebar-active/50 hover:text-foreground"
+          <NavLink
+            to="/settings"
+            className={({ isActive }) =>
+              cn(
+                "flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium transition-colors",
+                isActive
+                  ? "bg-sidebar-active text-sidebar-active-foreground"
+                  : "text-muted-foreground hover:bg-sidebar-active/50 hover:text-foreground",
+              )
+            }
           >
             <SettingsIcon className="size-4 shrink-0" />
             <span className="max-lg:hidden">Ajustes</span>
-          </button>
+          </NavLink>
           <button
             type="button"
             onClick={toggle}
@@ -288,7 +292,6 @@ export function AppShell() {
       </div>
 
       {/* ── Global overlays ── */}
-      <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
       <HelpGuide open={helpOpen} onOpenChange={setHelpOpen} />
       <CvAuditDialog open={cvOpen} onOpenChange={setCvOpen} />
       <CommandPalette
