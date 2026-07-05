@@ -149,6 +149,31 @@ Fondo del `body` es **plano**: `background: var(--background);` — sin gradient
 | `--shadow-lg` | `0 12px 28px oklch(0.2 0.02 258 / 0.12), 0 4px 8px oklch(0.2 0.02 258 / 0.06)` |
 | `--highlight-top` | `inset 0 1px 0 oklch(1 0 0 / 0.6)` |
 
+## Componentes (radius/sombras/detalles por primitivo)
+
+Guía por categoría para el restyle de `src/components/ui/*` (F1 Task 2+). Los primitivos ya
+componen sobre los tokens semánticos de Task 1 — esto solo fija QUÉ token de radius/sombra usa
+cada categoría; no cambia ningún export, variant ni prop.
+
+| Categoría | Radius | Sombra (reposo) | Sombra (hover/abierto) | Borde |
+| --- | --- | --- | --- | --- |
+| Button (todas las variants) | `--radius-md` | ninguna | `--shadow-xs` solo en variant `default`/primary | `--border` en variants outline/ghost |
+| Input / Textarea / Select trigger | `--radius-md` | ninguna | — | `1px solid var(--input)`, focus → `--ring` |
+| Checkbox / Switch (control, no track) | `--radius-sm` (checkbox) | ninguna | — | `1px solid var(--input)` |
+| Switch (track) | pill `9999px` (no usa `--radius-*`) | ninguna | — | ninguno |
+| Card | `--radius-lg` | `--shadow-sm` | — | `1px solid var(--border)` |
+| Popover / DropdownMenu / Command / Select content / Tooltip | `--radius-md` | — | `--shadow-lg` (siempre "abierto" cuando se renderiza) | `1px solid var(--border)` |
+| Dialog | `--radius-lg` | — | `--shadow-lg` | `1px solid var(--border)` |
+| Sheet | `--radius-lg` en el borde no anclado al viewport; `0` en el borde anclado | — | `--shadow-lg` | `1px solid var(--border)` en el borde no anclado |
+| Badge / Chip / Kbd | pill `9999px` (no usa `--radius-*`) | ninguna | — | `1px solid var(--border)` en variant `outline` |
+| Skeleton | `--radius-md` | n/a (es un placeholder de carga) | — | ninguno |
+| Score-ring | circular (SVG, no aplica `--radius-*`) | n/a | — | ninguno |
+| Separator | n/a | n/a | — | usa `--border` como color de línea, no borde de caja |
+
+Regla general no cubierta arriba: cualquier primitivo nuevo que se agregue en fases
+posteriores (F2-F4) sigue la fila más parecida de esta tabla por rol (control de formulario →
+fila Input; contenedor flotante → fila Popover; contenedor de layout → fila Card).
+
 ## Notas de uso (para Tasks 2+ del plan F1, restyle de primitivos)
 
 - `--primary` es el único acento de acción (botones primarios, focus ring, links, active nav).
