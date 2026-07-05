@@ -35,6 +35,25 @@ if (typeof globalThis.localStorage?.setItem !== "function") {
   });
 }
 
+// jsdom has no ResizeObserver implementation, but cmdk (the ⌘K command palette) uses one
+// internally to measure its list for virtualization/sizing. Without this stub, mounting
+// CommandPalette in tests throws "ResizeObserver is not defined" — a jsdom environment gap,
+// not an app bug (the browser has ResizeObserver natively).
+if (typeof globalThis.ResizeObserver === "undefined") {
+  class StubResizeObserver implements ResizeObserver {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  }
+  globalThis.ResizeObserver = StubResizeObserver;
+}
+
+// jsdom also doesn't implement Element.scrollIntoView, which cmdk calls when the
+// keyboard-selected item changes. No-op stub, same rationale as ResizeObserver above.
+if (typeof Element.prototype.scrollIntoView !== "function") {
+  Element.prototype.scrollIntoView = () => {};
+}
+
 // AppShell auto-opens HelpGuide the first time `atlas-guide-seen` is unset in localStorage
 // (a one-time hint for real first-time users). A fresh in-memory localStorage per test file
 // means every test would otherwise see that "first visit" state, and Radix's Dialog marks

@@ -1,3 +1,4 @@
+import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { Command as CmdkCommand } from "cmdk";
 import {
   ChartNoAxesColumn,
@@ -57,6 +58,13 @@ export function CommandPalette({
       contentClassName="relative z-[81]"
     >
       <div className="w-[600px] max-w-[92vw] overflow-hidden rounded-xl border border-border bg-popover text-popover-foreground shadow-[var(--shadow-lg)]">
+        {/* cmdk's Command.Dialog renders a bare Radix Dialog.Content with only an
+            aria-label — Radix still requires a Title descendant for a11y, so we
+            supply one here, visually hidden (sr-only), plus a description. */}
+        <DialogPrimitive.Title className="sr-only">Paleta de comandos</DialogPrimitive.Title>
+        <DialogPrimitive.Description className="sr-only">
+          Busca una vista, vacante o acción y navega al instante.
+        </DialogPrimitive.Description>
         <CommandInput autoFocus placeholder="Busca una vista, vacante o acción…" />
         <CommandList>
           <CommandEmpty>Sin resultados.</CommandEmpty>
