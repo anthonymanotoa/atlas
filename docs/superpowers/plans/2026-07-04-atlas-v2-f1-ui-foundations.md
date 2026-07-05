@@ -3858,7 +3858,7 @@ Con backend + dev server corriendo, verificar UNO a UNO (criterio de done F1 de 
 - [ ] **Perfiles**: switch de perfil recarga tablero/overview/portfolio del perfil nuevo y navega a `/pipeline`.
 - [ ] **⌘K**: grupo "Ir a" navega a las 4 vistas; buscar vacante abre su página; "Resumen del día" abre el diálogo de brief.
 - [ ] **Tema**: toggle dark/light persiste tras recargar; sin flash (main.tsx pre-paint).
-- [ ] **Responsive básico**: `preview_resize` a 1100×700 — sidebar colapsa a iconos (`max-lg:w-14`), el kanban scrollea horizontal, nada se rompe (objetivo laptop pequeña, no mobile).
+- [ ] **Responsive básico**: `preview_resize` a **1000×700** (por debajo del breakpoint Tailwind `lg`, 1024px — no 1100×700: a 1100px el viewport sigue por encima de `lg` y el sidebar NO colapsa) — sidebar colapsa a iconos (`max-lg:w-14`), el kanban scrollea horizontal, nada se rompe (objetivo laptop pequeña, no mobile).
 - [ ] **Cero rastro v1**: nada ámbar/terracota, sin `shadow-glow`, sin Tabs Pipeline/Portafolio en el header.
 
 - [ ] **Step 5: Registrar el resultado del gate**
