@@ -161,7 +161,7 @@ export function SettingsModal({ open, onClose }: { open: boolean; onClose: () =>
             <Button variant="secondary" onClick={saveColumns}>
               Guardar diseño
             </Button>
-            <a className={buttonVariants()} href={api.exportUrl(selected)}>
+            <a className={buttonVariants()} href={open ? api.exportUrl(selected) : "#"}>
               <Download className="size-4" /> Descargar CSV
             </a>
           </div>
