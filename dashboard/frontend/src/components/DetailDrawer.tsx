@@ -666,7 +666,7 @@ export function DetailDrawer({
                 <Card className="border-[color-mix(in_oklch,var(--accent2)_50%,var(--border))] bg-[color-mix(in_oklch,var(--accent2)_8%,transparent)] p-3.5">
                   <div
                     className="flex items-center gap-1.5 text-sm font-medium"
-                    style={{ color: "var(--color-accent2)" }}
+                    style={{ color: "var(--accent2)" }}
                   >
                     <ReferralIcon className="size-4" /> Referido disponible (prioriza esto)
                   </div>

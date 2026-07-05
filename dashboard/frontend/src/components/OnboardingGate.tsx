@@ -56,10 +56,7 @@ export function OnboardingGate({
     <div className="fade-up mx-auto max-w-[760px] py-8">
       {/* hero */}
       <div className="mb-6 flex flex-col items-center text-center">
-        <div
-          className="relative mb-4 grid size-12 place-items-center rounded-2xl text-lg font-bold text-primary-foreground shadow-[var(--shadow-glow)] before:absolute before:inset-0 before:rounded-2xl before:bg-[radial-gradient(circle_at_30%_20%,oklch(1_0_0/0.4),transparent_60%)]"
-          style={{ background: "linear-gradient(135deg, var(--primary), var(--accent2))" }}
-        >
+        <div className="mb-4 grid size-12 place-items-center rounded-2xl bg-primary text-lg font-bold text-primary-foreground shadow-[var(--shadow-md)]">
           A
         </div>
         <h1 className="text-display">Primer paso: adapta tu CV y tu LinkedIn</h1>
@@ -123,7 +120,7 @@ export function OnboardingGate({
         <Card className="mt-5 border-[color-mix(in_oklch,var(--accent2)_50%,var(--border))] bg-[color-mix(in_oklch,var(--accent2)_8%,transparent)] p-3.5 text-sm">
           <div
             className="flex items-center gap-1.5 font-medium"
-            style={{ color: "var(--color-accent2)" }}
+            style={{ color: "var(--accent2)" }}
           >
             <Sparkles className="size-4" /> Mejora guiada con IA
           </div>
