@@ -70,6 +70,21 @@ class DB:
         self._ensure_column("jobs", "language", "TEXT")
         self._ensure_column("jobs", "match_score", "INTEGER")
         self._ensure_column("jobs", "match_missing", "TEXT")
+        # F2: geo-scoring + pipeline hygiene columns.
+        self._ensure_column("jobs", "geo_restriction", "TEXT")
+        self._ensure_column("jobs", "geo_scope", "TEXT")
+        self._ensure_column("jobs", "repost_count", "INTEGER DEFAULT 0")
+        self._ensure_column("jobs", "liveness_checked_at", "TEXT")
+        # F3 (plan 2026-07-04): knock-out pre-scan + machine summary + cadencia v2.
+        self._ensure_column("jobs", "knockout_warnings", "TEXT")
+        self._ensure_column("jobs", "score_breakdown", "TEXT")
+        # F4 (Block G): posting-legitimacy tier + signal notes (orthogonal to fit).
+        self._ensure_column("jobs", "legitimacy_tier", "TEXT")
+        self._ensure_column("jobs", "legitimacy_notes", "TEXT")
+        # F4 §7.2: interview deep prep (Audience Map + cited Qs) + post-interview debrief.
+        self._ensure_column("interviews", "deep_prep_md", "TEXT")
+        self._ensure_column("interviews", "debrief_md", "TEXT")
+        self._ensure_column("followups", "kind", "TEXT")
 
     def _ensure_column(self, table: str, column: str, decl: str) -> None:
         existing = {r["name"] for r in self.conn.execute(f"PRAGMA table_info({table})")}
@@ -101,8 +116,9 @@ class DB:
                    (id, source, source_job_id, title, company, location, is_remote,
                     workplace_type, url, apply_url, description, employment_type,
                     salary_min, salary_max, salary_currency, salary_interval,
-                    date_posted, language, raw_json, sources_json, state, discovered_at)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'discovered', ?)""",
+                    date_posted, language, geo_restriction, geo_scope,
+                    raw_json, sources_json, state, discovered_at)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'discovered', ?)""",
                 (
                     job.id,
                     job.source,
@@ -122,6 +138,8 @@ class DB:
                     job.salary_interval,
                     job.date_posted,
                     job.language,
+                    job.geo_restriction,
+                    job.geo_scope,
                     json.dumps(job.raw),
                     json.dumps([job.source]),
                     now,
@@ -147,6 +165,9 @@ class DB:
                  date_posted     = COALESCE(date_posted, ?),
                  language        = COALESCE(language, ?),
                  is_remote       = COALESCE(is_remote, ?),
+                 geo_restriction = COALESCE(geo_restriction, ?),
+                 geo_scope       = CASE WHEN COALESCE(geo_scope,'') IN ('','unknown')
+                                        THEN ? ELSE geo_scope END,
                  sources_json    = ?
                WHERE id=?""",
             (
@@ -161,6 +182,8 @@ class DB:
                 job.date_posted,
                 job.language,
                 _b(job.is_remote),
+                job.geo_restriction,
+                job.geo_scope,
                 json.dumps(sorted(sources)),
                 job.id,
             ),
@@ -193,10 +216,31 @@ class DB:
             q += f" LIMIT {int(limit)}"
         return [dict(r) for r in self.conn.execute(q, params).fetchall()]
 
-    def set_fit(self, job_id: str, score: float, reasons: list[str], knockouts: list[str]) -> None:
+    def set_fit(
+        self,
+        job_id: str,
+        score: float,
+        reasons: list[str],
+        knockouts: list[str],
+        *,
+        warnings: list[dict] | None = None,
+        breakdown: dict | None = None,
+    ) -> None:
+        """Persist the fit result. `warnings` (§6.4) and `breakdown` (§6.5) are optional so
+        legacy callers keep working; COALESCE preserves the previous value when omitted."""
         self.conn.execute(
-            "UPDATE jobs SET fit_score=?, fit_reasons=?, knockout_flags=? WHERE id=?",
-            (score, json.dumps(reasons), json.dumps(knockouts), job_id),
+            """UPDATE jobs SET fit_score=?, fit_reasons=?, knockout_flags=?,
+                 knockout_warnings=COALESCE(?, knockout_warnings),
+                 score_breakdown=COALESCE(?, score_breakdown)
+               WHERE id=?""",
+            (
+                score,
+                json.dumps(reasons),
+                json.dumps(knockouts),
+                json.dumps(warnings) if warnings is not None else None,
+                json.dumps(breakdown) if breakdown is not None else None,
+                job_id,
+            ),
         )
         self.conn.commit()
 
@@ -205,6 +249,17 @@ class DB:
         self.conn.execute(
             "UPDATE jobs SET match_score=?, match_missing=? WHERE id=?",
             (score, json.dumps(missing), job_id),
+        )
+        self.conn.commit()
+
+    def set_legitimacy(self, job_id: str, tier: str, notes: str) -> None:
+        """Persist the posting-legitimacy tier (high|medium|low) + signal notes (F4 Block G).
+
+        Orthogonal to fit/match: this never touches the scoring columns. `notes` are
+        signal-based OBSERVATIONS, never accusations (the brain enforces the framing)."""
+        self.conn.execute(
+            "UPDATE jobs SET legitimacy_tier=?, legitimacy_notes=? WHERE id=?",
+            (tier, notes, job_id),
         )
         self.conn.commit()
 
@@ -224,6 +279,49 @@ class DB:
     def counts_by_state(self) -> dict[str, int]:
         rows = self.conn.execute("SELECT state, COUNT(*) n FROM jobs GROUP BY state").fetchall()
         return {r["state"]: r["n"] for r in rows}
+
+    # ── posting snapshots (F2) ────────────────────────────────────────────────
+    _SNAPSHOT_FIELDS = (
+        "title",
+        "company",
+        "location",
+        "description",
+        "url",
+        "apply_url",
+        "salary_min",
+        "salary_max",
+        "salary_currency",
+        "salary_interval",
+        "date_posted",
+    )
+
+    def snapshot_posting(self, job_id: str) -> int | None:
+        """Persist an immutable snapshot of the posting at apply time. Idempotent per job."""
+        if self.conn.execute(
+            "SELECT 1 FROM posting_snapshots WHERE job_id=? LIMIT 1", (job_id,)
+        ).fetchone():
+            return None
+        job = self.get_job(job_id)
+        if not job:
+            return None
+        payload = {k: job.get(k) for k in self._SNAPSHOT_FIELDS}
+        cur = self.conn.execute(
+            "INSERT INTO posting_snapshots (job_id, captured_at, payload) VALUES (?,?,?)",
+            (job_id, now_iso(), json.dumps(payload)),
+        )
+        self.conn.commit()
+        return int(cur.lastrowid)
+
+    def snapshots_for(self, job_id: str) -> list[dict]:
+        rows = self.conn.execute(
+            "SELECT * FROM posting_snapshots WHERE job_id=? ORDER BY captured_at", (job_id,)
+        ).fetchall()
+        out = []
+        for r in rows:
+            d = dict(r)
+            d["payload"] = _loads(d.get("payload"), {})
+            out.append(d)
+        return out
 
     # ── cv versions ──────────────────────────────────────────────────────────
     def add_cv_version(
@@ -265,6 +363,63 @@ class DB:
             "SELECT * FROM cv_versions WHERE job_id=? ORDER BY created_at DESC", (job_id,)
         ).fetchall()
         return [dict(r) for r in rows]
+
+    # ── cv reviews (F4 §7.2) ───────────────────────────────────────────────────
+    def add_cv_review(
+        self,
+        job_id: str,
+        *,
+        intent_id: str | None,
+        cv_version_id: int | None,
+        edits: list,
+        critique: dict,
+        flags: list,
+    ) -> int:
+        cur = self.conn.execute(
+            """INSERT INTO cv_reviews
+               (intent_id, job_id, cv_version_id, edits, critique, flags, created_at)
+               VALUES (?,?,?,?,?,?,?)""",
+            (
+                intent_id,
+                job_id,
+                cv_version_id,
+                json.dumps(edits),
+                json.dumps(critique),
+                json.dumps(flags),
+                now_iso(),
+            ),
+        )
+        self.conn.commit()
+        return int(cur.lastrowid)
+
+    def _parse_review(self, row) -> dict:
+        d = dict(row)
+        d["edits"] = _loads(d.get("edits"), [])
+        d["critique"] = _loads(d.get("critique"), {})
+        d["flags"] = _loads(d.get("flags"), [])
+        return d
+
+    def get_cv_review(self, review_id: int) -> dict | None:
+        row = self.conn.execute("SELECT * FROM cv_reviews WHERE id=?", (review_id,)).fetchone()
+        return self._parse_review(row) if row else None
+
+    def cv_reviews_for(self, job_id: str) -> list[dict]:
+        rows = self.conn.execute(
+            "SELECT * FROM cv_reviews WHERE job_id=? ORDER BY created_at DESC", (job_id,)
+        ).fetchall()
+        return [self._parse_review(r) for r in rows]
+
+    def set_cv_review_edits(self, review_id: int, edits: list) -> None:
+        self.conn.execute(
+            "UPDATE cv_reviews SET edits=? WHERE id=?", (json.dumps(edits), review_id)
+        )
+        self.conn.commit()
+
+    def set_cv_review_flags(self, review_id: int, flags: list) -> None:
+        self.conn.execute(
+            "UPDATE cv_reviews SET flags=? WHERE id=?", (json.dumps(flags), review_id)
+        )
+        self.conn.commit()
 
     # ── messages ─────────────────────────────────────────────────────────────
     def add_message(
@@ -387,11 +542,12 @@ class DB:
         touch_number: int,
         due_at: str,
         message_id: int | None = None,
+        kind: str | None = None,
     ) -> int:
         cur = self.conn.execute(
-            """INSERT INTO followups (job_id, message_id, channel, touch_number, due_at, created_at)
-               VALUES (?,?,?,?,?,?)""",
-            (job_id, message_id, channel, touch_number, due_at, now_iso()),
+            """INSERT INTO followups (job_id, message_id, channel, touch_number, due_at, kind, created_at)
+               VALUES (?,?,?,?,?,?,?)""",
+            (job_id, message_id, channel, touch_number, due_at, kind, now_iso()),
         )
         self.conn.commit()
         return int(cur.lastrowid)
@@ -410,6 +566,15 @@ class DB:
         rows = self.conn.execute(
             "SELECT * FROM followups WHERE state='pending' AND due_at<=? ORDER BY due_at",
             (as_of_iso,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    def pending_followups(self) -> list[dict]:
+        """Every pending follow-up joined with its job (company/title/state) — feeds /followups."""
+        rows = self.conn.execute(
+            """SELECT f.*, j.title, j.company, j.state AS job_state, j.applied_at
+               FROM followups f JOIN jobs j ON j.id = f.job_id
+               WHERE f.state='pending' ORDER BY f.due_at"""
         ).fetchall()
         return [dict(r) for r in rows]
 
@@ -622,6 +787,17 @@ class DB:
         self.conn.execute("UPDATE interviews SET prep_path=? WHERE id=?", (path, interview_id))
         self.conn.commit()
 
+    def set_interview_deep_prep(self, interview_id: int, md: str) -> None:
+        """Persist the brain's audience-mapped deep prep pack (F4 §7.2). No LLM here — the
+        brain produced `md` offline; this only writes it to the interview row."""
+        self.conn.execute("UPDATE interviews SET deep_prep_md=? WHERE id=?", (md, interview_id))
+        self.conn.commit()
+
+    def set_interview_debrief(self, interview_id: int, md: str) -> None:
+        """Persist the candidate's post-interview debrief (F4 §7.2) — feeds the next prep."""
+        self.conn.execute("UPDATE interviews SET debrief_md=? WHERE id=?", (md, interview_id))
+        self.conn.commit()
+
     def add_interviewer(
         self,
         interview_id: int,
@@ -738,6 +914,143 @@ class DB:
             )
         self.conn.commit()
         return int(cur.lastrowid)
+
+    # ── story bank STAR+R (F3 §6.3) ───────────────────────────────────────────
+    _STORY_TEXT_FIELDS = ("title", "situation", "task", "action", "result", "reflection")
+
+    def add_story(
+        self,
+        *,
+        title: str,
+        situation: str = "",
+        task: str = "",
+        action: str = "",
+        result: str = "",
+        reflection: str = "",
+        skills: list[str] | None = None,
+    ) -> int:
+        now = now_iso()
+        cur = self.conn.execute(
+            """INSERT INTO stories
+               (title, situation, task, action, result, reflection, skills, created_at, updated_at)
+               VALUES (?,?,?,?,?,?,?,?,?)""",
+            (
+                title,
+                situation,
+                task,
+                action,
+                result,
+                reflection,
+                json.dumps(skills or []),
+                now,
+                now,
+            ),
+        )
+        self.conn.commit()
+        return int(cur.lastrowid)
+
+    def _story_row(self, row) -> dict:
+        d = dict(row)
+        d["skills"] = _loads(d.get("skills"), [])
+        return d
+
+    def get_story(self, story_id: int) -> dict | None:
+        row = self.conn.execute("SELECT * FROM stories WHERE id=?", (story_id,)).fetchone()
+        return self._story_row(row) if row else None
+
+    def list_stories(self) -> list[dict]:
+        rows = self.conn.execute("SELECT * FROM stories ORDER BY updated_at DESC").fetchall()
+        return [self._story_row(r) for r in rows]
+
+    def update_story(self, story_id: int, fields: dict) -> bool:
+        """Partial update. Only STAR+R text fields and `skills` are writable."""
+        allowed = set(self._STORY_TEXT_FIELDS) | {"skills"}
+        unknown = set(fields) - allowed
+        if unknown:
+            raise ValueError(f"unknown story fields: {sorted(unknown)}")
+        if not fields:
+            return False
+        sets, params = [], []
+        for k, v in fields.items():
+            sets.append(f"{k}=?")
+            params.append(json.dumps(v or []) if k == "skills" else str(v or ""))
+        sets.append("updated_at=?")
+        params.extend([now_iso(), story_id])
+        cur = self.conn.execute(f"UPDATE stories SET {', '.join(sets)} WHERE id=?", params)
+        self.conn.commit()
+        return cur.rowcount > 0
+
+    def delete_story(self, story_id: int) -> bool:
+        cur = self.conn.execute("DELETE FROM stories WHERE id=?", (story_id,))
+        self.conn.commit()
+        return cur.rowcount > 0
+
+    # ── upskill reports (F4 §7.2) ──────────────────────────────────────────────
+    def add_upskill_report(
+        self, *, intent_id: str | None, report_md: str, heatmap: list, hard_gaps: dict
+    ) -> int:
+        cur = self.conn.execute(
+            """INSERT INTO upskill_reports (intent_id, report_md, heatmap, hard_gaps, created_at)
+               VALUES (?,?,?,?,?)""",
+            (intent_id, report_md, json.dumps(heatmap), json.dumps(hard_gaps), now_iso()),
+        )
+        self.conn.commit()
+        return int(cur.lastrowid)
+
+    def _parse_upskill(self, row) -> dict:
+        d = dict(row)
+        d["heatmap"] = _loads(d.get("heatmap"), [])
+        d["hard_gaps"] = _loads(d.get("hard_gaps"), {})
+        return d
+
+    def get_upskill_report(self, report_id: int) -> dict | None:
+        row = self.conn.execute("SELECT * FROM upskill_reports WHERE id=?", (report_id,)).fetchone()
+        return self._parse_upskill(row) if row else None
+
+    def list_upskill_reports(self, limit: int = 20) -> list[dict]:
+        rows = self.conn.execute(
+            "SELECT * FROM upskill_reports ORDER BY created_at DESC, id DESC LIMIT ?", (int(limit),)
+        ).fetchall()
+        return [self._parse_upskill(r) for r in rows]
+
+    def latest_upskill_report(self) -> dict | None:
+        rows = self.list_upskill_reports(limit=1)
+        return rows[0] if rows else None
+
+    # ── profile expansions (F4 §7.2) ───────────────────────────────────────────
+    def add_profile_expansion(self, *, intent_id: str | None, items: list) -> int:
+        cur = self.conn.execute(
+            "INSERT INTO profile_expansions (intent_id, items, created_at) VALUES (?,?,?)",
+            (intent_id, json.dumps(items), now_iso()),
+        )
+        self.conn.commit()
+        return int(cur.lastrowid)
+
+    def get_profile_expansion(self, exp_id: int) -> dict | None:
+        row = self.conn.execute("SELECT * FROM profile_expansions WHERE id=?", (exp_id,)).fetchone()
+        if not row:
+            return None
+        d = dict(row)
+        d["items"] = _loads(d.get("items"), [])
+        return d
+
+    def list_profile_expansions(self, limit: int = 20) -> list[dict]:
+        rows = self.conn.execute(
+            "SELECT * FROM profile_expansions ORDER BY created_at DESC, id DESC LIMIT ?",
+            (int(limit),),
+        ).fetchall()
+        out = []
+        for r in rows:
+            d = dict(r)
+            d["items"] = _loads(d.get("items"), [])
+            out.append(d)
+        return out
+
+    def set_profile_expansion(self, exp_id: int, items: list) -> None:
+        self.conn.execute(
+            "UPDATE profile_expansions SET items=? WHERE id=?", (json.dumps(items), exp_id)
+        )
+        self.conn.commit()
 
 
 def _b(v: bool | None) -> int | None:

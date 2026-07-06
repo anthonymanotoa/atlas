@@ -29,19 +29,19 @@ export const COLUMN_ES: Record<string, string> = {
   offer: "Oferta",
 };
 
-// Tone per action type (the icon now lives in the lucide icon map — see components/ui/icons.ts).
+// Tone per action type (the icon lives in components/ui/icons.ts).
 export const ACTION_META: Record<string, { tone: string }> = {
-  ask_referral: { tone: "var(--color-accent2)" },
-  send_application: { tone: "var(--color-action)" },
-  reply: { tone: "var(--color-done)" },
-  follow_up: { tone: "var(--color-pending)" },
+  ask_referral: { tone: "var(--accent2)" },
+  send_application: { tone: "var(--info)" },
+  reply: { tone: "var(--success)" },
+  follow_up: { tone: "var(--warning)" },
 };
 
 export function fitTone(score?: number | null): string {
-  if (score == null) return "var(--color-faint)";
-  if (score >= 85) return "var(--color-done)";
-  if (score >= 65) return "var(--color-accent)";
-  return "var(--color-muted)";
+  if (score == null) return "var(--muted-foreground)";
+  if (score >= 85) return "var(--success)";
+  if (score >= 65) return "var(--primary)";
+  return "var(--muted-foreground)";
 }
 
 export function ageLabel(days?: number | null): string {

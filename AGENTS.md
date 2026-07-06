@@ -21,7 +21,8 @@ Read `README.md` and `docs/ARCHITECTURE.md` for the full picture.
   outreach templating, referrals, SQLite tracker, analytics.
 - `brain/` — the daily orchestrator (`run_brain.py` + `SKILL.md`, a Cowork scheduled task).
 - `dashboard/backend` — FastAPI serving JSON over `127.0.0.1` (no auth, by design — local single user).
-- `dashboard/frontend` — React 19 + Vite + Tailwind v4 SPA.
+- `dashboard/frontend` — React 19 + Vite + Tailwind v4 SPA, **react-router v7** (library mode) +
+  **TanStack Query v5** (per-resource data hooks in `src/hooks/`).
 - `config/`, `docs/`, `tests/`, `plans/` (improve-skill audit plans).
 
 ## Package managers
@@ -33,7 +34,7 @@ Read `README.md` and `docs/ARCHITECTURE.md` for the full picture.
 ## Verify commands (use these exact forms)
 
 ```bash
-uv run pytest                                   # Python tests → expect "19 passed"
+uv run pytest                                   # Python tests → expect all green
 npm --prefix dashboard/frontend run typecheck   # tsc --noEmit
 npm --prefix dashboard/frontend run build       # production build
 ./scripts/check.sh                              # all of the above, one command
@@ -55,16 +56,24 @@ npm --prefix dashboard/frontend run build       # production build
 
 ## Frontend UI / design system
 
-The dashboard follows the **"Warm Editorial" design system** — spec in
-`dashboard/frontend/DESIGN_SYSTEM.md`. **Any UI change must follow it.**
+The dashboard follows the **"Meridian" design system (v2)** — spec in
+`dashboard/frontend/DESIGN_SYSTEM.md` (aesthetic source of truth:
+`docs/superpowers/specs/2026-07-04-atlas-v2-visual-language.md`). It replaces the retired v1
+"Warm Editorial": cold slate/ink OKLCH neutrals + a single signal-blue brand accent, with amber
+surviving only as the functional `warning` color. **Any UI change must follow it.**
 
 - Compose from the primitives in `dashboard/frontend/src/components/ui/*` (shadcn-style: Radix +
   cva + `cn` from `@/lib/utils`). Don't hand-roll buttons/inputs/badges or hardcode colors.
 - Use the semantic tokens / Tailwind utilities (`bg-card`, `text-muted-foreground`, `bg-primary`,
-  `bg-secondary`, `border-border`, `ring-ring`, …) from `src/index.css`. **Never** use `bg-accent`/
-  `bg-muted` (unmapped on purpose) — use `secondary`. Theme is `data-theme` on `<html>` (no `.dark`).
-- Icons come from `src/components/ui/icons.ts` (lucide) — **no raw emoji**. Font is Geist; use
-  `tabular-nums` on numbers.
+  `bg-secondary`, `border-border`, `ring-ring`, `bg-sidebar`, …) from `src/index.css`. **Never** use
+  `bg-accent`/`bg-muted` (unmapped on purpose) — use `secondary`. Theme is `data-theme` on `<html>`
+  (never `.dark`); default is dark, with full light parity.
+- Icons come from `src/components/ui/icons.ts` (lucide) — **no raw emoji**. Fonts are Space Grotesk
+  (sans) + JetBrains Mono; use `tabular-nums` on live numbers.
+- Pages route via **react-router v7** (`src/routes.tsx`, `AppShell.tsx`) and read server data only
+  through **TanStack Query** hooks in `src/hooks/` (keys in `src/hooks/keys.ts`) — never `api.*` or
+  `useEffect`+`useState` for server data. Every page uses `LoadingState`/`ErrorState`/`EmptyState`
+  from `src/components/ui/states.tsx`.
 - `components.json` enables the shadcn CLI/skill; a repo skill `.claude/skills/atlas-design-system/`
   auto-enforces this. FE lint is `--max-warnings 0`; run `npm --prefix dashboard/frontend run build`
   (it is **not** part of `check.sh`).

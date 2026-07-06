@@ -35,6 +35,7 @@ _SEED_FILES: list[tuple[str, str]] = [
     ("config/ontology.yaml", "ontology.yaml"),
     ("config/cv_layout.yaml", "cv_layout.yaml"),
     ("config/interview_topics.yaml", "interview_topics.yaml"),
+    ("config/discovery_seeds.yaml", "discovery_seeds.yaml"),
     ("profile/master_cv.yaml", "master_cv.example.yaml"),
 ]
 

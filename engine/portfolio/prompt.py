@@ -37,7 +37,7 @@ def _experience_block(cv: dict) -> str:
     return "\n".join(lines)
 
 
-def _target_role(b: dict, criteria: "Criteria | None") -> str:
+def _target_role(b: dict, criteria: Criteria | None) -> str:
     """Hero/title — the candidate's REAL target role, never a hardcoded persona.
 
     Priority: basics.label → criteria.roles (title-cased, joined) → a neutral fallback.
@@ -50,7 +50,7 @@ def _target_role(b: dict, criteria: "Criteria | None") -> str:
     return "[tu rol objetivo]"
 
 
-def _domain_descriptor(criteria: "Criteria | None") -> str:
+def _domain_descriptor(criteria: Criteria | None) -> str:
     """A short, profile-derived domain hint so the LLM groups skills/projects sensibly,
     instead of us hardcoding data-specific buckets (Analytics/GenAI/Retention…)."""
     if criteria and criteria.roles:
@@ -150,7 +150,7 @@ def build_portfolio_prompt(
     cv: dict,
     *,
     layout: dict | None = None,
-    criteria: "Criteria | None" = None,
+    criteria: Criteria | None = None,
     ontology: dict[str, list[str]] | None = None,
 ) -> str:
     """Return a long, copy-paste-ready prompt for an LLM to build the user's portfolio site.

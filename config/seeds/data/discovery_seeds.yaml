@@ -1,0 +1,10 @@
+# Candidatas para reverse ATS discovery (dominio: data). Lista curada de EJEMPLO con
+# empresas tech/data-first conocidas y públicas — Atlas derivará un token plausible del
+# nombre y probará sus boards de Greenhouse/Lever/Ashby. Edita/reemplaza con las empresas
+# de TU radar antes de usarlo (esto NO es un directorio mágico: solo prueba estos nombres).
+candidates:
+  - Databricks
+  - Snowflake
+  - Datadog
+  - Airtable
+  - dbt Labs

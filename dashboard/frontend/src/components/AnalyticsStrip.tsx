@@ -73,7 +73,7 @@ export function AnalyticsStrip({ ov }: { ov: Overview }) {
         <Metric
           label="Listos para enviar"
           value={String(ov.ready)}
-          tone="var(--color-action)"
+          tone="var(--info)"
           sub="revisa y envía"
           icon={Send}
           highlight
@@ -82,7 +82,7 @@ export function AnalyticsStrip({ ov }: { ov: Overview }) {
           label="Tasa de respuesta"
           value={pct(rr)}
           sub={rrBand}
-          tone="var(--color-done)"
+          tone="var(--success)"
           icon={MessageCircleReply}
         />
         <Metric

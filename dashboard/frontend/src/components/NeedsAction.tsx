@@ -32,7 +32,7 @@ export function NeedsAction({
       </div>
       <div className="flex gap-3 overflow-x-auto pb-1">
         {actions.map((a, i) => {
-          const tone = (ACTION_META[a.type] || { tone: "var(--color-muted)" }).tone;
+          const tone = (ACTION_META[a.type] || { tone: "var(--muted-foreground)" }).tone;
           const Icon = actionIcon(a.type);
           return (
             <Card

@@ -124,10 +124,7 @@ export function HelpGuide({
       <DialogContent className="max-h-[88vh] max-w-[860px] gap-0 overflow-hidden p-0">
         <DialogHeader className="border-b border-border px-6 py-5">
           <div className="flex items-center gap-3">
-            <span
-              className="relative grid size-9 place-items-center rounded-xl font-bold text-primary-foreground shadow-[var(--shadow-glow)]"
-              style={{ background: "linear-gradient(135deg, var(--primary), var(--accent2))" }}
-            >
+            <span className="grid size-9 place-items-center rounded-xl bg-primary font-bold text-primary-foreground shadow-[var(--shadow-md)]">
               A
             </span>
             <div>
