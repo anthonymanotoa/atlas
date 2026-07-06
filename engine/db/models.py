@@ -75,6 +75,10 @@ class DB:
         self._ensure_column("jobs", "geo_scope", "TEXT")
         self._ensure_column("jobs", "repost_count", "INTEGER DEFAULT 0")
         self._ensure_column("jobs", "liveness_checked_at", "TEXT")
+        # F3 (plan 2026-07-04): knock-out pre-scan + machine summary + cadencia v2.
+        self._ensure_column("jobs", "knockout_warnings", "TEXT")
+        self._ensure_column("jobs", "score_breakdown", "TEXT")
+        self._ensure_column("followups", "kind", "TEXT")
 
     def _ensure_column(self, table: str, column: str, decl: str) -> None:
         existing = {r["name"] for r in self.conn.execute(f"PRAGMA table_info({table})")}
@@ -206,10 +210,31 @@ class DB:
             q += f" LIMIT {int(limit)}"
         return [dict(r) for r in self.conn.execute(q, params).fetchall()]
 
-    def set_fit(self, job_id: str, score: float, reasons: list[str], knockouts: list[str]) -> None:
+    def set_fit(
+        self,
+        job_id: str,
+        score: float,
+        reasons: list[str],
+        knockouts: list[str],
+        *,
+        warnings: list[dict] | None = None,
+        breakdown: dict | None = None,
+    ) -> None:
+        """Persist the fit result. `warnings` (§6.4) and `breakdown` (§6.5) are optional so
+        legacy callers keep working; COALESCE preserves the previous value when omitted."""
         self.conn.execute(
-            "UPDATE jobs SET fit_score=?, fit_reasons=?, knockout_flags=? WHERE id=?",
-            (score, json.dumps(reasons), json.dumps(knockouts), job_id),
+            """UPDATE jobs SET fit_score=?, fit_reasons=?, knockout_flags=?,
+                 knockout_warnings=COALESCE(?, knockout_warnings),
+                 score_breakdown=COALESCE(?, score_breakdown)
+               WHERE id=?""",
+            (
+                score,
+                json.dumps(reasons),
+                json.dumps(knockouts),
+                json.dumps(warnings) if warnings is not None else None,
+                json.dumps(breakdown) if breakdown is not None else None,
+                job_id,
+            ),
         )
         self.conn.commit()
 
@@ -443,11 +468,12 @@ class DB:
         touch_number: int,
         due_at: str,
         message_id: int | None = None,
+        kind: str | None = None,
     ) -> int:
         cur = self.conn.execute(
-            """INSERT INTO followups (job_id, message_id, channel, touch_number, due_at, created_at)
-               VALUES (?,?,?,?,?,?)""",
-            (job_id, message_id, channel, touch_number, due_at, now_iso()),
+            """INSERT INTO followups (job_id, message_id, channel, touch_number, due_at, kind, created_at)
+               VALUES (?,?,?,?,?,?,?)""",
+            (job_id, message_id, channel, touch_number, due_at, kind, now_iso()),
         )
         self.conn.commit()
         return int(cur.lastrowid)
@@ -466,6 +492,15 @@ class DB:
         rows = self.conn.execute(
             "SELECT * FROM followups WHERE state='pending' AND due_at<=? ORDER BY due_at",
             (as_of_iso,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    def pending_followups(self) -> list[dict]:
+        """Every pending follow-up joined with its job (company/title/state) — feeds /followups."""
+        rows = self.conn.execute(
+            """SELECT f.*, j.title, j.company, j.state AS job_state, j.applied_at
+               FROM followups f JOIN jobs j ON j.id = f.job_id
+               WHERE f.state='pending' ORDER BY f.due_at"""
         ).fetchall()
         return [dict(r) for r in rows]
 
@@ -794,6 +829,66 @@ class DB:
             )
         self.conn.commit()
         return int(cur.lastrowid)
+
+    # ── story bank STAR+R (F3 §6.3) ───────────────────────────────────────────
+    _STORY_TEXT_FIELDS = ("title", "situation", "task", "action", "result", "reflection")
+
+    def add_story(
+        self,
+        *,
+        title: str,
+        situation: str = "",
+        task: str = "",
+        action: str = "",
+        result: str = "",
+        reflection: str = "",
+        skills: list[str] | None = None,
+    ) -> int:
+        now = now_iso()
+        cur = self.conn.execute(
+            """INSERT INTO stories
+               (title, situation, task, action, result, reflection, skills, created_at, updated_at)
+               VALUES (?,?,?,?,?,?,?,?,?)""",
+            (title, situation, task, action, result, reflection, json.dumps(skills or []), now, now),
+        )
+        self.conn.commit()
+        return int(cur.lastrowid)
+
+    def _story_row(self, row) -> dict:
+        d = dict(row)
+        d["skills"] = _loads(d.get("skills"), [])
+        return d
+
+    def get_story(self, story_id: int) -> dict | None:
+        row = self.conn.execute("SELECT * FROM stories WHERE id=?", (story_id,)).fetchone()
+        return self._story_row(row) if row else None
+
+    def list_stories(self) -> list[dict]:
+        rows = self.conn.execute("SELECT * FROM stories ORDER BY updated_at DESC").fetchall()
+        return [self._story_row(r) for r in rows]
+
+    def update_story(self, story_id: int, fields: dict) -> bool:
+        """Partial update. Only STAR+R text fields and `skills` are writable."""
+        allowed = set(self._STORY_TEXT_FIELDS) | {"skills"}
+        unknown = set(fields) - allowed
+        if unknown:
+            raise ValueError(f"unknown story fields: {sorted(unknown)}")
+        if not fields:
+            return False
+        sets, params = [], []
+        for k, v in fields.items():
+            sets.append(f"{k}=?")
+            params.append(json.dumps(v or []) if k == "skills" else str(v or ""))
+        sets.append("updated_at=?")
+        params.extend([now_iso(), story_id])
+        cur = self.conn.execute(f"UPDATE stories SET {', '.join(sets)} WHERE id=?", params)
+        self.conn.commit()
+        return cur.rowcount > 0
+
+    def delete_story(self, story_id: int) -> bool:
+        cur = self.conn.execute("DELETE FROM stories WHERE id=?", (story_id,))
+        self.conn.commit()
+        return cur.rowcount > 0
 
 
 def _b(v: bool | None) -> int | None:

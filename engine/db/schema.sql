@@ -266,3 +266,18 @@ CREATE TABLE IF NOT EXISTS posting_snapshots (
     payload     TEXT NOT NULL                      -- json: title/company/location/description/salary/url/date_posted
 );
 CREATE INDEX IF NOT EXISTS idx_snapshots_job ON posting_snapshots(job_id);
+
+-- Story bank STAR+R (F3 §6.3). Vive en la DB del perfil activo (una por perfil).
+-- El matcher determinista (engine/stories.py) rankea por overlap de tokens/skills.
+CREATE TABLE IF NOT EXISTS stories (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    title       TEXT NOT NULL,
+    situation   TEXT DEFAULT '',
+    task        TEXT DEFAULT '',
+    action      TEXT DEFAULT '',
+    result      TEXT DEFAULT '',
+    reflection  TEXT DEFAULT '',
+    skills      TEXT DEFAULT '[]',              -- json array de tags de skill
+    created_at  TEXT NOT NULL,
+    updated_at  TEXT NOT NULL
+);
