@@ -11,6 +11,7 @@ from datetime import UTC, datetime, timedelta
 
 from engine.config import Criteria
 from engine.db.models import DB
+from engine.normalize import parse_dt_utc
 from engine.outreach.templates import Draft
 
 # (touch_number, day_offset, is_breakup)
@@ -18,10 +19,7 @@ CADENCE = [(1, 3, False), (2, 7, False), (3, 14, False), (4, 21, True)]
 
 
 def _parse(iso: str) -> datetime:
-    try:
-        return datetime.fromisoformat(iso)
-    except ValueError:
-        return datetime.now(UTC)
+    return parse_dt_utc(iso) or datetime.now(UTC)
 
 
 def schedule(
@@ -122,8 +120,6 @@ def seed_for_state(
         return None
     touch = (max((f["touch_number"] or 0) for f in existing) + 1) if existing else 1
     base = _parse(base_iso) if base_iso else datetime.now(UTC)
-    if base.tzinfo is None:
-        base = base.replace(tzinfo=UTC)
     due = (base + timedelta(days=days)).isoformat()
     return db.add_followup(job_id, channel="email", touch_number=touch, due_at=due, kind=state)
 
@@ -151,8 +147,6 @@ def bucket_followups(followups: list[dict], now: datetime) -> dict[str, list[dic
         if f.get("state") != "pending":
             continue
         due = _parse(f.get("due_at") or "")
-        if due.tzinfo is None:
-            due = due.replace(tzinfo=UTC)
         overdue_days = (now - due).total_seconds() / 86400
         item = {**f, "days_overdue": round(max(overdue_days, 0.0), 1)}
         if overdue_days < 0:
