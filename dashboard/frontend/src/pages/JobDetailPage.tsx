@@ -22,7 +22,7 @@ import { ScoreBreakdown } from "../components/job-detail/ScoreBreakdown";
 import { SectionTitle } from "../components/job-detail/SectionTitle";
 import { SocialSearch } from "../components/job-detail/SocialSearch";
 import { InterviewPanel } from "../components/InterviewPanel";
-import { GeoBadge, RepostBadge } from "../components/JobBadges";
+import { GeoBadge, LegitimacyBadge, RepostBadge } from "../components/JobBadges";
 import { Badge } from "../components/ui/badge";
 import { Button, buttonVariants } from "../components/ui/button";
 import { Card } from "../components/ui/card";
@@ -145,6 +145,7 @@ export function JobDetailPage() {
         {d.job.is_remote === 1 && <Badge variant="secondary">Remoto</Badge>}
         <GeoBadge job={d.job} />
         <RepostBadge job={d.job} />
+        <LegitimacyBadge job={d.job} />
         {salaryLabel(d.job) && (
           <Badge variant="secondary" title="Salario publicado">
             <SalaryIcon /> {salaryLabel(d.job)}

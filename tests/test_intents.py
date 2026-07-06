@@ -255,6 +255,115 @@ def test_cover_letter_context_exposes_cv_learnings_and_messages(db):
     assert any(m["kind"] == "cold_email" for m in ctx["existing_messages"])
 
 
+# ── legitimacy_batch (Task 9, Block G) ─────────────────────────────────────────
+# The writer persists ONE tier+notes per job_id in the batch. It is orthogonal to fit:
+# it never touches fit_score/match_score. It rejects any entry outside the payload's
+# job_ids (the LLM can only rate the shortlist it was handed) and any bad tier / empty
+# notes — a malformed batch raises and leaves the intent `running` (not done).
+def test_legitimacy_writer_updates_jobs(db):
+    from engine.normalize import Job
+
+    db.upsert_job(
+        Job(source="ashby", source_job_id="4", title="DS", company="Ghosty", url="https://x/4")
+    )
+    jid = db.list_jobs()[0]["id"]
+    iid = intents.enqueue(db, "legitimacy_batch", {"job_ids": [jid]})
+    intents.mark_running(db, iid)
+    ref = intents.apply_result(
+        db,
+        iid,
+        {
+            "jobs": [
+                {
+                    "job_id": jid,
+                    "tier": "low",
+                    "notes": "Posting de 92 días sin repost; JD genérico.",
+                }
+            ]
+        },
+    )
+    assert ref == "jobs:1"
+    job = db.get_job(jid)
+    assert job["legitimacy_tier"] == "low" and "92 días" in job["legitimacy_notes"]
+    # Orthogonal to fit: rating legitimacy never fabricates or touches the match/fit scores.
+    assert job["fit_score"] is None and job["match_score"] is None
+    assert intents.get_intent(db, iid)["status"] == "done"
+
+
+def test_legitimacy_writer_persists_each_job_in_the_batch(db):
+    from engine.normalize import Job
+
+    for n in ("10", "11", "12"):
+        db.upsert_job(
+            Job(source="ashby", source_job_id=n, title="DS", company=f"Co{n}", url=f"https://x/{n}")
+        )
+    ids = [j["id"] for j in db.list_jobs()]
+    iid = intents.enqueue(db, "legitimacy_batch", {"job_ids": ids})
+    intents.mark_running(db, iid)
+    ref = intents.apply_result(
+        db,
+        iid,
+        {
+            "jobs": [
+                {"job_id": ids[0], "tier": "high", "notes": "Reciente; JD específico."},
+                {"job_id": ids[1], "tier": "medium", "notes": "Señales mixtas; falta info."},
+                {"job_id": ids[2], "tier": "low", "notes": "Dominio no coincide con la empresa."},
+            ]
+        },
+    )
+    assert ref == "jobs:3"
+    assert db.get_job(ids[0])["legitimacy_tier"] == "high"
+    assert db.get_job(ids[1])["legitimacy_tier"] == "medium"
+    assert db.get_job(ids[2])["legitimacy_tier"] == "low"
+
+
+def test_legitimacy_writer_rejects_bad_tier_and_foreign_job(db):
+    from engine.normalize import Job
+
+    db.upsert_job(
+        Job(source="ashby", source_job_id="5", title="DS", company="Ok", url="https://x/5")
+    )
+    jid = db.list_jobs()[0]["id"]
+    iid = intents.enqueue(db, "legitimacy_batch", {"job_ids": [jid]})
+    intents.mark_running(db, iid)
+    with pytest.raises(ValueError):
+        intents.apply_result(db, iid, {"jobs": [{"job_id": jid, "tier": "meh", "notes": "x"}]})
+    with pytest.raises(ValueError):  # job fuera del payload — el LLM no puede tocar otros
+        intents.apply_result(db, iid, {"jobs": [{"job_id": "otro", "tier": "low", "notes": "x"}]})
+    # A rejected batch leaves the intent `running` (not done) and never wrote a tier.
+    assert intents.get_intent(db, iid)["status"] == "running"
+    assert db.get_job(jid)["legitimacy_tier"] is None
+
+
+def test_legitimacy_writer_rejects_empty_batch_and_empty_notes(db):
+    from engine.normalize import Job
+
+    db.upsert_job(
+        Job(source="ashby", source_job_id="6", title="DS", company="Ok", url="https://x/6")
+    )
+    jid = db.list_jobs()[0]["id"]
+    iid = intents.enqueue(db, "legitimacy_batch", {"job_ids": [jid]})
+    intents.mark_running(db, iid)
+    with pytest.raises(ValueError):  # empty jobs list
+        intents.apply_result(db, iid, {"jobs": []})
+    with pytest.raises(ValueError):  # notes are the observations — never empty
+        intents.apply_result(db, iid, {"jobs": [{"job_id": jid, "tier": "high", "notes": "  "}]})
+    assert db.get_job(jid)["legitimacy_tier"] is None
+
+
+def test_legitimacy_context_exposes_job_briefs_and_today(db):
+    from engine.normalize import Job
+
+    db.upsert_job(
+        Job(source="ashby", source_job_id="8", title="DS", company="Ctx", url="https://x/8")
+    )
+    jid = db.list_jobs()[0]["id"]
+    iid = intents.enqueue(db, "legitimacy_batch", {"job_ids": [jid]})
+    ctx = intents.context_for(db, iid)
+    assert [b["id"] for b in ctx["jobs"]] == [jid]
+    assert len(ctx["today"]) == 10 and ctx["today"][4] == "-"  # YYYY-MM-DD
+
+
 # ── CLI layer (Task 3) — el brain drena la cola vía estos comandos ─────────────
 @pytest.fixture
 def cli_db(tmp_path, monkeypatch):

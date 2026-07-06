@@ -78,6 +78,9 @@ class DB:
         # F3 (plan 2026-07-04): knock-out pre-scan + machine summary + cadencia v2.
         self._ensure_column("jobs", "knockout_warnings", "TEXT")
         self._ensure_column("jobs", "score_breakdown", "TEXT")
+        # F4 (Block G): posting-legitimacy tier + signal notes (orthogonal to fit).
+        self._ensure_column("jobs", "legitimacy_tier", "TEXT")
+        self._ensure_column("jobs", "legitimacy_notes", "TEXT")
         self._ensure_column("followups", "kind", "TEXT")
 
     def _ensure_column(self, table: str, column: str, decl: str) -> None:
@@ -243,6 +246,17 @@ class DB:
         self.conn.execute(
             "UPDATE jobs SET match_score=?, match_missing=? WHERE id=?",
             (score, json.dumps(missing), job_id),
+        )
+        self.conn.commit()
+
+    def set_legitimacy(self, job_id: str, tier: str, notes: str) -> None:
+        """Persist the posting-legitimacy tier (high|medium|low) + signal notes (F4 Block G).
+
+        Orthogonal to fit/match: this never touches the scoring columns. `notes` are
+        signal-based OBSERVATIONS, never accusations (the brain enforces the framing)."""
+        self.conn.execute(
+            "UPDATE jobs SET legitimacy_tier=?, legitimacy_notes=? WHERE id=?",
+            (tier, notes, job_id),
         )
         self.conn.commit()
 

@@ -10,7 +10,7 @@ import {
 import { MapPin, Users, X } from "lucide-react";
 import type { Job } from "../api";
 import { COLUMN_ES, ageLabel, cn, fitTone, freshLabel, langLabel, salaryLabel } from "../lib";
-import { GeoBadge, RepostBadge } from "./JobBadges";
+import { GeoBadge, LegitimacyBadge, RepostBadge } from "./JobBadges";
 import { Badge } from "./ui/badge";
 import { KnockoutIcon, MatchIcon, SalaryIcon } from "./ui/icons";
 import { ScoreRing } from "./ui/score-ring";
@@ -117,6 +117,7 @@ function JobCard({
         )}
         <GeoBadge job={job} />
         <RepostBadge job={job} />
+        <LegitimacyBadge job={job} compact />
         {job.sources && job.sources.length > 1 && (
           <span className="inline-flex items-center gap-1">
             <Users className="size-3" />

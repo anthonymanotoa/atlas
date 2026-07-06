@@ -296,3 +296,43 @@ def _write_cover_letter(db: DB, intent: dict, result: dict) -> str:
 
 _CONTEXT_BUILDERS["cover_letter"] = _ctx_cover_letter
 _RESULT_WRITERS["cover_letter"] = _write_cover_letter
+
+
+# ── legitimacy_batch (F4 §7.2, Block G) ────────────────────────────────────────
+# Assesses posting LEGITIMACY (ghost-job triage) — ORTHOGONAL to fit: it writes only
+# jobs.legitimacy_tier + legitimacy_notes, never the scores. The context hands the brain a
+# per-job brief + today's date (posting age is the strongest signal). The writer VALIDATES a
+# per-job_id {tier, notes} batch and PERSISTS each — no LLM here ($0 invariant). Every entry
+# must reference a job_id from the intent's payload (the brain can only rate the shortlist it
+# was handed); a malformed batch raises and leaves the intent `running` for a corrected retry.
+_LEGITIMACY_TIERS = ("high", "medium", "low")
+
+
+def _ctx_legitimacy(db: DB, intent: dict) -> dict:
+    briefs = []
+    for jid in intent["payload"].get("job_ids", []):
+        b = _job_brief(db.get_job(jid), desc_chars=2000)
+        if b:
+            briefs.append(b)
+    return {"jobs": briefs, "today": now_iso()[:10]}
+
+
+def _write_legitimacy(db: DB, intent: dict, result: dict) -> str:
+    rows = result.get("jobs")
+    if not isinstance(rows, list) or not rows:
+        raise ValueError("result.jobs must be a non-empty list")
+    allowed = set(intent["payload"].get("job_ids", []))
+    for r in rows:
+        if not isinstance(r, dict) or r.get("job_id") not in allowed:
+            raise ValueError("every entry needs a job_id from the intent's payload.job_ids")
+        if r.get("tier") not in _LEGITIMACY_TIERS:
+            raise ValueError(f"tier must be one of {_LEGITIMACY_TIERS}")
+        if not (r.get("notes") or "").strip():
+            raise ValueError("every entry needs non-empty notes (signal-based observations)")
+    for r in rows:
+        db.set_legitimacy(r["job_id"], r["tier"], r["notes"].strip())
+    return f"jobs:{len(rows)}"
+
+
+_CONTEXT_BUILDERS["legitimacy_batch"] = _ctx_legitimacy
+_RESULT_WRITERS["legitimacy_batch"] = _write_legitimacy

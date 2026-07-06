@@ -35,6 +35,8 @@ CREATE TABLE IF NOT EXISTS jobs (
     match_missing   TEXT,                      -- json array of JD keywords the CV doesn't evidence
     knockout_warnings TEXT,                    -- json array of knock-out pre-scan warnings (F3, visa/years/degree/language/clearance)
     score_breakdown TEXT,                      -- json: machine summary — per-factor score deltas (F3)
+    legitimacy_tier TEXT,                      -- high | medium | low (F4 Block G; NULL = unrated)
+    legitimacy_notes TEXT,                     -- señales observadas, nunca acusaciones
 
     discovered_at   TEXT NOT NULL,
     scored_at       TEXT,

@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import type { Job } from "../api";
 import { Board } from "../components/Board";
 import { FilterBar, type Filters } from "../components/FilterBar";
+import { IntentConfirmDialog } from "../components/IntentConfirmDialog";
 import { NeedsAction } from "../components/NeedsAction";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
@@ -28,6 +29,7 @@ export function PipelinePage() {
   const jobs = useMemo(() => boardQ.data?.jobs ?? {}, [boardQ.data]);
   const columns = boardQ.data?.columns ?? [];
   const dismissed = boardQ.data?.dismissed ?? [];
+  const shortlistIds = useMemo(() => (jobs.shortlisted ?? []).map((j) => j.id), [jobs]);
   const actions = overviewQ.data?.needs_action ?? [];
   const ov = overviewQ.data?.overview;
 
@@ -93,7 +95,20 @@ export function PipelinePage() {
         <NeedsAction actions={actions} onOpen={open} />
       </div>
 
-      <FilterBar filters={filters} setFilters={setFilters} languages={languages} />
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <FilterBar filters={filters} setFilters={setFilters} languages={languages} />
+        {shortlistIds.length > 0 && (
+          <IntentConfirmDialog
+            buttonLabel="Verificar legitimidad"
+            title="Legitimidad del shortlist (Block G)"
+            what="El brain evalúa cada vacante preseleccionada con una tabla de señales ponderadas (edad del posting, especificidad técnica, dominio, coherencia) e investiga brevemente cada empresa."
+            produces="Un tier alta/media/baja + notas de señales por vacante (observaciones, nunca acusaciones)."
+            where="Como badge en cada card del tablero y en el detalle de la vacante."
+            type="legitimacy_batch"
+            payload={{ job_ids: shortlistIds }}
+          />
+        )}
+      </div>
       <Board
         columns={columns}
         jobs={filteredJobs}

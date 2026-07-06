@@ -36,6 +36,9 @@ export type Job = {
   geo_restriction?: string | null; // raw restriction text ("Remote — US only")
   geo_scope?: string | null; // normalized: iso2/region tokens | "worldwide" | "unknown" | ""
   repost_count?: number | null; // ≥1 = same company re-posted this role in 90 days
+  // F4 Block G posting-legitimacy (ghost-job triage; orthogonal to fit/match). NULL = sin evaluar.
+  legitimacy_tier?: "high" | "medium" | "low" | null;
+  legitimacy_notes?: string | null; // señales observadas, nunca acusaciones
 };
 
 export type Action = {
