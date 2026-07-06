@@ -128,13 +128,20 @@ _LOC_CODE_RE = re.compile(
 # Description bodies are long free text → only anchored phrases count, and the captured
 # geo must be a known alias (free text can never produce a scope).
 _DESC_PATTERNS = [
-    re.compile(rf"\b(?P<geo>{_GEO_ALT})[- ]?(?:candidates\s+|residents\s+)?only\b", re.I),
+    # "open to <geo>[ only]" / "hiring [in] <geo>[ only]" — a candidate-facing anchor MUST
+    # precede the geo. A bare "<geo> only" suffix is deliberately NOT matched: it fires on
+    # market/shipping/customer prose ("we ship to France only") that carries no residency
+    # requirement, so a false country scope there would unfairly penalize a worldwide job.
+    re.compile(
+        rf"\b(?:open\s+to|hiring)\s+(?:in\s+)?(?:the\s+)?"
+        rf"(?P<geo>{_GEO_ALT})(?:[- ]?(?:candidates|residents))?(?:\s+only)?(?![A-Za-z])",
+        re.I,
+    ),
     re.compile(
         rf"\bmust\s+(?:reside|be\s+based|be\s+located|live)\s+in\s+(?:the\s+)?"
         rf"(?P<geo>{_GEO_ALT})(?![A-Za-z])",
         re.I,
     ),
-    re.compile(rf"\bbased\s+in\s+(?:the\s+)?(?P<geo>{_GEO_ALT})(?![A-Za-z])", re.I),
     re.compile(
         rf"\b(?:eligible|authori[sz]ed)\s+to\s+work\s+in\s+(?:the\s+)?"
         rf"(?P<geo>{_GEO_ALT})(?![A-Za-z])",
@@ -142,6 +149,7 @@ _DESC_PATTERNS = [
     ),
     re.compile(rf"\bwithin\s+the\s+(?P<geo>{_GEO_ALT})(?![A-Za-z])", re.I),
     re.compile(rf"\bremote\s*[(\-–—,:]\s*(?:the\s+)?(?P<geo>{_GEO_ALT})(?![A-Za-z])", re.I),
+    # "only open to <geo>" / "only hiring [in] <geo>" — the mirror phrasing, "only" first.
     re.compile(
         rf"\bonly\s+(?:open\s+to|hiring)\s+(?:in\s+)?(?:the\s+)?"
         rf"(?P<geo>{_GEO_ALT})(?![A-Za-z])",

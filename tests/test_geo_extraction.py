@@ -79,6 +79,56 @@ def test_country_only_suffix_in_description():
     assert scope == "br"
 
 
+# ── Conservatism: non-restriction prose must stay "unknown" (no false positives) ──
+def test_customers_based_in_country_is_unknown():
+    # Company/customer-HQ prose is NOT a candidate-residency requirement.
+    assert extract_geo_restriction("Remote", "Our customers are based in Germany.", True) == (
+        None,
+        "unknown",
+    )
+
+
+def test_company_based_in_country_is_unknown():
+    assert extract_geo_restriction("Remote", "The company is based in the Netherlands.", True) == (
+        None,
+        "unknown",
+    )
+
+
+def test_headquarters_based_in_country_is_unknown():
+    assert extract_geo_restriction("Remote", "Our headquarters are based in Spain.", True) == (
+        None,
+        "unknown",
+    )
+
+
+def test_founded_and_based_in_country_is_unknown():
+    assert extract_geo_restriction("Remote", "Founded in 2015 and based in Portugal.", True) == (
+        None,
+        "unknown",
+    )
+
+
+def test_ship_to_customers_country_only_is_unknown():
+    # Market/shipping prose ("... in <country> only") is NOT a hiring restriction.
+    assert extract_geo_restriction(
+        "Remote", "We ship product to customers in France only.", True
+    ) == (None, "unknown")
+
+
+def test_support_clients_country_only_is_unknown():
+    assert extract_geo_restriction("Remote", "We support clients in Canada only.", True) == (
+        None,
+        "unknown",
+    )
+
+
+def test_sell_to_country_only_is_unknown():
+    assert extract_geo_restriction(
+        "Remote", "We sell to Mexico only through our partners.", True
+    ) == (None, "unknown")
+
+
 def test_specific_country_in_remote_location():
     # A remote job whose location names a country IS a restriction signal (spec §5.2).
     assert extract_geo_restriction("Remote - Poland", "", True)[1] == "pl"
