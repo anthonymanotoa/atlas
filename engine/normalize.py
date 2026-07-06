@@ -56,6 +56,24 @@ def now_iso() -> str:
     return datetime.now(UTC).isoformat()
 
 
+def parse_dt_utc(iso: str | None) -> datetime | None:
+    """Parse an ISO-8601 string (or bare YYYY-MM-DD) into an AWARE UTC datetime.
+
+    Naive inputs are assumed UTC (SQLite rows written by now_iso() are aware, but legacy/
+    bare-date values exist). Returns None on garbage — callers pick their own fallback.
+    """
+    if not iso:
+        return None
+    try:
+        dt = datetime.fromisoformat(str(iso))
+    except (ValueError, TypeError):
+        try:
+            dt = datetime.strptime(str(iso)[:10], "%Y-%m-%d")
+        except (ValueError, TypeError):
+            return None
+    return dt if dt.tzinfo is not None else dt.replace(tzinfo=UTC)
+
+
 def norm_text(s: str | None) -> str:
     """Lowercase, strip punctuation/extra whitespace — for dedupe keys only."""
     if not s:

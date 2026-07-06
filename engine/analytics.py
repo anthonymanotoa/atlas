@@ -10,7 +10,7 @@ from typing import Any
 from engine import heartbeat
 from engine.config import Criteria
 from engine.db.models import DB
-from engine.normalize import norm_company
+from engine.normalize import norm_company, parse_dt_utc
 from engine.referrals.connections import match_referrals
 
 FUNNEL = [
@@ -28,17 +28,9 @@ STALE_APPLIED_DAYS = 7
 
 
 def _days_since(iso: str | None) -> float | None:
-    if not iso:
+    dt = parse_dt_utc(iso)
+    if dt is None:
         return None
-    try:
-        dt = datetime.fromisoformat(iso)
-    except (ValueError, TypeError):
-        try:  # bare 'YYYY-MM-DD' (e.g. date_posted) — fromisoformat handles it on 3.11+, but be safe
-            dt = datetime.strptime(str(iso)[:10], "%Y-%m-%d")
-        except (ValueError, TypeError):
-            return None
-    if dt.tzinfo is None:  # naive (bare date) → assume UTC so the subtraction is aware-safe
-        dt = dt.replace(tzinfo=UTC)
     return round((datetime.now(UTC) - dt).total_seconds() / 86400, 1)
 
 
