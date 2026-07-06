@@ -55,7 +55,7 @@ def test_set_state_happy_path(atlas_app):
 
 
 def test_mark_applied_on_real_job_schedules_cadence(atlas_app):
-    """Current behavior: /applied flips state and starts the follow-up cadence."""
+    """F3 v2: /applied siembra el PRIMER follow-up de la cadencia applied (7d, kind='applied')."""
     from engine.db.models import DB
 
     with TestClient(atlas_app) as client:
@@ -63,8 +63,9 @@ def test_mark_applied_on_real_job_schedules_cadence(atlas_app):
         resp = client.post(f"/api/jobs/{jid}/applied")
     assert resp.status_code == 200 and resp.json() == {"ok": True}
     with DB() as db:
+        rows = db.followups_for_job(jid)
         assert db.get_job(jid)["state"] == "applied"
-        assert len(db.followups_for_job(jid)) == 4  # Day 3/7/14 + breakup scheduled
+    assert len(rows) == 1 and rows[0]["kind"] == "applied"
 
 
 def test_mark_sent_unknown_message_is_ok(atlas_app):

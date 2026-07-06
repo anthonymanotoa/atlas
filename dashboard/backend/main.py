@@ -266,6 +266,7 @@ def api_job(job_id: str, db: DB = Depends(get_db)):
 
 @app.post("/api/jobs/{job_id}/state", dependencies=[Depends(require_trusted_origin)])
 def api_set_state(job_id: str, body: StateBody, db: DB = Depends(get_db)):
+    from engine.config import load_criteria
     from engine.outreach import followups
 
     if body.state not in STATES:
@@ -273,22 +274,25 @@ def api_set_state(job_id: str, body: StateBody, db: DB = Depends(get_db)):
     if not db.get_job(job_id):
         raise HTTPException(404, "job not found")
     db.set_state(job_id, body.state, {"via": "dashboard"})
-    # Drive the reply-aware cadence off the same transitions the user makes on the board.
     if body.state == "applied":
         db.snapshot_posting(job_id)  # archive the posting as evidence (F2)
-        followups.schedule(db, job_id, channel="email")
-    elif body.state == "responded":
+    # Cadencia v2 (F3 §6.1): applied/responded/interview siembran su follow-up; responded
+    # además cancela los pendientes (nunca insistir tras una respuesta — regla plan 006).
+    if body.state == "responded":
         followups.register_reply(db, job_id)  # cancel pending touches — never pester after a reply
+    if body.state in followups.CADENCE_STATES:
+        followups.seed_for_state(db, job_id, body.state, load_criteria())
     return {"ok": True, "state": body.state}
 
 
 @app.post("/api/jobs/{job_id}/applied", dependencies=[Depends(require_trusted_origin)])
 def api_mark_applied(job_id: str, db: DB = Depends(get_db)):
+    from engine.config import load_criteria
     from engine.outreach import followups
 
     db.set_state(job_id, "applied", {"via": "dashboard"})
     db.snapshot_posting(job_id)  # archive the posting as evidence (F2)
-    followups.schedule(db, job_id, channel="email")  # start the Day 3/7/14 + breakup cadence
+    followups.seed_for_state(db, job_id, "applied", load_criteria())  # +7d, máx 2 → cold
     return {"ok": True}
 
 
@@ -317,6 +321,67 @@ def api_mark_sent(message_id: int, db: DB = Depends(get_db)):
     )
     db.conn.commit()
     return {"ok": True}
+
+
+# ── Follow-ups v2 (F3 §6.1): buckets + confirmación humana de envío ───────────
+class FollowupSentBody(BaseModel):
+    confirm: bool = False
+
+
+@app.get("/api/followups")
+def api_followups(db: DB = Depends(get_db)):
+    from datetime import UTC, datetime
+
+    from engine.config import default_language, load_criteria, load_master_cv
+    from engine.outreach import followups as fu
+
+    criteria = load_criteria()
+    candidate = (load_master_cv().get("basics") or {}).get("name", "")
+    language = default_language()
+    highlight = criteria.core_keywords[0] if criteria.core_keywords else ""
+    buckets = fu.bucket_followups(db.pending_followups(), datetime.now(UTC))
+    out: dict[str, list[dict]] = {}
+    for name, rows in buckets.items():
+        items = []
+        for f in rows:
+            d = fu.draft_followup(
+                {"company": f.get("company"), "title": f.get("title")},
+                candidate,
+                f.get("kind") or "applied",
+                f.get("touch_number") or 1,
+                language=language,
+                highlight=highlight,
+            )
+            items.append(
+                {
+                    "id": f["id"],
+                    "job_id": f["job_id"],
+                    "title": f.get("title"),
+                    "company": f.get("company"),
+                    "kind": f.get("kind"),
+                    "touch_number": f.get("touch_number"),
+                    "due_at": f.get("due_at"),
+                    "days_overdue": f.get("days_overdue"),
+                    "draft": {"subject": d.subject, "body": d.body},
+                }
+            )
+        out[name] = items
+    out["cold"] = fu.cold_jobs(db, criteria)
+    return {"buckets": out}
+
+
+@app.post("/api/followups/{followup_id}/sent", dependencies=[Depends(require_trusted_origin)])
+def api_followup_sent(followup_id: int, body: FollowupSentBody, db: DB = Depends(get_db)):
+    """Registro de envío SOLO con confirmación explícita del usuario (§6.1)."""
+    from engine.config import load_criteria
+    from engine.outreach import followups as fu
+
+    if not body.confirm:
+        raise HTTPException(400, "confirmación explícita requerida (confirm: true)")
+    res = fu.register_sent(db, followup_id, load_criteria())
+    if not res["ok"]:
+        raise HTTPException(404, "followup not found")
+    return res
 
 
 # ── On-demand discover + score (plan 019) ─────────────────────────────────────

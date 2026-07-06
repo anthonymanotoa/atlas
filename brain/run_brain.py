@@ -70,6 +70,8 @@ def run(db: DB, *, limit: int = 8, language: str = "en", do_discover: bool = Tru
     # Due follow-ups → draft (never send), then mark done.
     candidate = {"name": (load_master_cv().get("basics", {}) or {}).get("name", "")}
     for f in db.due_followups(now_iso()):
+        if f.get("kind"):
+            continue  # v2 (F3): los toques por estado se confirman a mano en /followups — nunca auto-draftar
         job = db.get_job(f["job_id"])
         if not job:
             db.mark_followup(f["id"], "cancelled")
