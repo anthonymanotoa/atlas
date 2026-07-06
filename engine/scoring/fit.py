@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
 from engine.config import Criteria
+from engine.geo import geo_scope_covers
 from engine.lang import detect_language
 from engine.normalize import norm_company
 
@@ -129,6 +130,27 @@ def score_job(job: dict, criteria: Criteria, learnings: list[dict] | None = None
             disq = True
             knockouts.append("presencial fuera de tus ubicaciones")
             reasons.append(f"on-site outside your locations ({job.get('location')})")
+
+    # 2c. Geo-restricted remote (F2): a remote posting restricted to a country/region that
+    #     doesn't cover the candidate is penalized and flagged — NEVER disqualified (they
+    #     stay browsable, just lower). Off when candidate_country is unset; "unknown"/""/
+    #     "worldwide" scopes never penalize (no signal ≠ restriction).
+    geo_scope = (job.get("geo_scope") or "").strip().lower()
+    if (
+        criteria.candidate_country
+        and is_remote_job
+        and geo_scope not in ("", "worldwide", "unknown")
+        and not geo_scope_covers(geo_scope, criteria.candidate_country, criteria.acceptable_regions)
+    ):
+        score -= criteria.geo_penalty
+        scope_label = ",".join(t.upper() for t in geo_scope.split(","))
+        knockouts.append(f"remoto restringido a {scope_label}")
+        raw = job.get("geo_restriction")
+        reasons.append(
+            f"remote restricted to {scope_label}"
+            + (f' ("{raw}")' if raw else "")
+            + " — outside your country/regions"
+        )
 
     # 3. Seniority fit — junior is under-qualified (DQ); exec is over-qualified (DQ when
     #    excluded); Staff/Principal is a "stretch" (over-qualified seniority) for a candidate
