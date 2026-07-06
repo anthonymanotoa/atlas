@@ -18,9 +18,17 @@ def db(tmp_path: Path) -> DB:
 
 
 def _mk(db: DB, n: int, *, source="greenhouse", title="Data Scientist", wt="remote") -> str:
-    db.upsert_job(Job(source=source, source_job_id=str(n), title=title,
-                      company=f"Acme{n}", location="Remote", workplace_type=wt,
-                      url=f"https://x/{n}"))
+    db.upsert_job(
+        Job(
+            source=source,
+            source_job_id=str(n),
+            title=title,
+            company=f"Acme{n}",
+            location="Remote",
+            workplace_type=wt,
+            url=f"https://x/{n}",
+        )
+    )
     return [j for j in db.list_jobs() if j["company"] == f"Acme{n}"][0]["id"]
 
 
@@ -77,8 +85,11 @@ def test_conversion_by_unknown_dim_raises(db: DB):
 def test_response_times_from_timestamps_and_outcomes(db: DB):
     a = _mk(db, 1)
     db.set_state(a, "applied")
-    db.conn.execute("UPDATE jobs SET applied_at='2026-06-01T00:00:00+00:00', "
-                    "responded_at='2026-06-08T00:00:00+00:00' WHERE id=?", (a,))
+    db.conn.execute(
+        "UPDATE jobs SET applied_at='2026-06-01T00:00:00+00:00', "
+        "responded_at='2026-06-08T00:00:00+00:00' WHERE id=?",
+        (a,),
+    )
     db.conn.commit()
     db.record_outcome(None, "Beta Corp", final_state="responded", response_days=3)
     rt = analytics.response_times(db)
@@ -96,8 +107,16 @@ def test_recommendations_threshold_and_block(db: DB):
         db.set_state(jid, "responded")
     # Ghost Corp: 3 aplicaciones sin respuesta → recomienda bloquear
     for n in (4, 5, 6):
-        db.upsert_job(Job(source="lever", source_job_id=str(n), title=f"DS {n}",
-                          company="Ghost Corp", location="Remote", url=f"https://g/{n}"))
+        db.upsert_job(
+            Job(
+                source="lever",
+                source_job_id=str(n),
+                title=f"DS {n}",
+                company="Ghost Corp",
+                location="Remote",
+                url=f"https://g/{n}",
+            )
+        )
     for j in db.list_jobs():
         if j["company"] == "Ghost Corp":
             db.set_state(j["id"], "applied")
@@ -111,11 +130,21 @@ def test_recommendations_threshold_and_block(db: DB):
 def test_recommendations_skip_already_blocked(db: DB):
     crit = Criteria(roles=["data scientist"], company_blocklist=["Ghost Corp"])
     for n in (1, 2, 3):
-        db.upsert_job(Job(source="lever", source_job_id=str(n), title=f"DS {n}",
-                          company="Ghost Corp", location="Remote", url=f"https://g/{n}"))
+        db.upsert_job(
+            Job(
+                source="lever",
+                source_job_id=str(n),
+                title=f"DS {n}",
+                company="Ghost Corp",
+                location="Remote",
+                url=f"https://g/{n}",
+            )
+        )
     for j in db.list_jobs():
         db.set_state(j["id"], "applied")
-    assert not [r for r in analytics.recommendations(db, crit) if r["action_type"] == "block_company"]
+    assert not [
+        r for r in analytics.recommendations(db, crit) if r["action_type"] == "block_company"
+    ]
 
 
 def test_recommendations_conservative_below_thresholds(db: DB):
@@ -128,8 +157,16 @@ def test_recommendations_conservative_below_thresholds(db: DB):
     db.set_state(a, "applied")
     db.set_state(a, "responded")
     # 1 sola aplicación a Lonely Corp sin respuesta → NO la bloquea (n < 3)
-    db.upsert_job(Job(source="lever", source_job_id="99", title="DS", company="Lonely Corp",
-                      location="Remote", url="https://l/99"))
+    db.upsert_job(
+        Job(
+            source="lever",
+            source_job_id="99",
+            title="DS",
+            company="Lonely Corp",
+            location="Remote",
+            url="https://l/99",
+        )
+    )
     for j in db.list_jobs():
         if j["company"] == "Lonely Corp":
             db.set_state(j["id"], "applied")
@@ -152,5 +189,13 @@ def test_recommendations_dead_role_term_is_informational(db: DB):
 
 def test_analytics_payload_shape(db: DB):
     p = analytics.analytics_payload(db, Criteria())
-    assert {"funnel", "score_floor", "by_source", "by_ats", "by_remote_policy",
-            "by_role_term", "response_times", "recommendations"} <= set(p)
+    assert {
+        "funnel",
+        "score_floor",
+        "by_source",
+        "by_ats",
+        "by_remote_policy",
+        "by_role_term",
+        "response_times",
+        "recommendations",
+    } <= set(p)

@@ -125,9 +125,7 @@ def match_stories(
     # que ganen el boost 3x de skill igual que los alias de una sola palabra.
     query_low = (query_text or "").lower()
     phrase_hits = {
-        can
-        for alias, can in amap.items()
-        if (" " in alias or "-" in alias) and alias in query_low
+        can for alias, can in amap.items() if (" " in alias or "-" in alias) and alias in query_low
     }
     q = _canonicalize(_tokens(query_text), amap) | phrase_hits
     if not q:

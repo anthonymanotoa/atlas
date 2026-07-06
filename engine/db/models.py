@@ -849,7 +849,17 @@ class DB:
             """INSERT INTO stories
                (title, situation, task, action, result, reflection, skills, created_at, updated_at)
                VALUES (?,?,?,?,?,?,?,?,?)""",
-            (title, situation, task, action, result, reflection, json.dumps(skills or []), now, now),
+            (
+                title,
+                situation,
+                task,
+                action,
+                result,
+                reflection,
+                json.dumps(skills or []),
+                now,
+                now,
+            ),
         )
         self.conn.commit()
         return int(cur.lastrowid)

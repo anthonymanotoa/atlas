@@ -80,8 +80,12 @@ def score_jobs(db: DB, criteria: Criteria, *, rescore: bool = False) -> tuple[in
                 )
         warnings = prescan(j, criteria, master)
         db.set_fit(
-            j["id"], res.score, res.reasons, res.knockouts,
-            warnings=warnings, breakdown=res.breakdown(),
+            j["id"],
+            res.score,
+            res.reasons,
+            res.knockouts,
+            warnings=warnings,
+            breakdown=res.breakdown(),
         )
         if have_cv:
             m = match_score(j, master, ontology)

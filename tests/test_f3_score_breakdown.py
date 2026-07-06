@@ -8,12 +8,20 @@ from pathlib import Path
 from engine.config import Criteria
 from engine.scoring.fit import score_job
 
-CRIT = Criteria(roles=["data scientist"], remote_required=True, must_haves=["python"],
-                salary_floor_usd=70000)
+CRIT = Criteria(
+    roles=["data scientist"], remote_required=True, must_haves=["python"], salary_floor_usd=70000
+)
 
-JOB = {"title": "Senior Data Scientist", "company": "Acme", "is_remote": 1,
-       "workplace_type": "remote", "salary_min": 90000, "salary_max": 120000,
-       "salary_interval": "yearly", "description": "We use python and sql daily."}
+JOB = {
+    "title": "Senior Data Scientist",
+    "company": "Acme",
+    "is_remote": 1,
+    "workplace_type": "remote",
+    "salary_min": 90000,
+    "salary_max": 120000,
+    "salary_interval": "yearly",
+    "description": "We use python and sql daily.",
+}
 
 
 def test_score_job_records_factor_deltas():
@@ -29,8 +37,13 @@ def test_deltas_sum_to_final_score_when_unclamped():
     # A genuinely-unclamped job: role no-match (-35, title/desc never say "data scientist") +
     # remote (+15) + must-have python (+4) = 50-16 = 34, comfortably inside the 0–100 bound with no
     # soft-cap/disq firing, so base + Σdeltas == final (the point of this reconciliation test).
-    job = {"title": "Analytics Engineer", "company": "Acme", "is_remote": 1,
-           "workplace_type": "remote", "description": "We use python for data science work."}
+    job = {
+        "title": "Analytics Engineer",
+        "company": "Acme",
+        "is_remote": 1,
+        "workplace_type": "remote",
+        "description": "We use python for data science work.",
+    }
     res = score_job(job, CRIT)
     assert res.score == 50.0 + sum(f["delta"] for f in res.factors)
 
@@ -55,8 +68,10 @@ def test_breakdown_shape():
 
 
 def test_negative_factor_recorded():
-    res = score_job({**JOB, "title": "Senior Underwater Basket Weaver",
-                     "description": "no relevant terms"}, CRIT)
+    res = score_job(
+        {**JOB, "title": "Senior Underwater Basket Weaver", "description": "no relevant terms"},
+        CRIT,
+    )
     factors = {f["factor"]: f for f in res.factors}
     assert factors["role"]["delta"] == -35
 
@@ -70,8 +85,16 @@ def test_breakdown_persisted_and_exposed(tmp_path: Path, monkeypatch):
     monkeypatch.setattr("engine.scoring.run.load_master_cv", lambda: {})
     monkeypatch.setattr("engine.scoring.run.load_ontology", lambda: {})
     db = DB(tmp_path / "t.db")
-    db.upsert_job(Job(source="greenhouse", title="Senior Data Scientist", company="Acme",
-                      location="Remote", is_remote=True, description="python everywhere"))
+    db.upsert_job(
+        Job(
+            source="greenhouse",
+            title="Senior Data Scientist",
+            company="Acme",
+            location="Remote",
+            is_remote=True,
+            description="python everywhere",
+        )
+    )
     score_jobs(db, CRIT)
     row = db.list_jobs()[0]
     stored = json.loads(row["score_breakdown"])

@@ -359,7 +359,9 @@ def job_detail(db: DB, job_id: str) -> dict | None:
     job["knockout_flags"] = json.loads(job.get("knockout_flags") or "[]")
     job["knockout_warnings"] = json.loads(job.get("knockout_warnings") or "[]")  # F3 §6.4 pre-scan
     # F3 §6.5 machine summary — per-factor deltas + caps; None when never scored (legacy rows).
-    job["score_breakdown"] = json.loads(job["score_breakdown"]) if job.get("score_breakdown") else None
+    job["score_breakdown"] = (
+        json.loads(job["score_breakdown"]) if job.get("score_breakdown") else None
+    )
     job["sources"] = json.loads(job.get("sources_json") or "[]")
     job["missing_keywords"] = json.loads(job.get("match_missing") or "[]")  # CV↔JD gaps
     job["jd_skills"] = _jd_skills(job)  # skills the posting itself asks for (detail view)
