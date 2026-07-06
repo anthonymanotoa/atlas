@@ -7,6 +7,7 @@ const { api } = vi.hoisted(() => ({
     onboarding: vi.fn(),
     overview: vi.fn(),
     board: vi.fn(),
+    criteria: vi.fn(),
   },
 }));
 vi.mock("../api", () => ({ api }));
@@ -43,6 +44,24 @@ beforeEach(() => {
     jobs: { shortlisted: [] },
     dismissed: [],
   });
+  api.criteria.mockResolvedValue({
+    criteria: {
+      roles: [],
+      role_aliases: [],
+      seniority: [],
+      remote_required: true,
+      onsite_locations: [],
+      languages: ["en"],
+      salary_floor_usd: 0,
+      candidate_years: 0,
+      candidate_country: "",
+      acceptable_regions: ["worldwide"],
+      geo_penalty: 12,
+      re_apply_window_days: 0,
+      shortlist_threshold: 60,
+    },
+    prose: "",
+  });
 });
 
 describe("AppShell + router", () => {
@@ -58,7 +77,7 @@ describe("AppShell + router", () => {
   it("con onboarding incompleto redirige a /onboarding", async () => {
     api.onboarding.mockResolvedValue({ ...onboardingDone, complete: false });
     renderRoutes("/pipeline");
-    expect(await screen.findByText(/Primer paso: adapta tu CV/)).toBeInTheDocument();
+    expect(await screen.findByText("Tu perfil")).toBeInTheDocument();
     await waitFor(() => expect(api.board).not.toHaveBeenCalled());
   });
 
