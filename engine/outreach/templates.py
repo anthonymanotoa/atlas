@@ -25,7 +25,8 @@ class Draft:
 
 
 def _first_name(name: str | None) -> str:
-    return (name or "").split()[0] if name else ""
+    words = (name or "").split()
+    return words[0] if words else ""
 
 
 def _word_cap(text: str, max_words: int = 125) -> str:

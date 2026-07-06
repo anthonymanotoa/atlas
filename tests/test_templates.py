@@ -6,7 +6,7 @@ These pin the cap behavior so a future edit can't silently blow past them.
 
 from __future__ import annotations
 
-from engine.outreach.templates import _linkedin_note, _skills_phrase, _word_cap
+from engine.outreach.templates import _first_name, _linkedin_note, _skills_phrase, _word_cap
 
 
 def test_word_cap_at_boundary():
@@ -39,3 +39,10 @@ def test_skills_phrase_forms():
     assert _skills_phrase(["python"]) == "Python"
     assert _skills_phrase(["python", "sql", "aws"]) == "Python, SQL and AWS"  # Oxford-style, n=3
     assert _skills_phrase(["AutoCAD", "Revit"]) == "AutoCAD and Revit"  # preserves given casing
+
+
+def test_first_name_handles_missing_and_whitespace():
+    assert _first_name(None) == ""
+    assert _first_name("") == ""
+    assert _first_name("   ") == ""  # whitespace-only: used to raise IndexError
+    assert _first_name("Ada Lovelace") == "Ada"
