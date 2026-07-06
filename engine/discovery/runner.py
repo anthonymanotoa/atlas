@@ -120,6 +120,11 @@ def discover(
     if want("adzuna") and cfg.get("adzuna", {}).get("enabled", True):
         store("adzuna", lambda: adzuna.fetch(cfg["adzuna"], terms, client))
 
+    # F2 hygiene: recount repost/ghost evidence over the fresh inventory (no network).
+    from engine.reposts import sweep_reposts
+
+    summary["reposts_flagged"] = sweep_reposts(db)
+
     client.close()
     db.meta_set("last_run", now_iso())
     db.meta_set("last_discover", str(summary["new"]))

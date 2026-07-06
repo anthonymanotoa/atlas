@@ -268,6 +268,15 @@ def score_job(job: dict, criteria: Criteria, learnings: list[dict] | None = None
         score -= min(len(ko) * 5, 10)
         reasons.append(f"knockout flags: {', '.join(ko)}")
 
+    # 7b. Repost/ghost signal (F2 hygiene): the same company re-posted this fuzzy-equal
+    #     title with new ids ≥2× in 90 days (see engine/reposts.py). Light, visible nudge —
+    #     never a DQ, so a re-posted role stays browsable, just slightly down-ranked.
+    repost_count = int(job.get("repost_count") or 0)
+    if repost_count >= 1:
+        score -= 4
+        knockouts.append(f"repost ({repost_count}x en 90 días)")
+        reasons.append(f"reposted {repost_count}x in 90 days (possible ghost posting)")
+
     # 8. Off-target language — use the language stored at discovery, else detect now. Soft
     #    down-rank by default; a hard single-language seeker (criteria.language_hard) disqualifies
     #    a confidently-detected off-language posting outright. Undetected postings (lang is None)
