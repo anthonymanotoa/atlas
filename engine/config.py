@@ -7,6 +7,7 @@ for nuance). Companies / sources / ontology are plain YAML.
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 import yaml
@@ -147,6 +148,30 @@ def load_criteria() -> Criteria:
     meta, prose = _split_frontmatter(path.read_text())
     meta["prose"] = prose
     return Criteria(**meta)
+
+
+def criteria_to_markdown(criteria: Criteria) -> str:
+    """Serialize a Criteria back to the hybrid criteria.md format (frontmatter + prose).
+
+    The YAML block is emitted so `_split_frontmatter` + `Criteria(**meta)` reads it back to
+    an equivalent model, and the prose is the Markdown body (never a frontmatter key).
+    """
+    meta = criteria.model_dump(exclude={"prose"})
+    yaml_block = yaml.safe_dump(meta, allow_unicode=True, sort_keys=False)
+    prose = criteria.prose.strip()
+    return f"---\n{yaml_block}---\n" + (f"\n{prose}\n" if prose else "")
+
+
+def save_criteria(criteria: Criteria) -> Path:
+    """Write the ACTIVE profile's criteria.md (late path read — follows profile switches).
+
+    Always writes paths.CRITERIA_PATH itself, never the committed `.example` fallback:
+    the profile's config dir is gitignored, so personal criteria never reach the repo.
+    """
+    path = paths.CRITERIA_PATH
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(criteria_to_markdown(criteria))
+    return path
 
 
 def default_language() -> str:

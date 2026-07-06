@@ -128,6 +128,11 @@ class SettingBody(BaseModel):
     value: str
 
 
+class CriteriaBody(BaseModel):
+    criteria: dict
+    prose: str = ""
+
+
 class OutcomeBody(BaseModel):
     final_state: str  # rejected | responded | interviewed | offer | ghosted
     response_days: int | None = None
@@ -549,6 +554,31 @@ def api_csv_columns(db: DB = Depends(get_db)):
         "available": export.available_columns(),
         "selected": export.resolve_columns(None, db.meta_get("csv_columns")),
     }
+
+
+# ── Criteria (F2 wizard): read/write the active profile's criteria.md frontmatter ─
+@app.get("/api/criteria")
+def api_get_criteria():
+    from engine.config import load_criteria
+
+    c = load_criteria()
+    return {"criteria": c.model_dump(exclude={"prose"}), "prose": c.prose}
+
+
+@app.put("/api/criteria", dependencies=[Depends(require_trusted_origin)])
+def api_put_criteria(body: CriteriaBody):
+    from pydantic import ValidationError
+
+    from engine.config import Criteria, save_criteria
+
+    # Validate BEFORE touching the file: an invalid payload must 422 and leave the
+    # existing criteria.md untouched (never half-write a corrupt file).
+    try:
+        c = Criteria(**{**body.criteria, "prose": body.prose})
+    except ValidationError as e:
+        raise HTTPException(422, str(e)) from None
+    path = save_criteria(c)
+    return {"ok": True, "path": str(path)}
 
 
 @app.get("/api/export")
