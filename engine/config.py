@@ -111,6 +111,16 @@ class Criteria(BaseModel):
     top_jd_keywords: int = 25  # how many JD keywords to extract/rank
     max_skills: int = 18  # cap on rendered skills
     max_highlights_per_role: int = 4  # cap on highlights per experience entry
+    # ── Follow-up cadence v2 (F3 §6.1) — días por estado + tope de toques ──
+    # applied: primer follow-up a +7d, máx 2 toques → luego COLD; responded: nudge a +1d;
+    # interview: thank-you a +1d. Editable por perfil desde criteria.md.
+    followup_cadence: dict[str, dict[str, int]] = Field(
+        default_factory=lambda: {
+            "applied": {"days": 7, "max_touches": 2},
+            "responded": {"days": 1, "max_touches": 1},
+            "interview": {"days": 1, "max_touches": 1},
+        }
+    )
     prose: str = ""  # the Markdown body (for the LLM)
 
     @property
@@ -174,6 +184,33 @@ def save_criteria(criteria: Criteria) -> Path:
     return path
 
 
+CRITERIA_WRITABLE_FIELDS = frozenset(
+    {"shortlist_threshold", "company_blocklist", "followup_cadence"}
+)
+
+
+def update_criteria_fields(updates: dict[str, Any]) -> Criteria:
+    """Patch de campos del frontmatter YAML de criteria.md, preservando la prosa.
+
+    Valida el resultado con el modelo Criteria ANTES de escribir (si no valida, el archivo
+    no se toca). Escribe SIEMPRE en paths.CRITERIA_PATH (perfil activo, gitignorado);
+    si solo existe el .example commiteado, la copia parcheada nace en la ruta real —
+    el example jamás se modifica.
+    """
+    unknown = set(updates) - CRITERIA_WRITABLE_FIELDS
+    if unknown:
+        raise ValueError(f"non-writable criteria fields: {sorted(unknown)}")
+    src = example_fallback(paths.CRITERIA_PATH)
+    text = src.read_text() if src.exists() else ""
+    meta, prose = _split_frontmatter(text)
+    meta.update(updates)
+    merged = Criteria(**{**meta, "prose": prose})  # valida antes de escribir
+    yaml_block = yaml.safe_dump(meta, sort_keys=False, allow_unicode=True).strip()
+    paths.CRITERIA_PATH.parent.mkdir(parents=True, exist_ok=True)
+    paths.CRITERIA_PATH.write_text(f"---\n{yaml_block}\n---\n\n{prose}\n")
+    return merged
+
+
 def default_language() -> str:
     """The profile's primary output language for generated CVs / messages — the first entry of
     criteria.languages (e.g. 'es' for a Spanish-only profile), defaulting to 'en'. Used so a
@@ -198,6 +235,36 @@ def load_companies() -> list[CompanyTarget]:
         return []
     data = yaml.safe_load(path.read_text()) or {}
     return [CompanyTarget(**c) for c in data.get("companies", [])]
+
+
+def save_company(entry: dict) -> bool:
+    """Append a companies.yaml del perfil activo. False si ya existe (mismo nombre, o mismo
+    ats+token). Valida con CompanyTarget antes de escribir; nunca toca el .example."""
+    target = CompanyTarget(**entry)
+    src = example_fallback(paths.COMPANIES_PATH)
+    data = (yaml.safe_load(src.read_text()) if src.exists() else {}) or {}
+    rows: list[dict] = data.get("companies") or []
+    name = target.company.strip().lower()
+    for c in rows:
+        if (c.get("company") or "").strip().lower() == name:
+            return False
+        if c.get("ats") == target.ats and (c.get("token") or "") == (target.token or ""):
+            return False
+    dumped = {k: v for k, v in target.model_dump().items() if v not in (None, "", False)}
+    rows.append(dumped)
+    data["companies"] = rows
+    paths.COMPANIES_PATH.parent.mkdir(parents=True, exist_ok=True)
+    paths.COMPANIES_PATH.write_text(yaml.safe_dump(data, sort_keys=False, allow_unicode=True))
+    return True
+
+
+def load_discovery_seeds() -> list[str]:
+    """Empresas candidatas para el reverse ATS discovery (F3 §6.5), del perfil activo."""
+    path = example_fallback(paths.CONFIG_DIR / "discovery_seeds.yaml")
+    if not path.exists():
+        return []
+    data = yaml.safe_load(path.read_text()) or {}
+    return [str(n).strip() for n in (data.get("candidates") or []) if str(n).strip()]
 
 
 # ── sources ──────────────────────────────────────────────────────────────────
