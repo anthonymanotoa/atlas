@@ -70,6 +70,11 @@ class DB:
         self._ensure_column("jobs", "language", "TEXT")
         self._ensure_column("jobs", "match_score", "INTEGER")
         self._ensure_column("jobs", "match_missing", "TEXT")
+        # F2: geo-scoring + pipeline hygiene columns.
+        self._ensure_column("jobs", "geo_restriction", "TEXT")
+        self._ensure_column("jobs", "geo_scope", "TEXT")
+        self._ensure_column("jobs", "repost_count", "INTEGER DEFAULT 0")
+        self._ensure_column("jobs", "liveness_checked_at", "TEXT")
 
     def _ensure_column(self, table: str, column: str, decl: str) -> None:
         existing = {r["name"] for r in self.conn.execute(f"PRAGMA table_info({table})")}
@@ -101,8 +106,9 @@ class DB:
                    (id, source, source_job_id, title, company, location, is_remote,
                     workplace_type, url, apply_url, description, employment_type,
                     salary_min, salary_max, salary_currency, salary_interval,
-                    date_posted, language, raw_json, sources_json, state, discovered_at)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'discovered', ?)""",
+                    date_posted, language, geo_restriction, geo_scope,
+                    raw_json, sources_json, state, discovered_at)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'discovered', ?)""",
                 (
                     job.id,
                     job.source,
@@ -122,6 +128,8 @@ class DB:
                     job.salary_interval,
                     job.date_posted,
                     job.language,
+                    job.geo_restriction,
+                    job.geo_scope,
                     json.dumps(job.raw),
                     json.dumps([job.source]),
                     now,
@@ -147,6 +155,9 @@ class DB:
                  date_posted     = COALESCE(date_posted, ?),
                  language        = COALESCE(language, ?),
                  is_remote       = COALESCE(is_remote, ?),
+                 geo_restriction = COALESCE(geo_restriction, ?),
+                 geo_scope       = CASE WHEN COALESCE(geo_scope,'') IN ('','unknown')
+                                        THEN ? ELSE geo_scope END,
                  sources_json    = ?
                WHERE id=?""",
             (
@@ -161,6 +172,8 @@ class DB:
                 job.date_posted,
                 job.language,
                 _b(job.is_remote),
+                job.geo_restriction,
+                job.geo_scope,
                 json.dumps(sorted(sources)),
                 job.id,
             ),

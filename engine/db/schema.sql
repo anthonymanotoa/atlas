@@ -20,6 +20,10 @@ CREATE TABLE IF NOT EXISTS jobs (
     salary_interval TEXT,
     date_posted     TEXT,
     language        TEXT,                      -- detected posting language (en|es|de|fr|pt)
+    geo_restriction TEXT,                      -- raw geo-restriction text detected (F2, UI)
+    geo_scope       TEXT,                      -- normalized scope: iso2/region | worldwide | unknown | ''
+    repost_count    INTEGER DEFAULT 0,         -- ghost-job signal: same company+core-title reposts in 90d
+    liveness_checked_at TEXT,                  -- last liveness HTTP check (F2 hygiene)
     raw_json        TEXT,
     sources_json    TEXT,                      -- json array of every source it was seen on
 
