@@ -371,6 +371,55 @@ def api_discover_status():
         return {"running": _discovering}
 
 
+# ── Liveness sweep (F2 hygiene) — same fire-and-forget model as /api/discover ─
+# Expire dead postings (404/410/tombstone) on demand. Deterministic HTTP-only
+# checks (engine.discovery.liveness — no LLM, no key), so still $0. Like the
+# discover task, the background worker opens its OWN short-lived `with DB()`
+# connection: a sweep does N paced network calls and must never hold the API lock.
+_LIVENESS_LOCK = Lock()
+_liveness_running = False
+
+
+def _run_liveness_sweep(limit: int, profile_id: str | None) -> None:
+    global _liveness_running
+    try:
+        from engine.discovery.liveness import sweep_liveness
+
+        # Re-pin the profile captured at enqueue time so a concurrent dashboard
+        # switch can't make this run land in another profile's DB.
+        if profile_id is not None:
+            paths.set_profile(profile_id)
+        with DB() as db:  # own connection — never holds the API lock on network
+            sweep_liveness(db, limit=limit)
+    except Exception as e:  # noqa: BLE001 — record the failure instead of dropping it silently
+        try:
+            with DB() as db:
+                db.log_event(None, "error", {"stage": "liveness_bg", "error": str(e)[:200]})
+        except Exception:  # noqa: BLE001
+            pass
+    finally:
+        with _LIVENESS_LOCK:
+            _liveness_running = False
+
+
+@app.post("/api/liveness/sweep", dependencies=[Depends(require_trusted_origin)])
+def api_liveness_sweep(background: BackgroundTasks, limit: int = 40):
+    """Expire dead postings (404/410/tombstone) in the background. One sweep at a time."""
+    global _liveness_running
+    with _LIVENESS_LOCK:
+        if _liveness_running:
+            return {"started": False, "running": True}
+        _liveness_running = True
+    background.add_task(_run_liveness_sweep, max(1, min(int(limit), 200)), paths.PROFILE_ID)
+    return {"started": True}
+
+
+@app.get("/api/liveness/status")
+def api_liveness_status():
+    with _LIVENESS_LOCK:
+        return {"running": _liveness_running}
+
+
 @app.get("/api/brief")
 def api_brief():
     path = paths.OUTBOX_DIR / "MORNING_BRIEF.md"

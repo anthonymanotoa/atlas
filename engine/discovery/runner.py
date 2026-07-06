@@ -120,6 +120,15 @@ def discover(
     if want("adzuna") and cfg.get("adzuna", {}).get("enabled", True):
         store("adzuna", lambda: adzuna.fetch(cfg["adzuna"], terms, client))
 
+    # F2 hygiene (opt-in via sources.yaml): expire dead postings at the end of a discover.
+    # Off by default — it adds N paced HTTP calls per run; always available on demand from
+    # the web UI via POST /api/liveness/sweep. Reuses the run's shared client.
+    lv = cfg.get("liveness", {})
+    if want("liveness") and lv.get("enabled", False):
+        from engine.discovery.liveness import sweep_liveness
+
+        summary["liveness"] = sweep_liveness(db, limit=int(lv.get("limit", 40)), client=client)
+
     # F2 hygiene: recount repost/ghost evidence over the fresh inventory (no network).
     from engine.reposts import sweep_reposts
 
