@@ -28,3 +28,12 @@ def test_run_with_empty_queue_has_no_intents_section(tmp_path, monkeypatch):
         summary = run(db, do_discover=False)
     assert summary["intents_pending"] == []
     assert "Tareas del Brain en cola" not in (tmp_path / "MORNING_BRIEF.md").read_text()
+
+
+def test_run_reports_pdf_checks_key(tmp_path, monkeypatch):
+    monkeypatch.setattr(paths, "OUTBOX_DIR", tmp_path)
+    from brain.run_brain import run
+
+    with DB(tmp_path / "t.db") as db:
+        summary = run(db, do_discover=False)
+    assert summary["pdf_checks"] == []  # sin jobs preparados → lista vacía, clave presente

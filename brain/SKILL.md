@@ -49,8 +49,9 @@ safe to re-run.
    outreach, never the CV). Only facts already in `profile/master_cv.yaml`. **Never invent
    metrics, skills, or experience.**
 
-4. **Visual PDF check (every job prepared today).** For each entry in the run summary's
-   `prepared` list, Read `data/outbox/<job_id>/cv_<lang>.pdf` and verify:
+4. **Visual PDF check (every job prepared today).** Follow `brain/prompts/pdf_check.md` al pie
+   de la letra. For each entry in the run summary's `prepared` list, Read
+   `data/outbox/<job_id>/cv_<lang>.pdf` and verify:
    - page count is exactly what `config/cv_layout.yaml` targets (default: ≤ 2 pages; a 3rd
      page with under 5 lines is a fail),
    - no section heading orphaned at the bottom of a page,
