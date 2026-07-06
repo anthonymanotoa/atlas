@@ -224,3 +224,69 @@ def test_resolve_flag_invalid_action_is_422(atlas_app):
     with TestClient(atlas_app) as client:
         r = client.post("/api/cv-reviews/1/resolve-flag", json={"index": 0, "action": "nuke"})
     assert r.status_code == 422  # Literal-constrained body rejects before the handler
+
+
+# ── interview debrief endpoint (Task 11) ───────────────────────────────────────
+# Saves the candidate's post-interview debrief and, when reanalyze=true, re-enqueues an
+# interview_prep_deep intent for that interview (a follow-up analysis — no LLM here, $0).
+def test_interview_debrief_saves_and_can_reanalyze(atlas_app):
+    from engine.db.models import DB
+
+    with TestClient(atlas_app) as client:
+        jid = _seed_job()
+        with DB() as db:
+            ivid = db.add_interview(jid, round="technical")
+        r = client.post(
+            f"/api/interviews/{ivid}/debrief",
+            json={"debrief_md": "Preguntaron mucho de SQL.", "reanalyze": True},
+        )
+        assert r.status_code == 200 and r.json()["ok"] is True
+        assert r.json()["intent_id"].startswith("in_")
+        with DB() as db:
+            assert "SQL" in db.get_interview(ivid)["debrief_md"]
+        # The re-enqueued intent is a pending interview_prep_deep tied to the same interview.
+        lst = client.get("/api/intents?status=pending").json()
+        deep = [i for i in lst["intents"] if i["type"] == "interview_prep_deep"]
+        assert deep and deep[0]["payload"]["interview_id"] == ivid
+
+
+def test_interview_debrief_without_reanalyze_enqueues_nothing(atlas_app):
+    from engine.db.models import DB
+
+    with TestClient(atlas_app) as client:
+        jid = _seed_job()
+        with DB() as db:
+            ivid = db.add_interview(jid, round="phone")
+        r = client.post(
+            f"/api/interviews/{ivid}/debrief",
+            json={"debrief_md": "Fue una charla corta.", "reanalyze": False},
+        )
+        assert r.status_code == 200 and r.json()["intent_id"] is None
+        assert client.get("/api/intents?status=pending").json()["pending"] == 0
+
+
+def test_interview_debrief_unknown_interview_is_404(atlas_app):
+    with TestClient(atlas_app) as client:
+        r = client.post("/api/interviews/9999/debrief", json={"debrief_md": "x"})
+    assert r.status_code == 404
+
+
+def test_interview_debrief_rejects_empty(atlas_app):
+    from engine.db.models import DB
+
+    with TestClient(atlas_app) as client:
+        jid = _seed_job()
+        with DB() as db:
+            ivid = db.add_interview(jid, round="final")
+        r = client.post(f"/api/interviews/{ivid}/debrief", json={"debrief_md": "   "})
+    assert r.status_code == 400
+
+
+def test_interview_debrief_rejects_foreign_origin(atlas_app):
+    with TestClient(atlas_app) as client:
+        r = client.post(
+            "/api/interviews/1/debrief",
+            json={"debrief_md": "x"},
+            headers={"Origin": "https://evil.example"},
+        )
+    assert r.status_code == 403

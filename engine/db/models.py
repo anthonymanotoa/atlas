@@ -81,6 +81,9 @@ class DB:
         # F4 (Block G): posting-legitimacy tier + signal notes (orthogonal to fit).
         self._ensure_column("jobs", "legitimacy_tier", "TEXT")
         self._ensure_column("jobs", "legitimacy_notes", "TEXT")
+        # F4 §7.2: interview deep prep (Audience Map + cited Qs) + post-interview debrief.
+        self._ensure_column("interviews", "deep_prep_md", "TEXT")
+        self._ensure_column("interviews", "debrief_md", "TEXT")
         self._ensure_column("followups", "kind", "TEXT")
 
     def _ensure_column(self, table: str, column: str, decl: str) -> None:
@@ -782,6 +785,17 @@ class DB:
 
     def set_interview_prep_path(self, interview_id: int, path: str) -> None:
         self.conn.execute("UPDATE interviews SET prep_path=? WHERE id=?", (path, interview_id))
+        self.conn.commit()
+
+    def set_interview_deep_prep(self, interview_id: int, md: str) -> None:
+        """Persist the brain's audience-mapped deep prep pack (F4 §7.2). No LLM here — the
+        brain produced `md` offline; this only writes it to the interview row."""
+        self.conn.execute("UPDATE interviews SET deep_prep_md=? WHERE id=?", (md, interview_id))
+        self.conn.commit()
+
+    def set_interview_debrief(self, interview_id: int, md: str) -> None:
+        """Persist the candidate's post-interview debrief (F4 §7.2) — feeds the next prep."""
+        self.conn.execute("UPDATE interviews SET debrief_md=? WHERE id=?", (md, interview_id))
         self.conn.commit()
 
     def add_interviewer(

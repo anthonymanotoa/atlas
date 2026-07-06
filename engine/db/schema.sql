@@ -222,6 +222,8 @@ CREATE TABLE IF NOT EXISTS interviews (
     status       TEXT DEFAULT 'scheduled',      -- scheduled | done | cancelled
     notes        TEXT,
     prep_path    TEXT,
+    deep_prep_md TEXT,                          -- F4 §7.2: LLM deep prep (Audience Map + cited Qs)
+    debrief_md   TEXT,                          -- F4 §7.2: candidate's post-interview debrief
     created_at   TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_interviews_job ON interviews(job_id);

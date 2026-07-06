@@ -394,3 +394,66 @@ def _write_upskill(db: DB, intent: dict, result: dict) -> str:
 
 _CONTEXT_BUILDERS["upskill_report"] = _ctx_upskill
 _RESULT_WRITERS["upskill_report"] = _write_upskill
+
+
+# ── interview_prep_deep (F4 §7.2) ─────────────────────────────────────────────
+# Upgrades the DETERMINISTIC prep doc (engine.interview.interview_prep.gen_prep_doc, $0) into
+# an audience-mapped, source-cited, story-matched pack. The context builder hands the brain the
+# baseline prep as the floor + the F3 story bank's ranked matches (via match_stories, also $0).
+# The writer only VALIDATES the brain's JSON (non-empty prep_md) and PERSISTS deep_prep_md — no
+# LLM here. Malformed → raises, leaving the intent `running` for a corrected retry.
+def _match_stories_safe(db: DB, query_text: str) -> list[dict]:
+    """F3 story bank matcher, guarded so F4 lands even if F3 hasn't merged yet."""
+    try:
+        from engine.config import load_ontology
+        from engine.stories import format_story, match_stories
+    except ImportError:
+        return []
+    stories = db.list_stories() if hasattr(db, "list_stories") else []
+    if not stories:
+        return []
+    ranked = match_stories(stories, query_text, load_ontology())
+    return [{"story": format_story(s), "score": score} for s, score in ranked[:5]]
+
+
+def _ctx_interview_prep_deep(db: DB, intent: dict) -> dict:
+    import engine.paths as paths
+    from engine.interview.interview_prep import gen_prep_doc
+
+    ivid = intent["payload"]["interview_id"]
+    iv = db.get_interview(ivid)
+    if not iv:
+        raise ValueError(f"interview {ivid} not found")
+    job = db.get_job(iv["job_id"]) or {}
+    lang = intent["payload"].get("language")
+    prep_path = gen_prep_doc(db, ivid, language=lang)  # deterministic baseline
+    query = f"{job.get('title', '')} {job.get('description', '')}"
+    return {
+        "interview": {
+            "id": ivid,
+            "round": iv.get("round"),
+            "mode": iv.get("mode"),
+            "scheduled_at": iv.get("scheduled_at"),
+        },
+        "interviewers": db.interviewers_for(ivid),
+        "job": _job_brief(job),
+        "deterministic_prep": prep_path.read_text(),
+        "matched_stories": _match_stories_safe(db, query),
+        "debrief_md": iv.get("debrief_md"),
+        "master_cv_path": str(paths.MASTER_CV_PATH),
+    }
+
+
+def _write_interview_prep_deep(db: DB, intent: dict, result: dict) -> str:
+    prep_md = (result.get("prep_md") or "").strip()
+    if not prep_md:
+        raise ValueError("interview_prep_deep result needs a non-empty prep_md")
+    ivid = intent["payload"]["interview_id"]
+    if not db.get_interview(ivid):
+        raise ValueError(f"interview {ivid} vanished")
+    db.set_interview_deep_prep(ivid, prep_md)
+    return f"interview:{ivid}"
+
+
+_CONTEXT_BUILDERS["interview_prep_deep"] = _ctx_interview_prep_deep
+_RESULT_WRITERS["interview_prep_deep"] = _write_interview_prep_deep

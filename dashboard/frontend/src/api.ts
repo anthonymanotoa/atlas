@@ -153,6 +153,8 @@ export type Interview = {
   mode?: string;
   status?: string;
   prep_path?: string;
+  deep_prep_md?: string | null;
+  debrief_md?: string | null;
   interviewers?: Interviewer[];
 };
 export type Learning = {
@@ -384,6 +386,16 @@ export const api = {
   genPrep: (interviewId: number, language = "en") =>
     post<{ ok: boolean; path: string; markdown: string }>(`/api/interview/${interviewId}/prep`, {
       language,
+    }),
+  // F4 §7.2 interview_prep_deep: encolar el prep profundo (Audience Map + preguntas citadas +
+  // historias) y guardar el debrief post-entrevista (opcionalmente re-encola el prep). Ninguna
+  // corre un LLM: el brain lo hace offline ($0).
+  enqueueInterviewPrepDeep: (interviewId: number, jobId: string) =>
+    api.enqueueIntent("interview_prep_deep", { interview_id: interviewId }, jobId),
+  interviewDebrief: (interviewId: number, debriefMd: string, reanalyze: boolean) =>
+    post<{ ok: boolean; intent_id: string | null }>(`/api/interviews/${interviewId}/debrief`, {
+      debrief_md: debriefMd,
+      reanalyze,
     }),
   socialMentions: (id: string) =>
     get<{ mentions: SocialMention[] }>(`/api/jobs/${id}/social_mentions`),

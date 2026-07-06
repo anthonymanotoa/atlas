@@ -1295,6 +1295,30 @@ def api_interview_prep(interview_id: int, body: PrepLangBody, db: DB = Depends(g
     return {"ok": True, "path": str(path), "markdown": path.read_text()}
 
 
+class DebriefBody(BaseModel):
+    debrief_md: str
+    reanalyze: bool = False
+
+
+@app.post("/api/interviews/{interview_id}/debrief", dependencies=[Depends(require_trusted_origin)])
+def api_interview_debrief(interview_id: int, body: DebriefBody, db: DB = Depends(get_db)):
+    """Save the candidate's post-interview debrief and, if `reanalyze`, re-enqueue an
+    interview_prep_deep intent for a follow-up analysis. No LLM here ($0): the brain runs it
+    offline. The debrief feeds the next prep (it lands in that intent's context)."""
+    iv = db.get_interview(interview_id)
+    if not iv:
+        raise HTTPException(404, "interview not found")
+    if not body.debrief_md.strip():
+        raise HTTPException(400, "debrief_md must not be empty")
+    db.set_interview_debrief(interview_id, body.debrief_md.strip())
+    intent_id = None
+    if body.reanalyze:
+        intent_id = intents.enqueue(
+            db, "interview_prep_deep", {"interview_id": interview_id}, job_id=iv["job_id"]
+        )
+    return {"ok": True, "intent_id": intent_id}
+
+
 # ── Social signal (P2-C): supervised LinkedIn/X lookup — never auto-contacts ──
 @app.get("/api/jobs/{job_id}/social_mentions")
 def api_social_mentions(job_id: str, db: DB = Depends(get_db)):

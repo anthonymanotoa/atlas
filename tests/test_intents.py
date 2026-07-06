@@ -364,6 +364,109 @@ def test_legitimacy_context_exposes_job_briefs_and_today(db):
     assert len(ctx["today"]) == 10 and ctx["today"][4] == "-"  # YYYY-MM-DD
 
 
+# ── interview_prep_deep (Task 11) ──────────────────────────────────────────────
+# The writer validates + persists the brain's audience-mapped deep prep pack (never runs an
+# LLM — $0). The context builder reuses the deterministic prep doc as the floor and, if the
+# F3 story bank landed, the matched STAR+R stories. Malformed → raises, intent stays running.
+def test_interview_prep_deep_writer_persists_and_marks_done(db, tmp_path, monkeypatch):
+    import engine.paths as paths
+    from engine.normalize import Job
+
+    monkeypatch.setattr(paths, "OUTBOX_DIR", tmp_path / "outbox")
+    db.upsert_job(
+        Job(
+            source="lever",
+            source_job_id="7",
+            title="Staff DS",
+            company="Nu",
+            url="https://x/7",
+            description="Python, SQL, causal inference.",
+        )
+    )
+    jid = db.list_jobs()[0]["id"]
+    ivid = db.add_interview(jid, round="hiring_manager")
+    iid = intents.enqueue(db, "interview_prep_deep", {"interview_id": ivid}, job_id=jid)
+    intents.mark_running(db, iid)
+    ref = intents.apply_result(
+        db, iid, {"prep_md": "# Prep profundo\n\n## Audience map\n- Hiring manager…"}
+    )
+    assert ref == f"interview:{ivid}"
+    assert "Audience map" in db.get_interview(ivid)["deep_prep_md"]
+    assert intents.get_intent(db, iid)["status"] == "done"
+
+
+def test_interview_prep_deep_context_includes_deterministic_prep(db, tmp_path, monkeypatch):
+    import engine.paths as paths
+    from engine.normalize import Job
+
+    monkeypatch.setattr(paths, "OUTBOX_DIR", tmp_path / "outbox")
+    db.upsert_job(
+        Job(
+            source="lever",
+            source_job_id="8",
+            title="DS",
+            company="Ka",
+            url="https://x/8",
+            description="Python and SQL.",
+        )
+    )
+    jid = db.list_jobs()[0]["id"]
+    ivid = db.add_interview(jid, round="technical")
+    iid = intents.enqueue(db, "interview_prep_deep", {"interview_id": ivid}, job_id=jid)
+    ctx = intents.context_for(db, iid)
+    assert ctx["interview"]["id"] == ivid
+    assert isinstance(ctx["deterministic_prep"], str) and ctx["deterministic_prep"]
+    assert isinstance(ctx["matched_stories"], list)  # [] si F3 no dejó historias
+
+
+def test_interview_prep_deep_context_matches_story_bank(db, tmp_path, monkeypatch):
+    """When the F3 story bank has a matching story, the context surfaces it (deterministic)."""
+    import engine.paths as paths
+    from engine.normalize import Job
+
+    monkeypatch.setattr(paths, "OUTBOX_DIR", tmp_path / "outbox")
+    db.upsert_job(
+        Job(
+            source="lever",
+            source_job_id="80",
+            title="Data Scientist",
+            company="Sti",
+            url="https://x/80",
+            description="Deep experience with causal inference and A/B testing.",
+        )
+    )
+    jid = db.list_jobs()[0]["id"]
+    ivid = db.add_interview(jid, round="technical")
+    db.add_story(
+        title="Rescued a broken A/B test",
+        situation="A/B testing pipeline was leaking exposures.",
+        action="Rebuilt the causal inference layer end to end.",
+        result="Cut false positives 40%.",
+        skills=["A/B testing", "causal inference"],
+    )
+    iid = intents.enqueue(db, "interview_prep_deep", {"interview_id": ivid}, job_id=jid)
+    ctx = intents.context_for(db, iid)
+    assert ctx["matched_stories"], "a matching story should be surfaced"
+    top = ctx["matched_stories"][0]
+    assert "A/B" in top["story"] and isinstance(top["score"], (int, float))
+
+
+def test_interview_prep_deep_writer_rejects_empty(db):
+    from engine.normalize import Job
+
+    db.upsert_job(
+        Job(source="lever", source_job_id="9", title="DS", company="Za", url="https://x/9")
+    )
+    jid = db.list_jobs()[0]["id"]
+    ivid = db.add_interview(jid, round="phone")
+    iid = intents.enqueue(db, "interview_prep_deep", {"interview_id": ivid}, job_id=jid)
+    intents.mark_running(db, iid)
+    with pytest.raises(ValueError):
+        intents.apply_result(db, iid, {"prep_md": ""})
+    assert intents.get_intent(db, iid)["status"] == "running"
+    assert db.get_interview(ivid)["deep_prep_md"] is None
+
+
 # ── CLI layer (Task 3) — el brain drena la cola vía estos comandos ─────────────
 @pytest.fixture
 def cli_db(tmp_path, monkeypatch):
