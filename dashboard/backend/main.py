@@ -17,10 +17,10 @@ from urllib.parse import urlsplit
 from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 import engine.paths as paths
-from engine import analytics, profiles
+from engine import analytics, intents, profiles
 from engine.db.models import DB
 from engine.discovery import reverse
 from engine.discovery.registry import resolve_ats
@@ -193,6 +193,57 @@ class SocialMentionBody(BaseModel):
     post_title: str | None = None
     post_excerpt: str | None = None
     context_type: str | None = None
+
+
+# ── Intents (F4 §7.1): la web encola trabajo LLM; el brain lo drena — nunca la web ──
+class IntentBody(BaseModel):
+    type: str
+    job_id: str | None = None
+    payload: dict = {}
+
+
+class CvReviewPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    language: Literal["en", "es"] | None = None
+
+
+class LegitimacyBatchPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    job_ids: list[str] = Field(min_length=1, max_length=100)
+
+
+class UpskillPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    states: list[str] = ["shortlisted", "tailored", "drafted", "ready", "applied"]
+
+
+class InterviewPrepDeepPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    interview_id: int
+    language: Literal["en", "es"] | None = None
+
+
+class ProfileExpandPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    github_user: str | None = None
+    portfolio_url: str | None = None
+    cert_names: list[str] = []
+
+
+class CoverLetterPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    language: Literal["en", "es"] | None = None
+
+
+PAYLOAD_MODELS: dict[str, type[BaseModel]] = {
+    "cv_review": CvReviewPayload,
+    "legitimacy_batch": LegitimacyBatchPayload,
+    "upskill_report": UpskillPayload,
+    "interview_prep_deep": InterviewPrepDeepPayload,
+    "profile_expand": ProfileExpandPayload,
+    "cover_letter": CoverLetterPayload,
+}
+_JOB_SCOPED_INTENTS = frozenset({"cv_review", "cover_letter"})
 
 
 # ── API ──────────────────────────────────────────────────────────────────────
@@ -557,6 +608,60 @@ def api_discover(background: BackgroundTasks, only: str | None = None):
 def api_discover_status():
     with _DISCOVER_LOCK:
         return {"running": _discovering}
+
+
+# ── Intents queue (F4 §7.1) — la web SOLO encola; el brain drena y ejecuta el LLM ──
+# $0 INVARIANT: estos endpoints jamás llaman a una API LLM. POST escribe una fila `pending`
+# en `intents` (via engine.intents.enqueue) tras validar type + payload por tipo + existencia
+# de las entidades referenciadas; el brain la ejecuta después con brain/prompts/<type>.md.
+@app.post("/api/intents", dependencies=[Depends(require_trusted_origin)])
+def api_enqueue_intent(body: IntentBody, db: DB = Depends(get_db)):
+    """Encola trabajo LLM para el brain. Valida type + payload por tipo; NUNCA ejecuta LLM."""
+    model = PAYLOAD_MODELS.get(body.type)
+    if model is None:
+        raise HTTPException(400, f"unknown intent type; allowed: {sorted(PAYLOAD_MODELS)}")
+    try:
+        payload = model.model_validate(body.payload).model_dump()
+    except ValidationError as e:
+        first = e.errors()[0]
+        raise HTTPException(
+            400, f"invalid payload for {body.type}: {first['loc']}: {first['msg']}"
+        ) from None
+    if body.type in _JOB_SCOPED_INTENTS and (not body.job_id or not db.get_job(body.job_id)):
+        raise HTTPException(404, "job not found")
+    if body.type == "legitimacy_batch":
+        missing = [j for j in payload["job_ids"] if not db.get_job(j)]
+        if missing:
+            raise HTTPException(404, f"unknown job ids: {missing[:3]}")
+    if body.type == "upskill_report":
+        bad = [s for s in payload["states"] if s not in STATES]
+        if bad:
+            raise HTTPException(400, f"invalid states: {bad}")
+    if body.type == "interview_prep_deep":
+        iv = db.get_interview(payload["interview_id"])
+        if not iv:
+            raise HTTPException(404, "interview not found")
+        body.job_id = iv["job_id"]  # liga el intent a su vacante para el panel
+    iid = intents.enqueue(db, body.type, payload, job_id=body.job_id)
+    return {"ok": True, "id": iid}
+
+
+@app.get("/api/intents")
+def api_list_intents(status: str | None = None, db: DB = Depends(get_db)):
+    if status is not None and status not in intents.INTENT_STATUSES:
+        raise HTTPException(400, f"invalid status; allowed: {intents.INTENT_STATUSES}")
+    return {
+        "intents": intents.list_intents(db, status=status),
+        "pending": intents.count_pending(db),
+    }
+
+
+@app.get("/api/intents/{intent_id}")
+def api_get_intent(intent_id: str, db: DB = Depends(get_db)):
+    row = intents.get_intent(db, intent_id)
+    if not row:
+        raise HTTPException(404, "intent not found")
+    return row
 
 
 # ── Liveness sweep (F2 hygiene) — same fire-and-forget model as /api/discover ─
