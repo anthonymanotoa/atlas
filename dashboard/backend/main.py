@@ -14,7 +14,7 @@ from threading import Lock
 from typing import Literal
 from urllib.parse import urlsplit
 
-from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Request
+from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel
@@ -513,6 +513,42 @@ def api_cv_library():
         reverse=True,
     )
     return {"dir": str(d), "count": len(files), "files": files}
+
+
+@app.post("/api/cv/import", dependencies=[Depends(require_trusted_origin)])
+async def api_cv_import(file: UploadFile):
+    """Extract an uploaded CV (PDF/DOCX) into a reviewable master_cv DRAFT (F2 wizard).
+
+    Deterministic text extraction only (engine/cv/import_cv.py) — never invents structure
+    and NEVER touches master_cv.yaml; the human + Cowork map the draft afterwards. The
+    upload and the draft live only in the profile's gitignored dirs (repo is public).
+    """
+    from engine.cv.import_cv import SUPPORTED, build_draft, extract_text
+
+    suffix = Path(file.filename or "").suffix.lower()
+    if suffix not in SUPPORTED:
+        raise HTTPException(400, f"formato no soportado {suffix!r}; usa PDF o DOCX")
+    paths.ensure_dirs()
+    dest = paths.INBOX_DIR / f"cv_import{suffix}"
+    dest.write_bytes(await file.read())
+    # A malformed/corrupt PDF/DOCX must fail as a clean 400, never a 500: extract_text can raise
+    # ValueError (unsupported) but the parsers (python-docx/pdfplumber) raise their own exceptions
+    # on garbage bytes, so catch broadly and translate every extraction failure into a 400.
+    try:
+        text = extract_text(dest)
+    except Exception as e:  # noqa: BLE001 — graceful for the user; the message stays generic
+        raise HTTPException(
+            400, f"no se pudo leer el archivo ({type(e).__name__}); ¿PDF/DOCX válido?"
+        ) from None
+    if not text.strip():
+        raise HTTPException(
+            400, "no se pudo extraer texto (¿PDF escaneado/solo imagen?) — prueba otro archivo"
+        )
+    draft = build_draft(text, domain=profiles.domain_of(paths.PROFILE_ID))
+    draft_path = paths.MASTER_CV_PATH.parent / "master_cv.draft.yaml"
+    draft_path.parent.mkdir(parents=True, exist_ok=True)
+    draft_path.write_text(draft)
+    return {"ok": True, "draft": draft, "path": str(draft_path), "chars": len(text)}
 
 
 @app.get("/api/health")
