@@ -47,6 +47,13 @@ adzuna:
   countries: [us, gb, es]
   results_per_country: 20
 
+# F2: liveness gate — expire dead postings (404/tombstone) at the end of each discover.
+# Off by default (adds N HTTP calls per run); always available on demand from the web UI
+# via POST /api/liveness/sweep.
+liveness:
+  enabled: false
+  limit: 40
+
 # Global pacing / safety knobs.
 limits:
   per_source_timeout_s: 45

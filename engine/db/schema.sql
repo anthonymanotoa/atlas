@@ -20,6 +20,10 @@ CREATE TABLE IF NOT EXISTS jobs (
     salary_interval TEXT,
     date_posted     TEXT,
     language        TEXT,                      -- detected posting language (en|es|de|fr|pt)
+    geo_restriction TEXT,                      -- raw geo-restriction text detected (F2, UI)
+    geo_scope       TEXT,                      -- normalized scope: iso2/region | worldwide | unknown | ''
+    repost_count    INTEGER DEFAULT 0,         -- ghost-job signal: same company+core-title reposts in 90d
+    liveness_checked_at TEXT,                  -- last liveness HTTP check (F2 hygiene)
     raw_json        TEXT,
     sources_json    TEXT,                      -- json array of every source it was seen on
 
@@ -29,6 +33,10 @@ CREATE TABLE IF NOT EXISTS jobs (
     knockout_flags  TEXT,                      -- json array of strings
     match_score     INTEGER,                   -- CV↔JD keyword match 0–100 (distinct from fit_score)
     match_missing   TEXT,                      -- json array of JD keywords the CV doesn't evidence
+    knockout_warnings TEXT,                    -- json array of knock-out pre-scan warnings (F3, visa/years/degree/language/clearance)
+    score_breakdown TEXT,                      -- json: machine summary — per-factor score deltas (F3)
+    legitimacy_tier TEXT,                      -- high | medium | low (F4 Block G; NULL = unrated)
+    legitimacy_notes TEXT,                     -- señales observadas, nunca acusaciones
 
     discovered_at   TEXT NOT NULL,
     scored_at       TEXT,
@@ -112,6 +120,7 @@ CREATE TABLE IF NOT EXISTS followups (
     job_id        TEXT REFERENCES jobs(id) ON DELETE CASCADE,
     message_id    INTEGER REFERENCES messages(id) ON DELETE SET NULL,
     channel       TEXT,
+    kind          TEXT,                        -- F3 cadencia v2: pipeline state that seeded this touch (e.g. 'applied'); NULL = legacy per-message touch
     touch_number  INTEGER,                     -- 1..4 then breakup
     due_at        TEXT,
     state         TEXT DEFAULT 'pending',      -- pending | done | cancelled
@@ -213,6 +222,8 @@ CREATE TABLE IF NOT EXISTS interviews (
     status       TEXT DEFAULT 'scheduled',      -- scheduled | done | cancelled
     notes        TEXT,
     prep_path    TEXT,
+    deep_prep_md TEXT,                          -- F4 §7.2: LLM deep prep (Audience Map + cited Qs)
+    debrief_md   TEXT,                          -- F4 §7.2: candidate's post-interview debrief
     created_at   TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_interviews_job ON interviews(job_id);
@@ -252,3 +263,82 @@ CREATE TABLE IF NOT EXISTS peer_portfolios (
     notes              TEXT,
     reviewed_at        TEXT
 );
+
+-- Posting archive (F2 hygiene): an immutable snapshot of the posting captured when the
+-- user marks Applied — evidence for prep/negotiation even after the posting dies.
+CREATE TABLE IF NOT EXISTS posting_snapshots (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    job_id      TEXT NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
+    captured_at TEXT NOT NULL,
+    payload     TEXT NOT NULL                      -- json: title/company/location/description/salary/url/date_posted
+);
+CREATE INDEX IF NOT EXISTS idx_snapshots_job ON posting_snapshots(job_id);
+
+-- Story bank STAR+R (F3 §6.3). Vive en la DB del perfil activo (una por perfil).
+-- El matcher determinista (engine/stories.py) rankea por overlap de tokens/skills.
+CREATE TABLE IF NOT EXISTS stories (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    title       TEXT NOT NULL,
+    situation   TEXT DEFAULT '',
+    task        TEXT DEFAULT '',
+    action      TEXT DEFAULT '',
+    result      TEXT DEFAULT '',
+    reflection  TEXT DEFAULT '',
+    skills      TEXT DEFAULT '[]',              -- json array de tags de skill
+    created_at  TEXT NOT NULL,
+    updated_at  TEXT NOT NULL
+);
+
+-- Intent queue (F4): guided handoff web → brain. The web enqueues; the brain (Claude Code)
+-- drains as step 0 of `corre atlas` and completes each intent with a validated result JSON.
+CREATE TABLE IF NOT EXISTS intents (
+    id           TEXT PRIMARY KEY,              -- in_<hex12>
+    type         TEXT NOT NULL,                 -- cv_review | legitimacy_batch | upskill_report
+                                                --  | interview_prep_deep | profile_expand | cover_letter
+    job_id       TEXT REFERENCES jobs(id) ON DELETE SET NULL,
+    payload      TEXT NOT NULL DEFAULT '{}',    -- json, validated per-type at the API
+    status       TEXT NOT NULL DEFAULT 'pending', -- pending | running | done | error
+    result_ref   TEXT,                          -- e.g. cv_review:3, jobs:12, message:7
+    error        TEXT,
+    created_at   TEXT NOT NULL,
+    completed_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_intents_status ON intents(status, created_at);
+CREATE INDEX IF NOT EXISTS idx_intents_job ON intents(job_id);
+
+-- CV reviews (F4 §7.2): salida del reviewer LLM (hiring-manager proxy). Los edits se
+-- aplican mecánicamente desde la web (apply-edit) y los flags se resuelven keep/soften/drop.
+CREATE TABLE IF NOT EXISTS cv_reviews (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    intent_id     TEXT REFERENCES intents(id) ON DELETE SET NULL,
+    job_id        TEXT NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
+    cv_version_id INTEGER REFERENCES cv_versions(id) ON DELETE SET NULL,
+    edits         TEXT NOT NULL DEFAULT '[]',   -- json [{file, old_string, new_string, reason, applied?, applied_ref?}]
+    critique      TEXT NOT NULL DEFAULT '{}',   -- json {missed_keywords, company_angles, reframing, tone_register}
+    flags         TEXT NOT NULL DEFAULT '[]',   -- json [{file, bullet, classification, reason, softened?, resolution?}]
+    created_at    TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_cv_reviews_job ON cv_reviews(job_id);
+
+-- Upskill / gap reports (F4 §7.2): pasada 1 determinista (hard_gaps) + síntesis LLM
+-- (report_md + heatmap). Una fila por corrida; la vista /upskill muestra la última.
+CREATE TABLE IF NOT EXISTS upskill_reports (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    intent_id  TEXT REFERENCES intents(id) ON DELETE SET NULL,
+    report_md  TEXT NOT NULL,                 -- el plan de estudio en Markdown
+    heatmap    TEXT NOT NULL DEFAULT '[]',    -- json [{skill, severity, note}]
+    hard_gaps  TEXT NOT NULL DEFAULT '{}',    -- json: la pasada 1 determinista que lo alimentó
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_upskill_created ON upskill_reports(created_at);
+
+-- Profile expansions (F4 §7.2): additive, source-annotated enrichment drafts from the brain.
+-- The web confirms items one by one; only confirmed items are written to the (gitignored)
+-- master CV. Nothing here is applied automatically.
+CREATE TABLE IF NOT EXISTS profile_expansions (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    intent_id  TEXT REFERENCES intents(id) ON DELETE SET NULL,
+    items      TEXT NOT NULL DEFAULT '[]',    -- json [{target, value, source, applied?}]
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_profile_exp_created ON profile_expansions(created_at);

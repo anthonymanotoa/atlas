@@ -1,49 +1,55 @@
 ---
 name: atlas-design-system
 description: >-
-  Apply the Atlas "Warm Editorial" design system to ANY visual/UI work in this repo
+  Apply the Atlas Design System v2 to ANY visual/UI work in this repo
   (the dashboard/frontend React app). ALWAYS use this whenever building, creating, making,
   designing, styling, restyling, or tweaking a component, page, screen, dashboard, board,
-  card, drawer/sheet, modal/dialog, form, button, badge, chip, table, chart, tooltip, menu,
-  toast, or any UI — and whenever editing dashboard/frontend/src/**, src/components/ui/**,
-  or src/index.css. Ensures every change is brand-consistent (warm charcoal + amber/terracotta,
-  Geist, the shared primitives and tokens) without re-specifying colors or styles.
+  card, modal/dialog, form, button, badge, chip, table, chart, tooltip, menu, toast, sidebar,
+  or any UI — and whenever editing dashboard/frontend/src/**, src/components/ui/**,
+  src/pages/**, src/hooks/**, or src/index.css. Ensures every change is brand-consistent
+  (v2 OKLCH tokens, the shared primitives, router/query architecture) without re-specifying
+  colors or styles.
 ---
 
-# Atlas Design System (enforcement skill)
+# Atlas Design System v2 (enforcement skill)
 
-The canonical spec is **`dashboard/frontend/DESIGN_SYSTEM.md`** — read it before any visual change.
-This skill exists to make sure UI work in this repo follows it.
+La spec canónica es **`dashboard/frontend/DESIGN_SYSTEM.md`** (v2) — leerla antes de cualquier
+cambio visual. Los valores de paleta/tipografía provienen de
+`docs/superpowers/specs/2026-07-04-atlas-v2-visual-language.md`. El sistema v1 "Warm Editorial"
+está RETIRADO: no reintroducir su aurora ámbar/terracota ni el compat layer `--color-*`.
 
-## Sources of truth (read / reuse these — don't reinvent)
-- **`dashboard/frontend/DESIGN_SYSTEM.md`** — tokens, type scale, elevation, motion, patterns.
-- **`dashboard/frontend/src/components/ui/*`** — the primitives (Button, Input, Select, Checkbox,
-  Switch, Badge, Card, Dialog, Sheet, Tooltip, Tabs, ScrollArea, Separator, Skeleton, Sonner,
-  Command, Kbd, ScoreRing). Compose from these; do not hand-roll equivalents.
-- **`dashboard/frontend/src/components/ui/icons.ts`** — the only place icons are declared. No raw emoji.
-- **`dashboard/frontend/src/index.css`** — the token system (`@theme inline` + `[data-theme]`).
+## Fuentes de verdad (leer / reusar — no reinventar)
+- `dashboard/frontend/DESIGN_SYSTEM.md` — tokens, tipografía, motion, patrones, arquitectura v2.
+- `dashboard/frontend/src/index.css` — el sistema de tokens (`@theme inline` + `[data-theme]`).
+- `dashboard/frontend/src/components/ui/*` — los primitivos + `states.tsx`
+  (LoadingState/ErrorState/EmptyState). Componer desde aquí; no hacer equivalentes a mano.
+- `dashboard/frontend/src/components/ui/icons.ts` — único lugar de iconos de dominio. Sin emoji.
+- `dashboard/frontend/src/hooks/` — capa de datos TanStack Query (keys en `hooks/keys.ts`).
+- `dashboard/frontend/src/routes.tsx` + `src/components/AppShell.tsx` — navegación y shell.
 
-## Non-negotiable rules
-1. **Use semantic tokens / Tailwind utilities** (`bg-card`, `text-muted-foreground`, `border-border`,
-   `bg-primary`, `text-primary`, `bg-secondary`, `bg-success/warning/info/destructive`, `ring-ring`)
-   or `var(--token)`. Never hardcode hex/raw colors.
-2. **Never use `bg-accent` / `text-accent-foreground` / `bg-muted`** — they're intentionally unmapped.
-   Use `secondary` for hover washes/surfaces and `text-muted-foreground` for muted text.
-3. **Theme = `data-theme` on `<html>`** (dark/light). Never add a `.dark` class or change the switch.
-4. **Typography:** Geist; use `text-display/h1/h2/h3/caption`, `font-mono` for code, and `tabular-nums`
-   on all numbers.
-5. **No raw emoji** — add to `icons.ts` and import from there.
-6. **`cn` from `@/lib/utils`**; `@/` → `src/`.
-7. **Motion:** Radix anims via `tw-animate-css`; respect `prefers-reduced-motion`; never animate a
-   dnd-kit dragged node or put `backdrop-filter`/`filter` on a draggable ancestor.
+## Reglas no negociables
+1. Tokens semánticos / utilities (`bg-card`, `text-muted-foreground`, `border-border`,
+   `bg-primary`, `bg-secondary`, `bg-success/warning/info/destructive`, `bg-sidebar*`,
+   `ring-ring`) o `var(--token)`. Nunca hex ni colores crudos.
+2. Nunca `bg-accent` / `text-accent-foreground` / `bg-muted` (sin mapear a propósito).
+3. Tema = `data-theme` en `<html>` (hook `useTheme`). Nunca la clase `.dark`.
+4. Vistas nuevas = ruta en `src/routes.tsx` + página en `src/pages/` + datos vía hooks de
+   `src/hooks/` (TanStack Query). Prohibido fetch manual con useEffect en páginas.
+5. Estados de página SIEMPRE con `LoadingState`/`ErrorState`/`EmptyState`; feedback con sonner
+   (`toast.loading`+`id` en operaciones largas; `Deshacer` en acciones destructivas).
+6. Tipografía: `text-display/h1/h2/h3/caption`, `font-mono` para código/paths, `tabular-nums`
+   en números vivos. Sin emoji crudo: `ui/icons.ts`.
+7. `cn` desde `@/lib/utils`; `@/` → `src/`.
+8. Motion: `--ease-*`/`--dur-*` + tw-animate-css; respetar `prefers-reduced-motion`; nunca
+   animar nodos dnd-kit arrastrados ni `backdrop-filter` en ancestros draggables.
 
-## Invariants
-- **Visual only** unless the task is explicitly about logic — keep handlers, API (`src/api.ts`), props,
-  state, and data flow intact.
-- Keep **Spanish** user-facing strings (some are asserted by tests).
-- Lint runs `--max-warnings 0`; build is separate from `check.sh`.
+## Invariantes
+- **Solo visual** salvo que la tarea sea explícitamente de lógica — no tocar handlers,
+  `src/api.ts`, hooks de datos, props ni flujo de estado.
+- Strings de usuario en **español** (varios fijados por tests).
+- Lint `--max-warnings 0`; el build es aparte de check.sh.
 
-## After any UI change, verify
+## Tras cualquier cambio de UI, verificar
 ```bash
 npm --prefix dashboard/frontend run lint
 npm --prefix dashboard/frontend run typecheck
@@ -51,5 +57,5 @@ npm --prefix dashboard/frontend test
 npm --prefix dashboard/frontend run build
 ```
 
-Adding a new shadcn component is fine (`components.json` is set up), but re-theme it to the tokens
-above and **revert any CLI edits to `src/index.css`**.
+Añadir un componente shadcn está bien (`components.json` sigue configurado), pero re-tematizarlo
+a los tokens v2 y **revertir cualquier edición de la CLI a `src/index.css`**.

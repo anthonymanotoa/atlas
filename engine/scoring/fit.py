@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
 from engine.config import Criteria
+from engine.geo import geo_scope_covers
 from engine.lang import detect_language
 from engine.normalize import norm_company
 
@@ -35,6 +36,43 @@ def _build_stretch_re(stretch_terms: list[str]) -> re.Pattern[str] | None:
 
 _YEARS = re.compile(r"(\d{1,2})\s*\+?\s*(?:years|yrs|años)", re.I)
 
+# F2 geo-mismatch: phrases that contradict a "remote" flag. The matched phrase is quoted in
+# the knockout so the user sees WHY ("3 days in office"). Flag-only — some postings mention
+# "hybrid" innocently ("not a hybrid role"), so this never moves the score.
+_OFFICE_DEMAND = re.compile(
+    r"(\d\s*\+?\s*days?\s+(?:per\s+week\s+)?(?:in|at)(?:\s+the)?\s+office"
+    r"|\d\s*d[ií]as\s+(?:por\s+semana\s+)?en\s+(?:la\s+)?oficina"
+    r"|on[- ]?site\s+\d"
+    r"|\bhybrid\b|\bh[ií]brido\b)",
+    re.I,
+)
+
+# The bare `hybrid`/`híbrido` tokens above are the only ones that fire spuriously on
+# genuinely-remote reassurance ("no hybrid", "not a hybrid role"): `office` always carries a
+# digit prefix and `on-site` a digit suffix, so a negator can't produce a false match there.
+# _BARE_HYBRID recognises a raw-token match; _NEGATED_HYBRID matches that token when a negator
+# (no / not / non / n't) immediately precedes it, allowing one short article filler ("not a
+# hybrid role"). _office_demand() skips such negated matches while still honouring a real
+# office demand later in the same body.
+_BARE_HYBRID = re.compile(r"\b(?:hybrid|h[ií]brido)\b", re.I)
+_NEGATED_HYBRID = re.compile(
+    r"\b(?:no|not|non|n.t)\b[- ]?(?:an?\s+|the\s+)?(?:hybrid|h[ií]brido)\b",
+    re.I,
+)
+
+
+def _office_demand(desc: str) -> re.Match[str] | None:
+    """First office-demand match in `desc`, skipping negated bare-hybrid mentions.
+
+    A `hybrid`/`híbrido` token preceded by a negator ("no hybrid", "not a hybrid role") is a
+    reassurance in a fully-remote post, not an office demand, so it never triggers factor 2d."""
+    negated_ends = {m.end() for m in _NEGATED_HYBRID.finditer(desc)}
+    for m in _OFFICE_DEMAND.finditer(desc):
+        if _BARE_HYBRID.fullmatch(m.group(0)) and m.end() in negated_ends:
+            continue
+        return m
+    return None
+
 
 @dataclass
 class ScoreResult:
@@ -42,6 +80,23 @@ class ScoreResult:
     reasons: list[str] = field(default_factory=list)
     knockouts: list[str] = field(default_factory=list)
     disqualified: bool = False
+    factors: list[dict] = field(default_factory=list)  # machine summary (F3 §6.5)
+
+    def breakdown(self) -> dict:
+        """Desglose completo por corrida — persistido en jobs.score_breakdown.
+
+        `base` is the fixed 50.0 starting score; `final` is the post-clamp value. When no
+        clamp/cap fired, base + sum(factor deltas) == final; the two may differ when the
+        soft-cap (stretch/big years-gap), the disq hard-cap (12), or the 0–100 bound fired,
+        so consumers reconcile against `final` (not the delta sum) and read the caps here."""
+        return {
+            "base": 50.0,
+            "final": self.score,
+            "disqualified": self.disqualified,
+            "factors": self.factors,
+            "reasons": self.reasons,
+            "knockouts": self.knockouts,
+        }
 
 
 def _has(hay: str, term: str) -> bool:
@@ -80,6 +135,19 @@ def score_job(job: dict, criteria: Criteria, learnings: list[dict] | None = None
     reasons: list[str] = []
     knockouts: list[str] = []
     disq = False
+    factors: list[dict] = []
+
+    def _apply(delta: float, factor: str, note: str) -> None:
+        """Ajusta el score y registra el delta con su razón — misma aritmética de siempre.
+
+        Machine summary (F3 §6.5): every scoring move goes through here so the breakdown lists
+        exactly which factor moved the score by how much. The `note` string is identical to the
+        `reasons` entry it replaces — existing scoring tests must not change."""
+        nonlocal score
+        score += delta
+        reasons.append(note)
+        factors.append({"factor": factor, "delta": delta, "note": note})
+
     # Soft cap: a "stretch" posting (Staff/Principal title, or a years requirement far above
     # yours) stays visible and browsable but is held just below the shortlist threshold, so it
     # never lands in "Preseleccionados" as if it were a realistic match. Distinct from `disq`
@@ -91,27 +159,29 @@ def score_job(job: dict, criteria: Criteria, learnings: list[dict] | None = None
     if criteria.company_blocklist:
         blocked = {norm_company(c) for c in criteria.company_blocklist}
         if norm_company(job.get("company")) in blocked:
-            return ScoreResult(0.0, ["company in blocklist"], ["company in blocklist"], True)
+            return ScoreResult(
+                0.0,
+                ["company in blocklist"],
+                ["company in blocklist"],
+                True,
+                [{"factor": "blocklist", "delta": -50.0, "note": "company in blocklist"}],
+            )
 
     # 1. Role relevance (strongest signal; title-weighted).
     role_terms = criteria.all_role_terms
     if any(_has(title_l, t) for t in role_terms):
-        score += 25
-        reasons.append("role matches title")
+        _apply(25, "role", "role matches title")
     elif any(_has(hay, t) for t in role_terms):
-        score += 8
-        reasons.append("role matches description only")
+        _apply(8, "role", "role matches description only")
     else:
-        score -= 35
-        reasons.append("no role keyword match")
+        _apply(-35, "role", "no role keyword match")
 
     # 2. Remote (hard requirement).
     is_remote = job.get("is_remote")
     wt = (job.get("workplace_type") or "unknown").lower()
     if criteria.remote_required:
         if is_remote == 1 or is_remote is True or wt == "remote":
-            score += 15
-            reasons.append("remote")
+            _apply(15, "remote", "remote")
         elif is_remote in (0, False) or wt in ("onsite", "hybrid"):
             disq = True
             reasons.append(f"not remote ({wt})")
@@ -129,6 +199,35 @@ def score_job(job: dict, criteria: Criteria, learnings: list[dict] | None = None
             disq = True
             knockouts.append("presencial fuera de tus ubicaciones")
             reasons.append(f"on-site outside your locations ({job.get('location')})")
+
+    # 2c. Geo-restricted remote (F2): a remote posting restricted to a country/region that
+    #     doesn't cover the candidate is penalized and flagged — NEVER disqualified (they
+    #     stay browsable, just lower). Off when candidate_country is unset; "unknown"/""/
+    #     "worldwide" scopes never penalize (no signal ≠ restriction).
+    geo_scope = (job.get("geo_scope") or "").strip().lower()
+    if (
+        criteria.candidate_country
+        and is_remote_job
+        and geo_scope not in ("", "worldwide", "unknown")
+        and not geo_scope_covers(geo_scope, criteria.candidate_country, criteria.acceptable_regions)
+    ):
+        scope_label = ",".join(t.upper() for t in geo_scope.split(","))
+        knockouts.append(f"remoto restringido a {scope_label}")
+        raw = job.get("geo_restriction")
+        _apply(
+            -criteria.geo_penalty,
+            "geo",
+            f"remote restricted to {scope_label}"
+            + (f' ("{raw}")' if raw else "")
+            + " — outside your country/regions",
+        )
+
+    # 2d. Geo-mismatch (F2 hygiene): the metadata says remote but the body demands office
+    #     presence. Flag with the exact quoted phrase; no score change (see regex comment).
+    if is_remote_job and desc and (office_m := _office_demand(desc)):
+        quoted = office_m.group(0).strip()
+        knockouts.append(f'dice remoto pero: "{quoted}"')
+        reasons.append(f'flagged remote but body says "{quoted}"')
 
     # 3. Seniority fit — junior is under-qualified (DQ); exec is over-qualified (DQ when
     #    excluded); Staff/Principal is a "stretch" (over-qualified seniority) for a candidate
@@ -150,20 +249,19 @@ def score_job(job: dict, criteria: Criteria, learnings: list[dict] | None = None
     elif stretch_re and (stretch_m := stretch_re.search(title)):
         term = stretch_m.group(0).lower()  # the actual matched stretch title (not a fixed label)
         if cy and cy < criteria.stretch_min_years:
-            score -= 12
             soft_cap = min(soft_cap, stretch_cap)  # keep it out of the shortlist
             knockouts.append(f"rol {term} (suele pedir +{criteria.stretch_min_years} años)")
-            reasons.append(
-                f"{term} title — typically wants ~{criteria.stretch_min_years}+ yrs (you have ~{cy})"
+            _apply(
+                -12,
+                "seniority",
+                f"{term} title — typically wants ~{criteria.stretch_min_years}+ yrs (you have ~{cy})",
             )
         else:
-            score += 6
-            reasons.append(f"{term} seniority")
+            _apply(6, "seniority", f"{term} seniority")
     elif any(_has(title_l, t.strip()) for t in [s.strip() for s in criteria.seniority]) or any(
         _has(title_l, t) for t in criteria.senior_terms
     ):
-        score += 10
-        reasons.append("seniority matches")
+        _apply(10, "seniority", "seniority matches")
 
     # 4. Salary (soft unless criteria.salary_hard).
     smin, smax = job.get("salary_min"), job.get("salary_max")
@@ -175,32 +273,38 @@ def score_job(job: dict, criteria: Criteria, learnings: list[dict] | None = None
             interval, 1
         )
         if annual >= floor:
-            score += 10
-            reasons.append("salary meets floor")
+            _apply(10, "salary", "salary meets floor")
         else:
             if criteria.salary_hard:
                 disq = True
-            score -= 10
-            reasons.append("salary below floor")
+            _apply(-10, "salary", "salary below floor")
 
     # 5. Must-haves.
     hits = [m for m in criteria.must_haves if _has(hay, m)]
     if hits:
-        score += min(len(hits) * 4, 12)
-        reasons.append(f"must-haves: {', '.join(hits)}")
+        _apply(min(len(hits) * 4, 12), "must_haves", f"must-haves: {', '.join(hits)}")
 
     # 6. Deal-breakers (cap score).
     db_hits = [d for d in criteria.deal_breakers if _has(hay, d)]
     if db_hits:
         disq = True
-        reasons.append(f"deal-breaker: {', '.join(db_hits)}")
+        # No score delta of its own — the disq hard-cap (12) below is what enforces it. Recorded
+        # with delta 0 so the breakdown still lists WHY the job was capped.
+        _apply(0, "deal_breaker", f"deal-breaker: {', '.join(db_hits)}")
 
     # 7. Knockouts (flag, don't reject).
     ko = [k for k in criteria.knockout_terms if _has(hay, k)]
     if ko:
         knockouts.extend(ko)
-        score -= min(len(ko) * 5, 10)
-        reasons.append(f"knockout flags: {', '.join(ko)}")
+        _apply(-min(len(ko) * 5, 10), "knockout_terms", f"knockout flags: {', '.join(ko)}")
+
+    # 7b. Repost/ghost signal (F2 hygiene): the same company re-posted this fuzzy-equal
+    #     title with new ids ≥2× in 90 days (see engine/reposts.py). Light, visible nudge —
+    #     never a DQ, so a re-posted role stays browsable, just slightly down-ranked.
+    repost_count = int(job.get("repost_count") or 0)
+    if repost_count >= 1:
+        knockouts.append(f"repost ({repost_count}x en 90 días)")
+        _apply(-4, "repost", f"reposted {repost_count}x in 90 days (possible ghost posting)")
 
     # 8. Off-target language — use the language stored at discovery, else detect now. Soft
     #    down-rank by default; a hard single-language seeker (criteria.language_hard) disqualifies
@@ -208,8 +312,7 @@ def score_job(job: dict, criteria: Criteria, learnings: list[dict] | None = None
     #    are never filtered — too little signal (e.g. a description-less LinkedIn listing).
     lang = job.get("language") or detect_language(desc or title)
     if lang and lang not in criteria.languages:
-        score -= 25
-        reasons.append(f"likely {lang}-language posting (off-target)")
+        _apply(-25, "language", f"likely {lang}-language posting (off-target)")
         if criteria.language_hard:
             disq = True
             knockouts.append(f"posting en otro idioma ({lang})")
@@ -218,8 +321,7 @@ def score_job(job: dict, criteria: Criteria, learnings: list[dict] | None = None
     if criteria.max_age_days:
         age = _age_days(job)
         if age is not None and age > criteria.max_age_days:
-            score -= 15
-            reasons.append(f"posted ~{age:.0f}d ago (stale, >{criteria.max_age_days}d)")
+            _apply(-15, "freshness", f"posted ~{age:.0f}d ago (stale, >{criteria.max_age_days}d)")
             if criteria.freshness_hard:
                 disq = True
 
@@ -233,18 +335,15 @@ def score_job(job: dict, criteria: Criteria, learnings: list[dict] | None = None
         if cy:
             gap = req - cy
             if gap >= 6:
-                score -= 18
                 soft_cap = min(soft_cap, stretch_cap)  # a +6yr gap is a long shot — don't shortlist
                 knockouts.append(f"pide {req}+ años (tienes ~{cy})")
-                reasons.append(f"requires {req}+ yrs — far above your ~{cy}")
+                _apply(-18, "years", f"requires {req}+ yrs — far above your ~{cy}")
             elif gap >= 3:
-                score -= 9
                 knockouts.append(f"pide {req}+ años (tienes ~{cy})")
-                reasons.append(f"requires {req}+ yrs (above your ~{cy})")
+                _apply(-9, "years", f"requires {req}+ yrs (above your ~{cy})")
         elif criteria.max_years_required and req > criteria.max_years_required:
             knockouts.append(f"requires {req}+ years")
-            score -= 8
-            reasons.append(f"requires {req}+ years (> your {criteria.max_years_required})")
+            _apply(-8, "years", f"requires {req}+ years (> your {criteria.max_years_required})")
 
     # 11. Company learnings (P2-D): confidence-gated nudges from past outcomes.
     for learning in learnings or []:
@@ -253,8 +352,7 @@ def score_job(job: dict, criteria: Criteria, learnings: list[dict] | None = None
         pt, obs = learning.get("pattern_type"), learning.get("observation", "")
         if pt == "offer_rate":
             # the one positive scoring nudge: this company has made offers to people like me.
-            score += 4
-            reasons.append(f"learning: {obs}")
+            _apply(4, "learning", f"learning: {obs}")
         else:
             # rejection_rate / referral_conversion / process_speed are informational context,
             # not score penalties — a past rejection (often role-specific) shouldn't down-rank
@@ -264,4 +362,4 @@ def score_job(job: dict, criteria: Criteria, learnings: list[dict] | None = None
     score = max(0.0, min(100.0, score, soft_cap))
     if disq:
         score = min(score, 12.0)
-    return ScoreResult(round(score, 1), reasons, knockouts, disq)
+    return ScoreResult(round(score, 1), reasons, knockouts, disq, factors)

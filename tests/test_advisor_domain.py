@@ -15,7 +15,11 @@ ARCH_CV = {
     },
     "skills": ["Revit", "AutoCAD", "Lumion", "ArchiCAD"],
     "experience": [
-        {"title": "Dibujante", "company": "P&P", "highlights": ["Produje 12 planos", "Coordine 3 obras"]}
+        {
+            "title": "Dibujante",
+            "company": "P&P",
+            "highlights": ["Produje 12 planos", "Coordine 3 obras"],
+        }
     ],
 }
 
@@ -47,16 +51,26 @@ def test_core_keyword_covered_by_ontology_alias_not_flagged(monkeypatch):
         "skills": ["ML", "Python"],
         "experience": [{"title": "A", "company": "B", "highlights": ["Shipped 5 models"]}],
     }
-    findings = adv.audit_cv(cv, Criteria(core_keywords=["machine learning"], repositioning_target=""))
+    findings = adv.audit_cv(
+        cv, Criteria(core_keywords=["machine learning"], repositioning_target="")
+    )
     assert not any("núcleo" in f.message for f in findings)  # covered via alias 'ml'
 
 
 def test_data_profile_keeps_repositioning_nudge():
-    data = Criteria(repositioning_target="AI/ML", core_keywords=["python", "machine learning", "llm"])
+    data = Criteria(
+        repositioning_target="AI/ML", core_keywords=["python", "machine learning", "llm"]
+    )
     cv = {
-        "basics": {"email": "a@b.c", "linkedin": "x", "summary": "Analista con foco en dashboards y reporting."},
+        "basics": {
+            "email": "a@b.c",
+            "linkedin": "x",
+            "summary": "Analista con foco en dashboards y reporting.",
+        },
         "skills": ["Excel", "Tableau"],
-        "experience": [{"title": "Analyst", "company": "X", "highlights": ["Hice 5 reportes", "Subi 10%"]}],
+        "experience": [
+            {"title": "Analyst", "company": "X", "highlights": ["Hice 5 reportes", "Subi 10%"]}
+        ],
     }
     findings = audit_cv(cv, data)
     assert any("AI/ML" in f.suggestion for f in findings)

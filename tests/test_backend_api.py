@@ -55,7 +55,7 @@ def test_set_state_happy_path(atlas_app):
 
 
 def test_mark_applied_on_real_job_schedules_cadence(atlas_app):
-    """Current behavior: /applied flips state and starts the follow-up cadence."""
+    """F3 v2: /applied siembra el PRIMER follow-up de la cadencia applied (7d, kind='applied')."""
     from engine.db.models import DB
 
     with TestClient(atlas_app) as client:
@@ -63,8 +63,9 @@ def test_mark_applied_on_real_job_schedules_cadence(atlas_app):
         resp = client.post(f"/api/jobs/{jid}/applied")
     assert resp.status_code == 200 and resp.json() == {"ok": True}
     with DB() as db:
+        rows = db.followups_for_job(jid)
         assert db.get_job(jid)["state"] == "applied"
-        assert len(db.followups_for_job(jid)) == 4  # Day 3/7/14 + breakup scheduled
+    assert len(rows) == 1 and rows[0]["kind"] == "applied"
 
 
 def test_mark_sent_unknown_message_is_ok(atlas_app):
@@ -359,3 +360,92 @@ def test_switch_profile_unknown_id_404(atlas_app):
     with TestClient(atlas_app) as client:
         resp = client.post("/api/profile", json={"id": "nope"})
     assert resp.status_code == 404
+
+
+# ── SPA fallback (Atlas v2 F1): el router de frontend necesita deep links ────
+
+
+def test_spa_fallback_serves_index_for_client_routes(atlas_app, tmp_path, monkeypatch):
+    import dashboard.backend.main as backend
+
+    dist = tmp_path / "dist"
+    (dist / "assets").mkdir(parents=True)
+    (dist / "index.html").write_text("<html>atlas-spa</html>")
+    (dist / "assets" / "app.js").write_text("console.log(1)")
+    monkeypatch.setattr(backend, "_DIST", dist)
+
+    with TestClient(atlas_app) as client:
+        for path in ("/", "/pipeline", "/jobs/abc123", "/settings", "/onboarding"):
+            resp = client.get(path)
+            assert resp.status_code == 200, path
+            assert "atlas-spa" in resp.text, path
+        # los archivos reales del build se sirven tal cual
+        resp = client.get("/assets/app.js")
+        assert resp.status_code == 200
+        assert "console.log" in resp.text
+
+
+def test_spa_fallback_unknown_api_route_is_404_not_index(atlas_app, tmp_path, monkeypatch):
+    import dashboard.backend.main as backend
+
+    dist = tmp_path / "dist"
+    dist.mkdir()
+    (dist / "index.html").write_text("<html>atlas-spa</html>")
+    monkeypatch.setattr(backend, "_DIST", dist)
+
+    with TestClient(atlas_app) as client:
+        assert client.get("/api/definitely-not-a-route").status_code == 404
+
+
+def test_spa_fallback_api_like_route_serves_index(atlas_app, tmp_path, monkeypatch):
+    """Routes like /apikeys (not /api/*) should serve index.html, not 404."""
+    import dashboard.backend.main as backend
+
+    dist = tmp_path / "dist"
+    dist.mkdir()
+    (dist / "index.html").write_text("<html>atlas-spa</html>")
+    monkeypatch.setattr(backend, "_DIST", dist)
+
+    with TestClient(atlas_app) as client:
+        resp = client.get("/apikeys")
+        assert resp.status_code == 200, "apikeys should be treated as a client route"
+        assert "atlas-spa" in resp.text
+
+
+def test_spa_fallback_without_built_dist_is_404(atlas_app, tmp_path, monkeypatch):
+    import dashboard.backend.main as backend
+
+    monkeypatch.setattr(backend, "_DIST", tmp_path / "no-dist")
+    with TestClient(atlas_app) as client:
+        assert client.get("/pipeline").status_code == 404
+
+
+# ── F4 §7.2: upskill report endpoints (read-only; $0) ────────────────────────────
+def test_upskill_latest_is_null_when_empty(atlas_app):
+    with TestClient(atlas_app) as client:
+        assert client.get("/api/upskill/latest").json() == {"report": None}
+
+
+def test_upskill_latest_returns_persisted_report(atlas_app):
+    from engine.db.models import DB
+
+    with TestClient(atlas_app) as client:
+        with DB() as db:
+            rid = db.add_upskill_report(
+                intent_id=None,
+                report_md="# Plan de upskilling\n\n## Kubernetes",
+                heatmap=[{"skill": "Kubernetes", "severity": "Critical", "note": "gate"}],
+                hard_gaps={"skills": [{"skill": "kubernetes", "score": 0.7}], "jobs_considered": 1},
+            )
+        latest = client.get("/api/upskill/latest").json()["report"]
+        assert latest["id"] == rid
+        assert latest["report_md"].startswith("# Plan")
+        assert latest["heatmap"][0]["severity"] == "Critical"  # parsed from json
+        assert latest["hard_gaps"]["jobs_considered"] == 1
+        one = client.get(f"/api/upskill/{rid}")
+        assert one.status_code == 200 and one.json()["id"] == rid
+
+
+def test_upskill_report_unknown_id_is_404(atlas_app):
+    with TestClient(atlas_app) as client:
+        assert client.get("/api/upskill/999999").status_code == 404

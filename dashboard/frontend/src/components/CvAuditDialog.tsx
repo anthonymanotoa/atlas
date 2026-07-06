@@ -114,14 +114,14 @@ export function CvAuditDialog({
             <Card className="border-[color-mix(in_oklch,var(--accent2)_50%,var(--border))] bg-[color-mix(in_oklch,var(--accent2)_8%,transparent)] p-3.5 text-sm">
               <div
                 className="flex items-center gap-1.5 font-medium"
-                style={{ color: "var(--color-accent2)" }}
+                style={{ color: "var(--accent2)" }}
               >
                 <Sparkles className="size-4" /> Cómo mejorarlo
               </div>
               <div className="mt-1.5 text-muted-foreground">
                 Editá tu <code className="font-mono">master_cv.yaml</code> aplicando las sugerencias
-                de arriba (usá solo hechos reales) y pulsá “Re-evaluar”. Para una mejora guiada de CV
-                + LinkedIn según tu rol objetivo, usá la guía{" "}
+                de arriba (usá solo hechos reales) y pulsá “Re-evaluar”. Para una mejora guiada de
+                CV + LinkedIn según tu rol objetivo, usá la guía{" "}
                 <b className="text-foreground">cv-linkedin-advisor</b> en Claude.
               </div>
             </Card>

@@ -26,12 +26,21 @@ def test_onsite_job_inside_locations_survives():
 
 
 def test_remote_job_is_exempt_worldwide():
-    remote_anywhere = {"title": "Arquitecto", "description": "x", "location": "Madrid, ES", "is_remote": 1}
+    remote_anywhere = {
+        "title": "Arquitecto",
+        "description": "x",
+        "location": "Madrid, ES",
+        "is_remote": 1,
+    }
     assert score_job(remote_anywhere, _EC_ONSITE).disqualified is False
 
 
 def test_undetermined_location_or_remote_is_not_filtered():
-    unknown = {"title": "Arquitecto", "description": "x", "location": "Bogotá, Colombia"}  # is_remote unset
+    unknown = {
+        "title": "Arquitecto",
+        "description": "x",
+        "location": "Bogotá, Colombia",
+    }  # is_remote unset
     assert score_job(unknown, _EC_ONSITE).disqualified is False
 
 

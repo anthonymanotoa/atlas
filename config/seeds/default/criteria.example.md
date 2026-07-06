@@ -18,6 +18,11 @@ repositioning_target: ""  # empty = the advisor won't push you toward any specif
 core_keywords: []         # the few must-appear terms the CV audit checks for
 shortlist_threshold: 60
 candidate_years: 0
+# ── Geo (F2): tu país, para la penalización de remotos restringidos ──
+candidate_country: ""          # tu código ISO-2 (p. ej. "ec"); vacío = factor apagado
+acceptable_regions: [worldwide] # regiones cuyos remotos restringidos sí te sirven (latam/eu/na/apac)
+geo_penalty: 12                # puntos que resta un remoto restringido fuera de tu alcance
+re_apply_window_days: 0        # marca empresas donde aplicaste hace <N días; 0 = apagado
 ---
 
 # Mi búsqueda

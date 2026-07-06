@@ -1,12 +1,15 @@
 import { CalendarPlus, FileText, Plus } from "lucide-react";
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import { api, type Interview } from "../api";
+import { IntentConfirmDialog } from "./IntentConfirmDialog";
 import { Button } from "./ui/button";
 import { Card } from "./ui/card";
 import { Input } from "./ui/input";
 import { ScrollArea } from "./ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Separator } from "./ui/separator";
+import { Textarea } from "./ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 
 // Round values stay stable (the backend/prep keys on them), but each gets a human label so the
@@ -31,6 +34,7 @@ export function InterviewPanel({ jobId }: { jobId: string }) {
   const [date, setDate] = useState("");
   const [round, setRound] = useState("phone");
   const [prep, setPrep] = useState<Record<number, string>>({});
+  const [debrief, setDebrief] = useState<Record<number, string>>({});
   const refresh = () => api.interviews(jobId).then((r) => setInterviews(r.interviews));
   useEffect(() => {
     refresh();
@@ -45,6 +49,21 @@ export function InterviewPanel({ jobId }: { jobId: string }) {
     const r = await api.genPrep(id);
     setPrep((p) => ({ ...p, [id]: r.markdown }));
     refresh();
+  }
+  async function saveDebrief(id: number, reanalyze: boolean) {
+    const text = (debrief[id] || "").trim();
+    if (!text) return;
+    try {
+      await api.interviewDebrief(id, text, reanalyze);
+      toast.success(
+        reanalyze
+          ? "Debrief guardado y re-análisis encolado (corre el brain)."
+          : "Debrief guardado.",
+      );
+      refresh();
+    } catch (e) {
+      toast.error(String(e));
+    }
   }
 
   return (
@@ -112,6 +131,44 @@ export function InterviewPanel({ jobId }: { jobId: string }) {
                 </pre>
               </ScrollArea>
             )}
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <IntentConfirmDialog
+                buttonLabel="Prep profundo (LLM)"
+                title="Preparación profunda de entrevista"
+                what="El brain arma un Audience Map por ronda, un banco de preguntas con fuente citada (nunca inventadas) y empareja tus historias del story bank; investiga empresa y entrevistadores en la web."
+                produces="Un pack de preparación específico para esta ronda."
+                where="Aquí mismo, bajo la entrevista, tras correr el brain."
+                type="interview_prep_deep"
+                jobId={jobId}
+                payload={{ interview_id: iv.id }}
+              />
+            </div>
+            {iv.deep_prep_md && (
+              <ScrollArea className="mt-2 max-h-72 rounded-lg bg-background/60">
+                <pre className="p-2.5 font-mono text-[0.76rem] whitespace-pre-wrap text-foreground">
+                  {iv.deep_prep_md}
+                </pre>
+              </ScrollArea>
+            )}
+            <div className="mt-2">
+              <div className="text-caption text-muted-foreground uppercase">
+                Debrief post-entrevista
+              </div>
+              <Textarea
+                className="mt-1 text-xs"
+                placeholder="¿Qué preguntaron? ¿Qué salió bien/mal? Alimenta el próximo prep y analytics."
+                value={debrief[iv.id] ?? iv.debrief_md ?? ""}
+                onChange={(e) => setDebrief((d) => ({ ...d, [iv.id]: e.target.value }))}
+              />
+              <div className="mt-1.5 flex gap-2">
+                <Button variant="secondary" size="sm" onClick={() => saveDebrief(iv.id, false)}>
+                  Guardar debrief
+                </Button>
+                <Button variant="secondary" size="sm" onClick={() => saveDebrief(iv.id, true)}>
+                  Guardar y re-analizar
+                </Button>
+              </div>
+            </div>
           </div>
         ))}
       </Card>

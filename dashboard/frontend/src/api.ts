@@ -32,6 +32,13 @@ export type Job = {
   match_score?: number | null;
   missing_keywords?: string[]; // importance-ranked JD keywords the CV doesn't evidence (detail only)
   jd_skills?: string[]; // skills the posting itself asks for, extracted from the description (detail only)
+  // F2 geo-scoring + hygiene (additive; backend may omit on older rows)
+  geo_restriction?: string | null; // raw restriction text ("Remote — US only")
+  geo_scope?: string | null; // normalized: iso2/region tokens | "worldwide" | "unknown" | ""
+  repost_count?: number | null; // ≥1 = same company re-posted this role in 90 days
+  // F4 Block G posting-legitimacy (ghost-job triage; orthogonal to fit/match). NULL = sin evaluar.
+  legitimacy_tier?: "high" | "medium" | "low" | null;
+  legitimacy_notes?: string | null; // señales observadas, nunca acusaciones
 };
 
 export type Action = {
@@ -112,6 +119,24 @@ export type OnboardingStatus = {
   cv_present: boolean;
   audit: { findings: Finding[]; summary: { high: number; med: number; low: number } };
 };
+// Frontmatter of the active profile's criteria.md (GET/PUT /api/criteria). Only the fields
+// the wizard edits are typed; everything else round-trips untouched via the index signature.
+export type CriteriaConfig = {
+  roles: string[];
+  role_aliases: string[];
+  seniority: string[];
+  remote_required: boolean;
+  onsite_locations: string[];
+  languages: string[];
+  salary_floor_usd: number;
+  candidate_years: number;
+  candidate_country: string;
+  acceptable_regions: string[];
+  geo_penalty: number;
+  re_apply_window_days: number;
+  shortlist_threshold: number;
+  [key: string]: unknown;
+};
 export type Interviewer = {
   id: number;
   name: string;
@@ -128,6 +153,8 @@ export type Interview = {
   mode?: string;
   status?: string;
   prep_path?: string;
+  deep_prep_md?: string | null;
+  debrief_md?: string | null;
   interviewers?: Interviewer[];
 };
 export type Learning = {
@@ -162,6 +189,80 @@ export type Peer = {
   source_url?: string;
   notes?: string;
 };
+// F4 §7.1 intents queue — la web SOLO encola ($0); el brain drena la cola y ejecuta el LLM.
+// El status refleja el ciclo de vida server-side (pending → running → done|error).
+export type Intent = {
+  id: string;
+  type: string;
+  job_id?: string | null;
+  payload?: Record<string, unknown>;
+  status: "pending" | "running" | "done" | "error";
+  result_ref?: string | null;
+  error?: string | null;
+  created_at: string;
+  completed_at?: string | null;
+};
+
+// F4 §7.2 cv_review — el reviewer LLM (hiring-manager proxy) devuelve edits mecánicos +
+// crítica en 4 categorías + flags del backtrack test. La web aplica edits uno a uno y resuelve
+// flags keep/soften/drop; TODO el trabajo LLM lo hizo el brain — estos endpoints son deterministas.
+export type CvReviewEdit = {
+  file: string;
+  old_string: string;
+  new_string: string;
+  reason: string;
+  applied?: boolean;
+  applied_ref?: string;
+};
+export type CvReviewFlag = {
+  file: string;
+  bullet: string;
+  classification: "OK" | "Flag" | "Never";
+  reason: string;
+  softened?: string;
+  resolution?: "keep" | "soften" | "drop";
+};
+export type CvReview = {
+  id: number;
+  job_id: string;
+  cv_version_id?: number | null;
+  edits: CvReviewEdit[];
+  critique: Record<string, string[]>;
+  flags: CvReviewFlag[];
+  created_at: string;
+};
+
+// F4 §7.2 upskill_report — análisis de brechas en dos pasadas: (1) diff duro de skills
+// (determinista, engine.upskill.hard_skill_gaps) + (2) síntesis del brain (report_md + heatmap).
+// La web solo LEE el reporte persistido; el trabajo LLM lo hizo el brain offline ($0).
+export type UpskillHeatItem = {
+  skill: string;
+  severity: "Critical" | "High" | "Medium" | "Low";
+  note: string;
+};
+export type UpskillReport = {
+  id: number;
+  report_md: string;
+  heatmap: UpskillHeatItem[];
+  hard_gaps: { skills?: { skill: string; score: number; occurrences: number }[] };
+  created_at: string;
+};
+
+// F4 §7.2 profile_expand — el brain escanea GitHub/portfolio/syllabi de certs y propone
+// ADICIONES al perfil, con fuente anotada. La web lee el borrador y confirma ítem por ítem
+// antes de que nada toque el master CV; apply es determinista ($0 — el escaneo lo hizo el brain).
+export type ProfileExpandItem = {
+  target: "skills" | "experience_highlight" | "project" | "certification";
+  value: unknown;
+  source: string;
+  applied?: boolean;
+};
+export type ProfileExpansion = {
+  id: number;
+  items: ProfileExpandItem[];
+  created_at: string;
+};
+
 export type JobDetail = {
   job: Job;
   cv_versions: CvVersion[];
@@ -170,6 +271,104 @@ export type JobDetail = {
   social_mentions?: SocialMention[];
   learnings?: Learning[];
   timeline: { stage: string; at: string }[];
+};
+
+// F3 §6.5 ops: system health + resolve/add company + reverse discovery.
+export type SystemHealth = {
+  profile: string;
+  db: { path: string; ok: boolean; jobs: number };
+  counts: Record<string, number>;
+  last_run: string | null;
+  last_success: string | null;
+  sources: {
+    source: string;
+    ok: boolean;
+    count: number;
+    run_at: string | null;
+    error: string | null;
+  }[];
+  safeguards: { api_key_unset: boolean; base_url_default: boolean };
+};
+
+export type ResolvedCompany = {
+  resolved: boolean;
+  company: string | null;
+  ats: string | null;
+  token: string | null;
+  preview_jobs_count: number;
+  already_configured: boolean;
+};
+
+export type CompanySuggestion = {
+  company: string;
+  ats: string;
+  token: string;
+  jobs_count: number;
+  matching_titles: string[];
+};
+
+// F3 §6.1 follow-ups: buckets deterministas (urgent/overdue/waiting + cold) con el borrador
+// pegable de cada toque. La web SOLO lee los toques que el engine sembró y confirma el envío
+// ($0, sin LLM). `cold` son jobs con la cadencia agotada — no llevan draft (nada que enviar).
+export type FollowupDraft = { subject: string; body: string };
+export type Followup = {
+  id: number;
+  job_id: string;
+  title?: string | null;
+  company?: string | null;
+  kind?: string | null;
+  touch_number?: number | null;
+  due_at?: string | null;
+  days_overdue?: number | null;
+  draft: FollowupDraft;
+};
+export type ColdJob = {
+  job_id: string;
+  title?: string | null;
+  company?: string | null;
+  applied_at?: string | null;
+  touches_done?: number | null;
+  touches_pending?: number | null;
+};
+export type FollowupBuckets = {
+  urgent: Followup[];
+  overdue: Followup[];
+  waiting: Followup[];
+  cold: ColdJob[];
+};
+
+// F3 §6.2 analytics: composición determinista (funnel con tasas, piso empírico de score,
+// conversión por dimensión, tiempos de respuesta, recomendaciones accionables). $0, sin LLM.
+export type FunnelStage = { stage: string; count: number; rate: number | null };
+export type ConversionRow = {
+  key: string;
+  applied: number;
+  responded: number;
+  interviews: number;
+  offers: number;
+  response_rate: number | null;
+};
+export type ResponseTimes = {
+  n: number;
+  avg_days: number | null;
+  median_days: number | null;
+  p90_days: number | null;
+};
+export type Recommendation = {
+  id: string;
+  text: string;
+  action_type: "set_criteria" | "block_company" | "none";
+  payload: Record<string, unknown>;
+};
+export type Analytics = {
+  funnel: FunnelStage[];
+  score_floor: number | null;
+  by_source: ConversionRow[];
+  by_ats: ConversionRow[];
+  by_remote_policy: ConversionRow[];
+  by_role_term: ConversionRow[];
+  response_times: ResponseTimes;
+  recommendations: Recommendation[];
 };
 
 async function get<T>(url: string): Promise<T> {
@@ -183,6 +382,21 @@ async function post<T>(url: string, body?: unknown): Promise<T> {
     headers: { "Content-Type": "application/json" },
     body: body ? JSON.stringify(body) : undefined,
   });
+  if (!r.ok) throw new Error(`${url} → ${r.status}`);
+  return r.json();
+}
+async function put<T>(url: string, body?: unknown): Promise<T> {
+  const r = await fetch(url, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!r.ok) throw new Error(`${url} → ${r.status}`);
+  return r.json();
+}
+// Multipart upload: never set Content-Type — the browser adds it WITH the boundary.
+async function postForm<T>(url: string, form: FormData): Promise<T> {
+  const r = await fetch(url, { method: "POST", body: form });
   if (!r.ok) throw new Error(`${url} → ${r.status}`);
   return r.json();
 }
@@ -252,6 +466,16 @@ export const api = {
     post<{ ok: boolean; path: string; markdown: string }>(`/api/interview/${interviewId}/prep`, {
       language,
     }),
+  // F4 §7.2 interview_prep_deep: encolar el prep profundo (Audience Map + preguntas citadas +
+  // historias) y guardar el debrief post-entrevista (opcionalmente re-encola el prep). Ninguna
+  // corre un LLM: el brain lo hace offline ($0).
+  enqueueInterviewPrepDeep: (interviewId: number, jobId: string) =>
+    api.enqueueIntent("interview_prep_deep", { interview_id: interviewId }, jobId),
+  interviewDebrief: (interviewId: number, debriefMd: string, reanalyze: boolean) =>
+    post<{ ok: boolean; intent_id: string | null }>(`/api/interview/${interviewId}/debrief`, {
+      debrief_md: debriefMd,
+      reanalyze,
+    }),
   socialMentions: (id: string) =>
     get<{ mentions: SocialMention[] }>(`/api/jobs/${id}/social_mentions`),
   startSocialSearch: (id: string) =>
@@ -267,6 +491,76 @@ export const api = {
   portfolioResearch: () => get<PortfolioResearch>("/api/portfolio/research"),
   peers: () => get<{ peers: Peer[] }>("/api/peers"),
   addPeer: (body: Partial<Peer>) => post<{ ok: boolean; id: number }>("/api/peers", body),
+  // F2: onboarding wizard + hygiene
+  criteria: () => get<{ criteria: CriteriaConfig; prose: string }>("/api/criteria"),
+  saveCriteria: (criteria: CriteriaConfig, prose: string) =>
+    put<{ ok: boolean; path: string }>("/api/criteria", { criteria, prose }),
+  importCv: (file: File) => {
+    const form = new FormData();
+    form.append("file", file);
+    return postForm<{ ok: boolean; draft: string; path: string; chars: number }>(
+      "/api/cv/import",
+      form,
+    );
+  },
+  livenessSweep: () => post<{ started: boolean; running?: boolean }>("/api/liveness/sweep"),
+  // F3 §6.1 follow-ups: leer los buckets (urgent/overdue/waiting/cold) con drafts y confirmar
+  // el envío de un toque (requiere confirm explícito — el backend rechaza sin él). $0, sin LLM.
+  followups: () => get<{ buckets: FollowupBuckets }>("/api/followups"),
+  markFollowupSent: (id: number, confirm = true) =>
+    post<{ ok: boolean; next_id: number | null }>(`/api/followups/${id}/sent`, { confirm }),
+  // F3 §6.2 analytics: leer la composición determinista y aplicar UNA recomendación (edita
+  // criteria.md del perfil activo por el mutator validado). Ninguna llama a un LLM.
+  analytics: () => get<Analytics>("/api/analytics"),
+  applyRec: (rec: Recommendation) =>
+    post<{ ok: boolean; applied: string }>("/api/analytics/apply-rec", {
+      id: rec.id,
+      action_type: rec.action_type,
+      payload: rec.payload,
+    }),
+  // F3 §6.5: expose CLI-only ops (system health, resolve/add company, reverse discovery, import).
+  systemHealth: () => get<SystemHealth>("/api/system/health"),
+  resolveCompany: (url: string) => post<ResolvedCompany>("/api/companies/resolve", { url }),
+  addCompany: (entry: { company: string; ats: string; token?: string | null }) =>
+    post<{ ok: boolean; added: boolean }>("/api/companies/add", entry),
+  suggestCompanies: (names?: string[]) =>
+    post<{ suggestions: CompanySuggestion[] }>("/api/discovery/suggest", { names: names ?? [] }),
+  importConnections: (file: File) => {
+    const form = new FormData();
+    form.append("file", file);
+    return postForm<{ ok: boolean; imported: number }>("/api/connections/import", form);
+  },
+  // F4 §7.1: intents queue. `intents` lista la cola + conteo de pendientes; `enqueueIntent`
+  // escribe una fila `pending` (jamás llama a un LLM — eso lo hace el brain offline, $0).
+  intents: (status?: string) =>
+    get<{ intents: Intent[]; pending: number }>(`/api/intents${status ? `?status=${status}` : ""}`),
+  enqueueIntent: (type: string, payload?: Record<string, unknown>, jobId?: string) =>
+    post<{ ok: boolean; id: string }>("/api/intents", {
+      type,
+      job_id: jobId,
+      payload: payload ?? {},
+    }),
+  // F4 §7.2 cv_review: leer las revisiones de una vacante, aplicar un edit mecánico (re-renderiza
+  // el CV) y resolver un flag (keep/soften/drop). Ninguna llama a un LLM.
+  cvReviews: (jobId: string) => get<{ reviews: CvReview[] }>(`/api/jobs/${jobId}/cv-reviews`),
+  applyCvReviewEdit: (id: number, index: number) =>
+    post<{ ok: boolean; applied_ref?: string }>(`/api/cv-reviews/${id}/apply-edit`, { index }),
+  resolveCvReviewFlag: (id: number, index: number, action: "keep" | "soften" | "drop") =>
+    post<{ ok: boolean; resolution: string }>(`/api/cv-reviews/${id}/resolve-flag`, {
+      index,
+      action,
+    }),
+  // F4 §7.2 upskill_report: lee el último reporte de brechas (read-only, $0 — la síntesis la
+  // hizo el brain offline; la pasada 1 determinista se persiste junto al plan para auditoría).
+  upskillLatest: () => get<{ report: UpskillReport | null }>("/api/upskill/latest"),
+  // F4 §7.2 profile_expand: leer los borradores de expansión del perfil y aplicar SOLO los ítems
+  // confirmados (por índice) al master CV. apply es determinista ($0), aditivo e idempotente.
+  profileExpansions: () => get<{ expansions: ProfileExpansion[] }>("/api/profile-expansions"),
+  applyProfileExpansion: (id: number, indices: number[]) =>
+    post<{ ok: boolean; applied: number; skipped_existing: number }>(
+      `/api/profile-expansions/${id}/apply`,
+      { indices },
+    ),
   exportUrl: (columns?: string[], state?: string) => {
     const p = new URLSearchParams();
     if (columns?.length) p.set("columns", columns.join(","));

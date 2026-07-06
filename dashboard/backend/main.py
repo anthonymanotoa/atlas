@@ -14,15 +14,16 @@ from threading import Lock
 from typing import Literal
 from urllib.parse import urlsplit
 
-from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Request
+from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response
-from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 import engine.paths as paths
-from engine import analytics, profiles
+from engine import analytics, intents, profiles
 from engine.db.models import DB
+from engine.discovery import reverse
+from engine.discovery.registry import resolve_ats
 from engine.normalize import STATES, now_iso
 from engine.paths import REPO_ROOT
 
@@ -129,6 +130,11 @@ class SettingBody(BaseModel):
     value: str
 
 
+class CriteriaBody(BaseModel):
+    criteria: dict
+    prose: str = ""
+
+
 class OutcomeBody(BaseModel):
     final_state: str  # rejected | responded | interviewed | offer | ghosted
     response_days: int | None = None
@@ -187,6 +193,57 @@ class SocialMentionBody(BaseModel):
     post_title: str | None = None
     post_excerpt: str | None = None
     context_type: str | None = None
+
+
+# ── Intents (F4 §7.1): la web encola trabajo LLM; el brain lo drena — nunca la web ──
+class IntentBody(BaseModel):
+    type: str
+    job_id: str | None = None
+    payload: dict = {}
+
+
+class CvReviewPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    language: Literal["en", "es"] | None = None
+
+
+class LegitimacyBatchPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    job_ids: list[str] = Field(min_length=1, max_length=100)
+
+
+class UpskillPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    states: list[str] = ["shortlisted", "tailored", "drafted", "ready", "applied"]
+
+
+class InterviewPrepDeepPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    interview_id: int
+    language: Literal["en", "es"] | None = None
+
+
+class ProfileExpandPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    github_user: str | None = None
+    portfolio_url: str | None = None
+    cert_names: list[str] = []
+
+
+class CoverLetterPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    language: Literal["en", "es"] | None = None
+
+
+PAYLOAD_MODELS: dict[str, type[BaseModel]] = {
+    "cv_review": CvReviewPayload,
+    "legitimacy_batch": LegitimacyBatchPayload,
+    "upskill_report": UpskillPayload,
+    "interview_prep_deep": InterviewPrepDeepPayload,
+    "profile_expand": ProfileExpandPayload,
+    "cover_letter": CoverLetterPayload,
+}
+_JOB_SCOPED_INTENTS = frozenset({"cv_review", "cover_letter"})
 
 
 # ── API ──────────────────────────────────────────────────────────────────────
@@ -262,6 +319,7 @@ def api_job(job_id: str, db: DB = Depends(get_db)):
 
 @app.post("/api/jobs/{job_id}/state", dependencies=[Depends(require_trusted_origin)])
 def api_set_state(job_id: str, body: StateBody, db: DB = Depends(get_db)):
+    from engine.config import load_criteria
     from engine.outreach import followups
 
     if body.state not in STATES:
@@ -269,20 +327,25 @@ def api_set_state(job_id: str, body: StateBody, db: DB = Depends(get_db)):
     if not db.get_job(job_id):
         raise HTTPException(404, "job not found")
     db.set_state(job_id, body.state, {"via": "dashboard"})
-    # Drive the reply-aware cadence off the same transitions the user makes on the board.
     if body.state == "applied":
-        followups.schedule(db, job_id, channel="email")
-    elif body.state == "responded":
+        db.snapshot_posting(job_id)  # archive the posting as evidence (F2)
+    # Cadencia v2 (F3 §6.1): applied/responded/interview siembran su follow-up; responded
+    # además cancela los pendientes (nunca insistir tras una respuesta — regla plan 006).
+    if body.state == "responded":
         followups.register_reply(db, job_id)  # cancel pending touches — never pester after a reply
+    if body.state in followups.CADENCE_STATES:
+        followups.seed_for_state(db, job_id, body.state, load_criteria())
     return {"ok": True, "state": body.state}
 
 
 @app.post("/api/jobs/{job_id}/applied", dependencies=[Depends(require_trusted_origin)])
 def api_mark_applied(job_id: str, db: DB = Depends(get_db)):
+    from engine.config import load_criteria
     from engine.outreach import followups
 
     db.set_state(job_id, "applied", {"via": "dashboard"})
-    followups.schedule(db, job_id, channel="email")  # start the Day 3/7/14 + breakup cadence
+    db.snapshot_posting(job_id)  # archive the posting as evidence (F2)
+    followups.seed_for_state(db, job_id, "applied", load_criteria())  # +7d, máx 2 → cold
     return {"ok": True}
 
 
@@ -310,6 +373,181 @@ def api_mark_sent(message_id: int, db: DB = Depends(get_db)):
         "UPDATE messages SET state='sent', sent_at=? WHERE id=?", (now_iso(), message_id)
     )
     db.conn.commit()
+    return {"ok": True}
+
+
+# ── Follow-ups v2 (F3 §6.1): buckets + confirmación humana de envío ───────────
+class FollowupSentBody(BaseModel):
+    confirm: bool = False
+
+
+@app.get("/api/followups")
+def api_followups(db: DB = Depends(get_db)):
+    from datetime import UTC, datetime
+
+    from engine.config import default_language, load_criteria, load_master_cv
+    from engine.outreach import followups as fu
+
+    criteria = load_criteria()
+    candidate = (load_master_cv().get("basics") or {}).get("name", "")
+    language = default_language()
+    highlight = criteria.core_keywords[0] if criteria.core_keywords else ""
+    buckets = fu.bucket_followups(db.pending_followups(), datetime.now(UTC))
+    out: dict[str, list[dict]] = {}
+    for name, rows in buckets.items():
+        items = []
+        for f in rows:
+            d = fu.draft_followup(
+                {"company": f.get("company"), "title": f.get("title")},
+                candidate,
+                f.get("kind") or "applied",
+                f.get("touch_number") or 1,
+                language=language,
+                highlight=highlight,
+            )
+            items.append(
+                {
+                    "id": f["id"],
+                    "job_id": f["job_id"],
+                    "title": f.get("title"),
+                    "company": f.get("company"),
+                    "kind": f.get("kind"),
+                    "touch_number": f.get("touch_number"),
+                    "due_at": f.get("due_at"),
+                    "days_overdue": f.get("days_overdue"),
+                    "draft": {"subject": d.subject, "body": d.body},
+                }
+            )
+        out[name] = items
+    out["cold"] = fu.cold_jobs(db, criteria)
+    return {"buckets": out}
+
+
+@app.post("/api/followups/{followup_id}/sent", dependencies=[Depends(require_trusted_origin)])
+def api_followup_sent(followup_id: int, body: FollowupSentBody, db: DB = Depends(get_db)):
+    """Registro de envío SOLO con confirmación explícita del usuario (§6.1)."""
+    from engine.config import load_criteria
+    from engine.outreach import followups as fu
+
+    if not body.confirm:
+        raise HTTPException(400, "confirmación explícita requerida (confirm: true)")
+    res = fu.register_sent(db, followup_id, load_criteria())
+    if not res["ok"]:
+        raise HTTPException(404, "followup not found")
+    return res
+
+
+# ── Analytics + loop de aprendizaje (F3 §6.2) ─────────────────────────────────
+# GET expone funnel/score_floor/conversiones/tiempos/recomendaciones (determinista, $0).
+# apply-rec cierra el loop: aplica UNA recomendación editando criteria.md por el mutator
+# validado (update_criteria_fields → sólo el frontmatter del perfil activo, gitignorado,
+# nunca el .example). Allowlist de campos: un rec jamás toca roles/deal_breakers/etc.
+APPLY_REC_CRITERIA_FIELDS = frozenset({"shortlist_threshold"})
+
+
+class RecBody(BaseModel):
+    id: str
+    action_type: str
+    payload: dict = {}
+
+
+@app.get("/api/analytics")
+def api_analytics(db: DB = Depends(get_db)):
+    from engine.config import load_criteria
+
+    return analytics.analytics_payload(db, load_criteria())
+
+
+@app.post("/api/analytics/apply-rec", dependencies=[Depends(require_trusted_origin)])
+def api_apply_rec(body: RecBody):
+    from engine.config import load_criteria, update_criteria_fields
+
+    if body.action_type == "set_criteria":
+        from pydantic import ValidationError
+
+        field, value = body.payload.get("field"), body.payload.get("value")
+        if field not in APPLY_REC_CRITERIA_FIELDS:
+            raise HTTPException(400, f"campo no aplicable por rec: {field}")
+        try:
+            update_criteria_fields({field: value})
+        except (ValueError, ValidationError):
+            raise HTTPException(400, f"valor inválido para {field}: {value!r}") from None
+        return {"ok": True, "applied": f"{field}={value}"}
+    if body.action_type == "block_company":
+        company = str(body.payload.get("company") or "").strip()
+        if not company:
+            raise HTTPException(400, "payload.company requerido")
+        current = load_criteria().company_blocklist
+        if company not in current:
+            update_criteria_fields({"company_blocklist": [*current, company]})
+        return {"ok": True, "applied": f"blocked:{company}"}
+    raise HTTPException(400, f"action_type no soportado: {body.action_type}")
+
+
+# ── Story bank STAR+R (F3 §6.3) ───────────────────────────────────────────────
+# CRUD sobre el banco de historias + un matcher determinista. El matcher rankea las
+# historias por solape (skills 3x + tokens) contra la query, canonicalizando ambos lados
+# con la ontología del perfil (engine.stories.match_stories), y devuelve el bloque STAR+R
+# ya formateado y pegable (format_story). $0: sin red ni LLM.
+class StoryBody(BaseModel):
+    title: str
+    situation: str = ""
+    task: str = ""
+    action: str = ""
+    result: str = ""
+    reflection: str = ""
+    skills: list[str] = []
+
+
+class StoryPatchBody(BaseModel):
+    title: str | None = None
+    situation: str | None = None
+    task: str | None = None
+    action: str | None = None
+    result: str | None = None
+    reflection: str | None = None
+    skills: list[str] | None = None
+
+
+@app.get("/api/stories")
+def api_stories(db: DB = Depends(get_db)):
+    return {"stories": db.list_stories()}  # skills ya parseado a list[str] por el helper
+
+
+@app.get("/api/stories/match")
+def api_match_stories(q: str = "", db: DB = Depends(get_db)):
+    """Historias rankeadas por relevancia a la query, con su bloque STAR+R pegable (top 5)."""
+    from engine.config import load_ontology
+    from engine.stories import format_story, match_stories
+
+    ranked = match_stories(db.list_stories(), q, load_ontology())[:5]
+    return {
+        "matches": [
+            {"story": s, "score": score, "formatted": format_story(s)} for s, score in ranked
+        ]
+    }
+
+
+@app.post("/api/stories", dependencies=[Depends(require_trusted_origin)])
+def api_add_story(body: StoryBody, db: DB = Depends(get_db)):
+    sid = db.add_story(**body.model_dump())
+    return {"ok": True, "id": sid}
+
+
+@app.put("/api/stories/{story_id}", dependencies=[Depends(require_trusted_origin)])
+def api_update_story(story_id: int, body: StoryPatchBody, db: DB = Depends(get_db)):
+    # Solo campos presentes (parche); id desconocido → 404 limpio, nunca un no-op silencioso.
+    fields = {k: v for k, v in body.model_dump().items() if v is not None}
+    if not db.get_story(story_id):
+        raise HTTPException(404, "story not found")
+    db.update_story(story_id, fields)
+    return {"ok": True}
+
+
+@app.delete("/api/stories/{story_id}", dependencies=[Depends(require_trusted_origin)])
+def api_delete_story(story_id: int, db: DB = Depends(get_db)):
+    if not db.delete_story(story_id):  # rowcount 0 → id desconocido
+        raise HTTPException(404, "story not found")
     return {"ok": True}
 
 
@@ -390,6 +628,200 @@ def api_discover(background: BackgroundTasks, only: str | None = None):
 def api_discover_status():
     with _DISCOVER_LOCK:
         return {"running": _discovering}
+
+
+# ── Intents queue (F4 §7.1) — la web SOLO encola; el brain drena y ejecuta el LLM ──
+# $0 INVARIANT: estos endpoints jamás llaman a una API LLM. POST escribe una fila `pending`
+# en `intents` (via engine.intents.enqueue) tras validar type + payload por tipo + existencia
+# de las entidades referenciadas; el brain la ejecuta después con brain/prompts/<type>.md.
+@app.post("/api/intents", dependencies=[Depends(require_trusted_origin)])
+def api_enqueue_intent(body: IntentBody, db: DB = Depends(get_db)):
+    """Encola trabajo LLM para el brain. Valida type + payload por tipo; NUNCA ejecuta LLM."""
+    model = PAYLOAD_MODELS.get(body.type)
+    if model is None:
+        raise HTTPException(400, f"unknown intent type; allowed: {sorted(PAYLOAD_MODELS)}")
+    try:
+        payload = model.model_validate(body.payload).model_dump()
+    except ValidationError as e:
+        first = e.errors()[0]
+        raise HTTPException(
+            400, f"invalid payload for {body.type}: {first['loc']}: {first['msg']}"
+        ) from None
+    if body.type in _JOB_SCOPED_INTENTS and (not body.job_id or not db.get_job(body.job_id)):
+        raise HTTPException(404, "job not found")
+    if body.type == "legitimacy_batch":
+        missing = [j for j in payload["job_ids"] if not db.get_job(j)]
+        if missing:
+            raise HTTPException(404, f"unknown job ids: {missing[:3]}")
+    if body.type == "upskill_report":
+        bad = [s for s in payload["states"] if s not in STATES]
+        if bad:
+            raise HTTPException(400, f"invalid states: {bad}")
+    if body.type == "interview_prep_deep":
+        iv = db.get_interview(payload["interview_id"])
+        if not iv:
+            raise HTTPException(404, "interview not found")
+        body.job_id = iv["job_id"]  # liga el intent a su vacante para el panel
+    iid = intents.enqueue(db, body.type, payload, job_id=body.job_id)
+    return {"ok": True, "id": iid}
+
+
+@app.get("/api/intents")
+def api_list_intents(status: str | None = None, db: DB = Depends(get_db)):
+    if status is not None and status not in intents.INTENT_STATUSES:
+        raise HTTPException(400, f"invalid status; allowed: {intents.INTENT_STATUSES}")
+    return {
+        "intents": intents.list_intents(db, status=status),
+        "pending": intents.count_pending(db),
+    }
+
+
+@app.get("/api/intents/{intent_id}")
+def api_get_intent(intent_id: str, db: DB = Depends(get_db)):
+    row = intents.get_intent(db, intent_id)
+    if not row:
+        raise HTTPException(404, "intent not found")
+    return row
+
+
+# ── upskill reports (F4 §7.2): the /upskill view reads the latest gap report. ──
+# Read-only ($0): pass 1 (hard_gaps) is deterministic and pass 2 (the study plan) was written
+# by the brain offline; these endpoints only surface the persisted row.
+@app.get("/api/upskill/latest")
+def api_upskill_latest(db: DB = Depends(get_db)):
+    return {"report": db.latest_upskill_report()}
+
+
+@app.get("/api/upskill/{report_id}")
+def api_upskill_report(report_id: int, db: DB = Depends(get_db)):
+    row = db.get_upskill_report(report_id)
+    if not row:
+        raise HTTPException(404, "upskill report not found")
+    return row
+
+
+# ── profile expansions (F4 §7.2): additive, source-annotated CV enrichment ─────
+# GET surfaces the brain's DRAFT proposals (latest first); apply writes ONLY the confirmed item
+# indices to the (gitignored) master CV via engine.profile_expand.apply_items. Deterministic
+# ($0): no LLM here — the scan was the brain offline. apply is additive + idempotent and never
+# clobbers existing CV content, so the origin-guarded POST is the sole confirmation gate.
+class ApplyExpansionBody(BaseModel):
+    indices: list[int]
+
+
+@app.get("/api/profile-expansions")
+def api_profile_expansions(db: DB = Depends(get_db)):
+    return {"expansions": db.list_profile_expansions()}
+
+
+@app.post(
+    "/api/profile-expansions/{exp_id}/apply",
+    dependencies=[Depends(require_trusted_origin)],
+)
+def api_apply_expansion(exp_id: int, body: ApplyExpansionBody, db: DB = Depends(get_db)):
+    from engine.profile_expand import apply_items
+
+    if not db.get_profile_expansion(exp_id):
+        raise HTTPException(404, "expansion not found")
+    try:
+        return apply_items(exp_id, body.indices)
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from None
+
+
+# ── cv_reviews (F4 §7.2): read a job's reviews + apply edits / resolve flags ───
+# apply-edit and resolve-flag are DETERMINISTIC ($0): no LLM. They replay a structured
+# edit the brain already produced onto the tailored CV / message body and re-render.
+# A non-matching / out-of-range request FAILS gracefully as a 400, never a 500.
+class EditIndexBody(BaseModel):
+    index: int
+
+
+class FlagResolveBody(BaseModel):
+    index: int
+    action: Literal["keep", "soften", "drop"]
+
+
+@app.get("/api/jobs/{job_id}/cv-reviews")
+def api_cv_reviews(job_id: str, db: DB = Depends(get_db)):
+    if not db.get_job(job_id):
+        raise HTTPException(404, "job not found")
+    return {"reviews": db.cv_reviews_for(job_id)}
+
+
+@app.post(
+    "/api/cv-reviews/{review_id}/apply-edit",
+    dependencies=[Depends(require_trusted_origin)],
+)
+def api_apply_cv_edit(review_id: int, body: EditIndexBody, db: DB = Depends(get_db)):
+    from engine.cv.review import apply_edit
+
+    try:
+        return apply_edit(db, review_id, body.index)
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from None
+
+
+@app.post(
+    "/api/cv-reviews/{review_id}/resolve-flag",
+    dependencies=[Depends(require_trusted_origin)],
+)
+def api_resolve_cv_flag(review_id: int, body: FlagResolveBody, db: DB = Depends(get_db)):
+    from engine.cv.review import resolve_flag
+
+    try:
+        return resolve_flag(db, review_id, body.index, body.action)
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from None
+
+
+# ── Liveness sweep (F2 hygiene) — same fire-and-forget model as /api/discover ─
+# Expire dead postings (404/410/tombstone) on demand. Deterministic HTTP-only
+# checks (engine.discovery.liveness — no LLM, no key), so still $0. Like the
+# discover task, the background worker opens its OWN short-lived `with DB()`
+# connection: a sweep does N paced network calls and must never hold the API lock.
+_LIVENESS_LOCK = Lock()
+_liveness_running = False
+
+
+def _run_liveness_sweep(limit: int, profile_id: str | None) -> None:
+    global _liveness_running
+    try:
+        from engine.discovery.liveness import sweep_liveness
+
+        # Re-pin the profile captured at enqueue time so a concurrent dashboard
+        # switch can't make this run land in another profile's DB.
+        if profile_id is not None:
+            paths.set_profile(profile_id)
+        with DB() as db:  # own connection — never holds the API lock on network
+            sweep_liveness(db, limit=limit)
+    except Exception as e:  # noqa: BLE001 — record the failure instead of dropping it silently
+        try:
+            with DB() as db:
+                db.log_event(None, "error", {"stage": "liveness_bg", "error": str(e)[:200]})
+        except Exception:  # noqa: BLE001
+            pass
+    finally:
+        with _LIVENESS_LOCK:
+            _liveness_running = False
+
+
+@app.post("/api/liveness/sweep", dependencies=[Depends(require_trusted_origin)])
+def api_liveness_sweep(background: BackgroundTasks, limit: int = 40):
+    """Expire dead postings (404/410/tombstone) in the background. One sweep at a time."""
+    global _liveness_running
+    with _LIVENESS_LOCK:
+        if _liveness_running:
+            return {"started": False, "running": True}
+        _liveness_running = True
+    background.add_task(_run_liveness_sweep, max(1, min(int(limit), 200)), paths.PROFILE_ID)
+    return {"started": True}
+
+
+@app.get("/api/liveness/status")
+def api_liveness_status():
+    with _LIVENESS_LOCK:
+        return {"running": _liveness_running}
 
 
 @app.get("/api/brief")
@@ -484,9 +916,207 @@ def api_cv_library(
     return {"dir": str(d), "count": len(files), "files": files}
 
 
+@app.post("/api/cv/import", dependencies=[Depends(require_trusted_origin)])
+async def api_cv_import(file: UploadFile):
+    """Extract an uploaded CV (PDF/DOCX) into a reviewable master_cv DRAFT (F2 wizard).
+
+    Deterministic text extraction only (engine/cv/import_cv.py) — never invents structure
+    and NEVER touches master_cv.yaml; the human + Cowork map the draft afterwards. The
+    upload and the draft live only in the profile's gitignored dirs (repo is public).
+    """
+    from engine.cv.import_cv import SUPPORTED, build_draft, extract_text
+
+    suffix = Path(file.filename or "").suffix.lower()
+    if suffix not in SUPPORTED:
+        raise HTTPException(400, f"formato no soportado {suffix!r}; usa PDF o DOCX")
+    paths.ensure_dirs()
+    dest = paths.INBOX_DIR / f"cv_import{suffix}"
+    dest.write_bytes(await file.read())
+    # A malformed/corrupt PDF/DOCX must fail as a clean 400, never a 500: extract_text can raise
+    # ValueError (unsupported) but the parsers (python-docx/pdfplumber) raise their own exceptions
+    # on garbage bytes, so catch broadly and translate every extraction failure into a 400.
+    try:
+        text = extract_text(dest)
+    except Exception as e:  # noqa: BLE001 — graceful for the user; the message stays generic
+        raise HTTPException(
+            400, f"no se pudo leer el archivo ({type(e).__name__}); ¿PDF/DOCX válido?"
+        ) from None
+    if not text.strip():
+        raise HTTPException(
+            400, "no se pudo extraer texto (¿PDF escaneado/solo imagen?) — prueba otro archivo"
+        )
+    draft = build_draft(text, domain=profiles.domain_of(paths.PROFILE_ID))
+    draft_path = paths.MASTER_CV_PATH.parent / "master_cv.draft.yaml"
+    draft_path.parent.mkdir(parents=True, exist_ok=True)
+    draft_path.write_text(draft)
+    return {"ok": True, "draft": draft, "path": str(draft_path), "chars": len(text)}
+
+
 @app.get("/api/health")
 def health():
     return {"ok": True}
+
+
+def _probe_company_jobs(ats: str, token: str) -> tuple[int, str | None]:
+    """Cuenta posiciones del board recién resuelto (preview de confirmación). Nunca lanza:
+    si el board no responde devuelve (0, None) — la resolución del ATS ya fue exitosa."""
+    from engine.discovery import reverse as _rev
+    from engine.discovery.http import get_json, make_client
+
+    urls = {
+        "greenhouse": _rev.GREENHOUSE_URL.format(token=token),
+        "lever": _rev.LEVER_URL.format(token=token),
+        "ashby": _rev.ASHBY_URL.format(token=token),
+    }
+    url = urls.get(ats)
+    if not url:
+        return 0, None
+    client = make_client(timeout=10)
+    try:
+        data = get_json(client, url, retries=0)
+        titles = [t for t in _rev._titles(ats, data) if t]
+        return len(titles), None
+    except Exception:  # noqa: BLE001 — preview only; a dead board must not break resolution
+        return 0, None
+    finally:
+        client.close()
+
+
+# ── Exponer CLI-only en la web (F3 §6.5): resolve/add company, suggest, connections, health ──
+class ResolveBody(BaseModel):
+    url: str
+
+
+class CompanyEntryBody(BaseModel):
+    # company/ats are optional HERE (not on CompanyTarget) so a bad payload reaches the handler
+    # and fails as a clean 400 via save_company's CompanyTarget validation — never a 422 shape
+    # error (the contract: add → 400 si la entrada no valida CompanyTarget).
+    company: str = ""
+    ats: str = ""
+    token: str | None = None
+    eu: bool = False
+    instance: str | None = None
+    careers_url: str | None = None
+
+
+class SuggestBody(BaseModel):
+    names: list[str] = []
+
+
+@app.post("/api/companies/resolve", dependencies=[Depends(require_trusted_origin)])
+def api_resolve_company(body: ResolveBody, db: DB = Depends(get_db)):
+    """resolve-ats en la web: detecta el ATS de una URL de carreras y previsualiza el board."""
+    from engine.config import load_companies
+    from engine.normalize import norm_company
+
+    url = (body.url or "").strip()
+    if not url:
+        raise HTTPException(400, "url requerida")
+    contract = resolve_ats(url)  # None si no hay ATS conocido — NO es un error
+    if not contract:
+        return {
+            "resolved": False,
+            "company": None,
+            "ats": None,
+            "token": None,
+            "preview_jobs_count": 0,
+            "already_configured": False,
+        }
+    token = contract.get("token") or ""
+    count, company_name = _probe_company_jobs(contract["ats"], token)
+    # Nombre sugerido: el que reporte el board, o derivado del host de la URL.
+    name = company_name or (urlsplit(url).hostname or "").split(".")[0].title() or token
+    known = {norm_company(c.company) for c in load_companies()}
+    return {
+        "resolved": True,
+        "company": name,
+        "ats": contract["ats"],
+        "token": token,
+        "preview_jobs_count": count,
+        "already_configured": norm_company(name) in known,
+    }
+
+
+@app.post("/api/companies/add", dependencies=[Depends(require_trusted_origin)])
+def api_add_company(body: CompanyEntryBody):
+    """Añade la empresa confirmada a companies.yaml del perfil activo (append idempotente)."""
+    from engine.config import save_company
+
+    entry = {k: v for k, v in body.model_dump().items() if v not in (None, "", False)}
+    try:
+        added = save_company(entry)
+    except Exception as e:  # noqa: BLE001 — pydantic ValidationError de CompanyTarget → 400 limpio
+        raise HTTPException(400, f"empresa inválida: {e}") from None
+    return {"ok": True, "added": added}
+
+
+@app.post("/api/discovery/suggest", dependencies=[Depends(require_trusted_origin)])
+def api_suggest_companies(body: SuggestBody):
+    """Reverse ATS discovery: nombres (o las seeds del perfil) → empresas que matchean el perfil."""
+    from engine.config import load_criteria, load_discovery_seeds
+
+    names = [n.strip() for n in (body.names or []) if n and n.strip()] or load_discovery_seeds()
+    suggestions = reverse.suggest_companies(names, load_criteria())
+    return {"suggestions": suggestions}
+
+
+@app.post("/api/connections/import", dependencies=[Depends(require_trusted_origin)])
+async def api_import_connections(file: UploadFile, db: DB = Depends(get_db)):
+    """Upload de LinkedIn Connections.csv → import_connections_csv (referral detection).
+
+    Bare `UploadFile` (no `File(...)` default) mirrors /api/cv/import and keeps the endpoint
+    within the project's ruff B008 policy without whitelisting `fastapi.File`."""
+    import tempfile
+
+    from engine.referrals.connections import import_connections_csv
+
+    raw = await file.read()
+    with tempfile.NamedTemporaryFile("wb", suffix=".csv", delete=False) as tmp:
+        tmp.write(raw)
+        tmp_path = Path(tmp.name)
+    try:
+        imported = import_connections_csv(db, tmp_path)
+    except Exception as e:  # noqa: BLE001 — CSV ilegible → 400 limpio (como F2 cv/import)
+        raise HTTPException(400, f"CSV ilegible: {e}") from None
+    finally:
+        tmp_path.unlink(missing_ok=True)
+    return {"ok": True, "imported": imported}
+
+
+@app.get("/api/system/health")
+def api_system_health(db: DB = Depends(get_db)):
+    """Consolida `atlas status` (counts, source health, last run) + `atlas doctor` (safeguards $0)."""
+    counts = db.counts_by_state()
+    health = db.latest_source_health()
+    api_key = os.environ.get("ANTHROPIC_API_KEY")
+    base_url = os.environ.get("ANTHROPIC_BASE_URL")
+    default_base = base_url in (None, "", "https://api.anthropic.com", "https://api.anthropic.com/")
+    return {
+        "profile": paths.PROFILE_ID or "legacy",
+        "db": {
+            "path": str(paths.DB_PATH),
+            "ok": True,
+            "jobs": sum(counts.values()),
+        },
+        "counts": counts,
+        "last_run": db.meta_get("last_run"),
+        # canonical heartbeat key (engine writes/reads "last_success_ts"; see engine.heartbeat).
+        "last_success": db.meta_get("last_success_ts"),
+        "sources": [
+            {
+                "source": h["source"],
+                "ok": bool(h["ok"]),
+                "count": h["count"],
+                "run_at": h.get("run_at"),
+                "error": h.get("error"),
+            }
+            for h in health
+        ],
+        "safeguards": {
+            "api_key_unset": not api_key,
+            "base_url_default": bool(default_base),
+        },
+    }
 
 
 # ── Settings + CSV export (P1-B) ──────────────────────────────────────────────
@@ -523,6 +1153,31 @@ def api_csv_columns(db: DB = Depends(get_db)):
         "available": export.available_columns(),
         "selected": export.resolve_columns(None, db.meta_get("csv_columns")),
     }
+
+
+# ── Criteria (F2 wizard): read/write the active profile's criteria.md frontmatter ─
+@app.get("/api/criteria")
+def api_get_criteria():
+    from engine.config import load_criteria
+
+    c = load_criteria()
+    return {"criteria": c.model_dump(exclude={"prose"}), "prose": c.prose}
+
+
+@app.put("/api/criteria", dependencies=[Depends(require_trusted_origin)])
+def api_put_criteria(body: CriteriaBody):
+    from pydantic import ValidationError
+
+    from engine.config import Criteria, save_criteria
+
+    # Validate BEFORE touching the file: an invalid payload must 422 and leave the
+    # existing criteria.md untouched (never half-write a corrupt file).
+    try:
+        c = Criteria(**{**body.criteria, "prose": body.prose})
+    except ValidationError as e:
+        raise HTTPException(422, str(e)) from None
+    path = save_criteria(c)
+    return {"ok": True, "path": str(path)}
 
 
 @app.get("/api/export")
@@ -701,6 +1356,30 @@ def api_interview_prep(interview_id: int, body: PrepLangBody, db: DB = Depends(g
     return {"ok": True, "path": str(path), "markdown": path.read_text()}
 
 
+class DebriefBody(BaseModel):
+    debrief_md: str
+    reanalyze: bool = False
+
+
+@app.post("/api/interview/{interview_id}/debrief", dependencies=[Depends(require_trusted_origin)])
+def api_interview_debrief(interview_id: int, body: DebriefBody, db: DB = Depends(get_db)):
+    """Save the candidate's post-interview debrief and, if `reanalyze`, re-enqueue an
+    interview_prep_deep intent for a follow-up analysis. No LLM here ($0): the brain runs it
+    offline. The debrief feeds the next prep (it lands in that intent's context)."""
+    iv = db.get_interview(interview_id)
+    if not iv:
+        raise HTTPException(404, "interview not found")
+    if not body.debrief_md.strip():
+        raise HTTPException(400, "debrief_md must not be empty")
+    db.set_interview_debrief(interview_id, body.debrief_md.strip())
+    intent_id = None
+    if body.reanalyze:
+        intent_id = intents.enqueue(
+            db, "interview_prep_deep", {"interview_id": interview_id}, job_id=iv["job_id"]
+        )
+    return {"ok": True, "intent_id": intent_id}
+
+
 # ── Social signal (P2-C): supervised LinkedIn/X lookup — never auto-contacts ──
 @app.get("/api/jobs/{job_id}/social_mentions")
 def api_social_mentions(job_id: str, db: DB = Depends(get_db)):
@@ -829,8 +1508,25 @@ def api_switch_profile(body: ProfileBody):
     return {"ok": True, "active": body.id}
 
 
-# ── Serve the built frontend (if present) ────────────────────────────────────
-# Mounted LAST so it never shadows the /api/* routes.
+# ── Serve the built frontend (SPA) ───────────────────────────────────────────
+# Catch-all definido AL FINAL para no sombrear /api/*. Sirve archivos reales del
+# build cuando existen y hace fallback a index.html para las rutas del router
+# (deep links /pipeline, /jobs/:id, …). Lee _DIST en call-time (testeable).
 _DIST = REPO_ROOT / "dashboard" / "frontend" / "dist"
-if _DIST.exists():
-    app.mount("/", StaticFiles(directory=str(_DIST), html=True), name="static")
+
+
+@app.get("/{full_path:path}", include_in_schema=False)
+def spa(full_path: str) -> FileResponse:
+    if full_path.split("/", 1)[0] == "api":
+        raise HTTPException(status_code=404, detail="Not found")
+    if full_path:
+        candidate = (_DIST / full_path).resolve()
+        if candidate.is_file() and candidate.is_relative_to(_DIST.resolve()):
+            return FileResponse(str(candidate))
+    index = _DIST / "index.html"
+    if not index.is_file():
+        raise HTTPException(
+            status_code=404,
+            detail="Frontend no compilado — corre scripts/run.sh (o npm run build).",
+        )
+    return FileResponse(str(index))

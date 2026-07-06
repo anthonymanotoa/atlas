@@ -19,8 +19,10 @@ from datetime import UTC, datetime
 
 import engine.paths as paths
 from engine import heartbeat
-from engine.config import load_criteria, load_master_cv
+from engine import intents as intent_queue
+from engine.config import load_criteria, load_cv_layout, load_master_cv
 from engine.cv.build import build_for_job
+from engine.cv.pdf_check import check_page_count
 from engine.db.models import DB
 from engine.discovery.runner import discover
 from engine.learning.runner import auto_learn_all
@@ -38,6 +40,7 @@ def run(db: DB, *, limit: int = 8, language: str = "en", do_discover: bool = Tru
         "shortlisted": 0,
         "prepared": [],
         "prepare_errors": [],
+        "pdf_checks": [],
         "followups": 0,
         "downtime_hours": None,
     }
@@ -67,9 +70,23 @@ def run(db: DB, *, limit: int = 8, language: str = "en", do_discover: bool = Tru
             summary["prepare_errors"].append({"id": j["id"], "error": str(e)[:200]})
             db.log_event(j["id"], "error", {"stage": "prepare", "error": str(e)[:200]})
 
+    # F4 §7.2 — deterministic half of the visual PDF check. Count pages for every CV we
+    # prepared today so the brain (SKILL step 4) knows which PDFs to open and fix. The
+    # non-deterministic half (orphaned headings, mixed fonts) is the brain reading the PDF.
+    max_pages = int(load_cv_layout().get("max_pages") or 2)
+    for prep in summary["prepared"]:
+        versions = db.cv_versions_for(prep["id"])
+        pdf = versions[0].get("path_pdf") if versions else None
+        if not pdf:
+            continue
+        chk = check_page_count(pdf, max_pages=max_pages)
+        summary["pdf_checks"].append({"job_id": prep["id"], "pdf_path": pdf, **chk})
+
     # Due follow-ups → draft (never send), then mark done.
     candidate = {"name": (load_master_cv().get("basics", {}) or {}).get("name", "")}
     for f in db.due_followups(now_iso()):
+        if f.get("kind"):
+            continue  # v2 (F3): los toques por estado se confirman a mano en /followups — nunca auto-draftar
         job = db.get_job(f["job_id"])
         if not job:
             db.mark_followup(f["id"], "cancelled")
@@ -94,6 +111,13 @@ def run(db: DB, *, limit: int = 8, language: str = "en", do_discover: bool = Tru
     # Refresh per-company learnings from any HUMAN-confirmed outcomes (P2-D). The brain
     # never fabricates outcomes — it only rolls up what the user recorded via form/CLI.
     summary["learnings"] = auto_learn_all(db)
+
+    # F4 paso 0 (parte determinista): reportar la cola. El drenaje REAL lo hace la sesión
+    # de Claude que invoca esto (SKILL.md paso 0) — aquí solo se hace visible lo pendiente.
+    summary["intents_pending"] = [
+        {"id": i["id"], "type": i["type"], "job_id": i["job_id"]}
+        for i in intent_queue.list_pending(db)
+    ]
 
     summary["downtime_hours"] = heartbeat.downtime_hours(db)
     heartbeat.beat(db)
@@ -145,10 +169,21 @@ def write_morning_brief(db: DB, summary: dict, language: str = "en") -> None:
     if summary.get("prepare_errors"):
         lines += ["", "## ⚠️ Errores al preparar"]
         lines += [f"- {e['id']}: {e['error']}" for e in summary["prepare_errors"]]
+    bad_pdfs = [c for c in summary.get("pdf_checks", []) if not c["ok"]]
+    if bad_pdfs:
+        lines += ["", "## ⚠︎ CVs que exceden el límite de páginas (arréglalos antes de enviar)"]
+        lines += [f"- {c['job_id']}: {c['reason']}" for c in bad_pdfs]
     health = [h for h in db.latest_source_health() if not h["ok"]]
     if health:
         lines += ["", "## ⚠️ Fuentes con problemas"]
         lines += [f"- {h['source']}: {(h['error'] or '')[:80]}" for h in health]
+    pend = summary.get("intents_pending") or []
+    if pend:
+        lines += ["", "## 🤖 Tareas del Brain en cola (pídele a Claude: `corre atlas`)"]
+        lines += [
+            f"- `{p['id']}` · {p['type']}" + (f" · job {p['job_id']}" if p["job_id"] else "")
+            for p in pend
+        ]
     (paths.OUTBOX_DIR / "MORNING_BRIEF.md").write_text("\n".join(lines))
 
 

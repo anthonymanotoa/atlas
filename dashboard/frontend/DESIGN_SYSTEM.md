@@ -1,165 +1,124 @@
-# Atlas Design System — "Warm Editorial"
+# Atlas Design System v2
 
-This is the binding visual spec for the Atlas dashboard (`dashboard/frontend/`). **Every UI change
-must follow it.** It is enforced two ways: the canonical tokens/primitives live in code
-(`src/index.css` + `src/components/ui/*`), and a Claude skill
-(`.claude/skills/atlas-design-system/`) + `components.json` route AI changes back here.
+Spec visual vinculante del dashboard (`dashboard/frontend/`). **Todo cambio de UI la sigue.**
+Se aplica en dos capas: tokens/primitivos canónicos en código (`src/index.css` +
+`src/components/ui/*`) y el skill `.claude/skills/atlas-design-system/` que trae los cambios
+de IA de vuelta aquí. La dirección estética, paleta y tipografía nacen de
+`docs/superpowers/specs/2026-07-04-atlas-v2-visual-language.md` (mockups aprobados).
 
-> **Golden rule:** compose from `src/components/ui/*` primitives and the semantic tokens below.
-> Don't hand-roll buttons/inputs/badges or hardcode hex colors.
+> **Regla de oro:** componer desde `src/components/ui/*` y los tokens semánticos.
+> Nada de botones/inputs/badges a mano ni colores hex.
 
----
+## 1. Filosofía
 
-## 1. Philosophy
+**Meridian** invierte la personalidad del anterior sistema v1 ("Warm Editorial"):
 
-Warm, editorial, crafted — not neon. A warm charcoal/ink canvas with a soft amber aurora,
-amber→terracotta accent, hairline-bordered surfaces, generous spacing, Geist typography with
-tabular numerals, soft elevation, and tasteful motion. References: Linear/Vercel/Mercury calm,
-recolored warm. Dark-first; a warm-paper light theme is a first-class peer.
+- **Neutral frío** (slate/ink con matiz azulado) en vez de charcoal cálido — sin aurora, fondo
+  plano.
+- **Un solo acento de marca confiado**: un azul-índigo ("signal blue"), no ámbar/terracota.
+  El ámbar sobrevive solo como color **funcional** de warning (nunca como identidad).
+- **Tipografía nueva por completo**: Space Grotesk (geométrica, con carácter) + JetBrains Mono
+  — se abandona Geist/Geist Mono.
+- **Radius más ajustado** (0.5rem vs. el look más suave típico de shadcn) — personalidad de
+  "instrumento de precisión" en vez de "amigable/editorial".
+- **Tema por defecto: dark** (`:root` sin decorar = dark; `data-theme="light"` = override) —
+  encaja con "command center" de búsqueda de empleo, con paridad completa en light.
 
-## 2. Theming — `[data-theme]`, never `.dark`
+Metáfora: Atlas como panel de control de una operación — data-dense, confiable, sin ruido
+decorativo. El ámbar/verde/rojo/cian son semáforos funcionales, no la marca.
 
-The theme is an attribute on `<html>`: `data-theme="dark" | "light"`, set in `App.tsx` and
-`main.tsx` (before first paint). The Tailwind `dark:` variant is wired to it in `index.css`:
+Reemplaza al "Warm Editorial" v1 (charcoal cálido + ámbar/terracota): ese sistema está RETIRADO.
 
-```css
-@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
-```
+## 2. Arquitectura de la app (v2)
 
-**Do not** introduce shadcn's default `.dark` class or change this mechanism. New theme-dependent
-styles should use semantic tokens (which already flip per theme) — you rarely need `dark:` at all.
+- **Router:** react-router v7 (modo librería, paquete `react-router`). Rutas:
+  `/pipeline` (default) · `/jobs/:id` (detalle con tabs Resumen/CV/Mensajes/Entrevistas/Research)
+  · `/analytics` · `/portfolio` · `/settings` · `/onboarding`. `/` y `*` redirigen a `/pipeline`.
+- **Shell:** `src/components/AppShell.tsx` — sidebar (tokens `--sidebar*`) + header compacto +
+  ⌘K (CommandPalette con grupo "Ir a"). Toaster/diálogos globales viven aquí, una sola vez.
+- **Datos:** TanStack Query v5. Hooks por recurso en `src/hooks/` (keys centralizadas en
+  `src/hooks/keys.ts`). Páginas NUNCA llaman `api.*` directo para leer, ni `useEffect`+`useState`
+  para datos de servidor.
+- **Estados:** `LoadingState` / `ErrorState` / `EmptyState` de `src/components/ui/states.tsx` en
+  toda página. `toast.loading→success/error` con `id` para operaciones largas; acciones
+  destructivas con `action: Deshacer`.
 
-## 3. Tokens (`src/index.css`)
+## 3. Theming — `[data-theme]`, nunca `.dark`
 
-Defined as OKLCH custom properties on `:root` (dark) and `:root[data-theme="light"]` (light), then
-exposed to Tailwind via `@theme inline` as `bg-*/text-*/border-*` utilities. Use the **utilities**
-(`bg-card`, `text-muted-foreground`, `border-border`, `ring-ring`, …) or `var(--token)` — never raw colors.
+`data-theme="dark" | "light"` en `<html>`, aplicado pre-paint en `main.tsx` y gestionado por
+`src/hooks/useTheme.ts`. Variant de Tailwind ya cableada en `index.css`:
+`@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));`
+No introducir la clase `.dark` ni cambiar el mecanismo.
 
-| Token | Utility | Dark | Light | Use |
-|---|---|---|---|---|
-| `--background` | `bg-background` | warm charcoal | warm cream | page canvas |
-| `--foreground` | `text-foreground` | warm cream | espresso ink | body text |
-| `--card` | `bg-card` | raised charcoal | white | cards, board cards |
-| `--popover` | `bg-popover` | floating charcoal | white | dialogs, menus, palette |
-| `--primary` | `bg-primary` / `text-primary` | amber | burnt amber | brand accent, primary buttons |
-| `--primary-foreground` | `text-primary-foreground` | dark ink | near-white | text on amber |
-| `--secondary` | `bg-secondary` | neutral surface | warm gray | secondary buttons, hovers, chips |
-| `--muted-foreground` | `text-muted-foreground` | warm gray | warm gray | captions, sub-text |
-| `--accent2` | `var(--accent2)` | terracotta | terracotta | gradient partner (logo, funnel, referral) |
-| `--success` | `bg-success`/`text-success` | green | green | done / positive |
-| `--warning` | `bg-warning`/`text-warning` | gold | amber-brown | pending / caution |
-| `--info` | `bg-info`/`text-info` | cool azure | blue | informational / "ready" KPI tone |
-| `--destructive` | `bg-destructive`/`text-destructive` | red | red | danger / high-severity |
-| `--border` | `border-border` | hairline | hairline | all borders |
-| `--input` | `border-input` | field border | field border | form field borders |
-| `--ring` | `ring-ring` | amber α | amber α | focus rings |
-| `--chart-1..5` | `bg-chart-N` | amber/terracotta/gold/green/azure | darker set | funnel & charts |
+## 4. Tokens (`src/index.css`)
 
-### ⚠️ Naming rules (don't break these)
-- `accent`, `accent-foreground`, and the `muted` **surface** are intentionally **NOT** mapped in
-  `@theme`. **Never use `bg-accent` / `text-accent-foreground` / `bg-muted` utilities** — use
-  `secondary` for hover washes/surfaces and `text-muted-foreground` for muted text. This frees the
-  legacy `--color-accent` / `--color-muted` names to be a clean compat layer.
-- **Legacy `--color-*` compat layer:** the original token names (`--color-bg`, `--color-panel`,
-  `--color-accent`, `--color-done`, `--color-faint`, …) are re-pointed at the new tokens under
-  `:root:root`. They still work, but **new code should prefer the semantic utilities above.**
+OKLCH en `:root` (dark, default) y `:root[data-theme="light"]`, expuestos vía `@theme inline`.
+Usar utilities (`bg-card`, `text-muted-foreground`, `border-border`, `ring-ring`, `bg-sidebar`,
+`bg-sidebar-active`, …) o `var(--token)` — nunca colores crudos.
 
-## 4. Typography — Geist
-
-Self-hosted via `@fontsource-variable/geist` + `geist-mono` (imported in `main.tsx`). `--font-sans`
-= Geist Variable, `--font-mono` = Geist Mono Variable. Scale (Tailwind text utilities):
-
-| Class | Size / weight | Use |
+| Token | Utility | Uso |
 |---|---|---|
-| `text-display` | 2.25rem / 700 / -0.022em | onboarding hero, empty-state headline |
-| `text-h1` | 1.5rem / 650 | drawer/sheet title |
-| `text-h2` | 1.125rem / 600 | dialog titles |
-| `text-h3` | 0.95rem / 600 | card titles |
-| `text-caption` | 0.7rem / 500 / uppercase | metric/section labels, column headers |
-| `font-mono` | Geist Mono | code, message/prep bodies, paths |
+| `--background` / `--foreground` | `bg-background` / `text-foreground` | lienzo / texto |
+| `--card` / `--card-foreground` | `bg-card` | cards, tarjetas del kanban |
+| `--popover` / `--popover-foreground` | `bg-popover` | menús, diálogos, palette |
+| `--primary` / `--primary-foreground` | `bg-primary` / `text-primary` | acento de marca, botón primario |
+| `--accent2` | `var(--accent2)` | acento secundario (referidos, ask_referral) |
+| `--secondary` / `--secondary-foreground` | `bg-secondary` | botones secundarios, hovers, chips |
+| `--muted-foreground` | `text-muted-foreground` | captions, texto apagado |
+| `--success/warning/info/destructive` (+`-foreground`) | `bg-*`/`text-*` | semánticos |
+| `--border` / `--input` / `--ring` | `border-border` / `border-input` / `ring-ring` | líneas, campos, foco |
+| `--sidebar`, `--sidebar-foreground`, `--sidebar-border`, `--sidebar-active`, `--sidebar-active-foreground` | `bg-sidebar` etc. | app shell |
+| `--chart-1..5` | `bg-chart-N` | embudo y charts |
+| `--shadow-xs/sm/md/lg`, `--highlight-top` | `shadow-[var(--…)]` | elevación |
+| `--radius` (+ sm/md/lg/xl) | `rounded-*` | radios |
+| `--ease-out/in-out`, `--dur-fast/base/slow` | `ease-[var(--…)]` | motion |
 
-**Always use `tabular-nums`** on numbers that align or update live (metrics, scores, %, salary,
-funnel counts).
+### ⚠️ Reglas de nombres
+- `accent`, `accent-foreground` y la superficie `muted` NO están mapeadas: **nunca**
+  `bg-accent` / `text-accent-foreground` / `bg-muted`. Hover/superficies → `secondary`;
+  texto apagado → `text-muted-foreground`.
+- El compat layer `--color-*` de v1 **ya no existe**. `fitTone()` y `ACTION_META` (en `src/lib`)
+  devuelven `var(--success|primary|info|warning|accent2|muted-foreground)`.
+- No escribir `*/` dentro de comentarios CSS en `index.css`.
 
-## 5. Elevation · radius · motion
+## 5. Tipografía y motion
 
-- **Shadows:** `var(--shadow-xs|sm|md|lg)`, `var(--shadow-glow)` (amber), `var(--highlight-top)`
-  (inset top hairline for the "glass" edge). Cards = `--shadow-sm` + `--highlight-top`; floating
-  surfaces (sheet/dialog/popover/command) = `--shadow-lg` + blur.
-- **Radius:** `rounded-md` (controls), `rounded-lg` (menus), `rounded-xl` (cards), `rounded-full`
-  (badges/avatars). Driven by `--radius` (0.875rem) → `--radius-sm/md/lg/xl`.
-- **Motion:** `var(--ease-out)` + `var(--dur-fast|base|slow)`. Radix enter/exit via `tw-animate-css`
-  (`animate-in`, `fade-in-0`, `slide-in-from-*`, `zoom-in-95`). Entrance via `.fade-up`. A global
-  `prefers-reduced-motion` guard neutralizes animation. **Never animate a dnd-kit dragged node's
-  transform**, and never put `backdrop-filter`/`filter` on a draggable ancestor.
+Familias: `--font-sans` / `--font-mono` (paquetes @fontsource-variable importados en `main.tsx`;
+Space Grotesk Variable y JetBrains Mono Variable, per visual-language doc). Escala: 
+`text-display/h1/h2/h3/caption` (valores en `index.css`). `tabular-nums` SIEMPRE en números vivos 
+(scores, métricas, %, salarios, contadores).
+Motion: `--ease-*` + `--dur-*`, entradas con `.fade-up`, Radix vía `tw-animate-css`; respeta
+`prefers-reduced-motion`. **Nunca** animar el transform de un nodo dnd-kit ni poner
+`backdrop-filter`/`filter` en un ancestro draggable.
 
-## 6. Primitives (`src/components/ui/`)
+## 6. Primitivos (`src/components/ui/`)
 
-Built on Radix + cva + `cn` (from `@/lib/utils`, twMerge-backed). React 19 style (no forwardRef;
-`data-slot` attributes).
+Mismos 22 archivos y APIs que v1 (Button, Badge, Card, Checkbox, Command, Dialog, DropdownMenu,
+icons, Input, Kbd, Label, ScoreRing, ScrollArea, Select, Separator, Sheet, Skeleton, Sonner,
+Switch, Tabs, Textarea, Tooltip) + `states.tsx` (LoadingState/ErrorState/EmptyState).
+Variants de Button: `default/secondary/outline/ghost/destructive/link`; sizes
+`sm/default/lg/icon/icon-sm`. Variants de Badge: `default/secondary/outline/success/warning/
+info/destructive/score` (score lee `--tone` por style, con `fitTone()`).
+Iconos: SOLO lucide; los de dominio se declaran en `ui/icons.ts` (no emoji crudo en la UI).
+Select: contenido `z-[95]`, `position="popper"`, item value nunca `""`.
 
-| File | Replaces | Variants / notes |
-|---|---|---|
-| `button.tsx` | `.btn`, `.btn-accent`, `<a className="btn">` | `default`(amber) · `secondary` · `outline` · `ghost` · `destructive` · `link`; sizes `sm/default/lg/icon/icon-sm`. For `<a>` use `buttonVariants({...})`. Exports `buttonVariants`. |
-| `badge.tsx` | `.chip` | `default · secondary · outline · success · warning · info · destructive` + **`score`** (pass `style={{ "--tone": fitTone(n) }}`). |
-| `card.tsx` | `.card` | `Card`/`CardHeader`/`CardTitle`/`CardDescription`/`CardContent`/`CardFooter`. |
-| `input.tsx` `textarea.tsx` `label.tsx` | `<input className="btn">`, raw labels | themed fields + focus ring. |
-| `select.tsx` | native `<select>` | Radix; content `z-[95]` (layers above sheets). **Item value can't be `""`** — map a sentinel (e.g. `"all"`). |
-| `checkbox.tsx` `switch.tsx` | native checkboxes | Radix. |
-| `dialog.tsx` | centered modals | overlay blur + animations. |
-| `sheet.tsx` | the right-side drawer | Dialog anchored `side="right"` (DetailDrawer). |
-| `tooltip.tsx` | `title=` attrs | wrap app in `TooltipProvider`. |
-| `dropdown-menu.tsx` `tabs.tsx` `scroll-area.tsx` `separator.tsx` `skeleton.tsx` | — | standard. Tabs = the Pipeline/Portafolio toggle. |
-| `command.tsx` | cmdk styling | used by CommandPalette. |
-| `sonner.tsx` | inline flash messages | single `<Toaster theme={theme} />` mounted in `App`. |
-| `kbd.tsx` | bare shortcut text | the ⌘K hint. |
-| `score-ring.tsx` | flat score chip | conic ring colored by `fitTone()`; pass `centerClassName` to match the surface (`bg-card` on board, `bg-background` in the sheet). |
-| `icons.ts` | **all emoji** | single icon source of truth (lucide). |
-
-### Iconography
-**No raw emoji in the UI.** Add icons to `src/components/ui/icons.ts` and import from there
-(`actionIcon(type)`, `MatchIcon`, `KnockoutIcon`, `ReferralIcon`, `SalaryIcon`, `InsightsIcon`,
-`CelebrateIcon`, `DowntimeIcon`). Everything else uses `lucide-react` directly.
-
-## 7. Patterns
-
-- **Dialog vs Sheet:** centered transient content → `Dialog`; side panel / record detail → `Sheet`.
-- **Radix Select inside a Sheet/Dialog:** works because Select content is `z-[95]` (> sheet `z-50`)
-  and portaled. Keep `position="popper"`.
-- **Toasts:** `import { toast } from "sonner"` for confirmations (Copiado / Guardado / Enviado).
-  The single `<Toaster>` lives in `App.tsx` and receives the theme.
-- **Glass:** use `backdrop-blur` + `--highlight-top` only on floating surfaces, never on board cards
-  (keeps dnd-kit drag math correct).
-
-## 8. Invariants (must hold on every change)
-
-1. **Visual only** unless the task is explicitly about logic — don't touch handlers, API calls
-   (`src/api.ts`), props, state, or data flow.
-2. **Keep Spanish user-facing strings.** Tests pin some (`NeedsAction`: `Todo al día`,
-   `Acciones para hoy`, and clicking a card's title fires `onOpen`).
-3. **Lint is `--max-warnings 0`.** `src/components/ui/**` has a scoped eslint override; everywhere
-   else, sweep unused imports.
-4. **`cn` comes from `@/lib/utils`** (twMerge). Domain helpers + `cn` re-export live in `@/lib`.
-5. **No `*/` inside CSS comments** in `index.css` (e.g. `bg-*/text-*`) — it closes the comment early.
-
-## 9. Verify
+## 7. Verificar
 
 ```bash
 npm --prefix dashboard/frontend run lint          # eslint --max-warnings 0
-npm --prefix dashboard/frontend run format:check   # prettier (run `format` to fix)
-npm --prefix dashboard/frontend run typecheck      # tsc --noEmit
-npm --prefix dashboard/frontend test               # vitest
-npm --prefix dashboard/frontend run build          # vite build (NOT in check.sh — run it)
-./scripts/check.sh                                  # full repo gate
+npm --prefix dashboard/frontend run format:check
+npm --prefix dashboard/frontend run typecheck
+npm --prefix dashboard/frontend test
+npm --prefix dashboard/frontend run build
+./scripts/check.sh
 ```
 
-Visual QA: start backend (`uv run uvicorn dashboard.backend.main:app --host 127.0.0.1 --port 8787`)
-+ `npm --prefix dashboard/frontend run dev`, then check the onboarding gate, board, detail sheet,
-command palette, and settings in **both themes** (header Sun/Moon toggle).
+QA visual: backend (`uv run uvicorn dashboard.backend.main:app --host 127.0.0.1 --port 8787`) +
+`npm --prefix dashboard/frontend run dev`; revisar /pipeline, /jobs/:id (5 tabs), /analytics,
+/portfolio, /settings, /onboarding y la palette en **ambos temas**.
 
-## 10. Extending with shadcn
+## 8. Extender con shadcn
 
-`components.json` is configured (new-york, Vite, `@/` aliases, lucide). The official shadcn skill
-auto-activates here. You can `npx shadcn@latest add <component>` — but **re-theme the generated file
-to the tokens above and revert any edits the CLI makes to `src/index.css`** (it must not overwrite
-the bespoke token system). Prefer hand-authoring in the existing style.
+`components.json` sigue configurado. Se puede `npx shadcn@latest add <componente>`, pero
+re-tematizar el archivo generado a los tokens v2 y revertir cualquier edición que la CLI haga a
+`src/index.css`. Preferir escribir a mano en el estilo existente.
