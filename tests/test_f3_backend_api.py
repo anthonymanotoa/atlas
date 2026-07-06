@@ -11,8 +11,13 @@ def _seed_job(state: str | None = None) -> str:
 
     with DB() as db:
         db.upsert_job(
-            Job(source="greenhouse", source_job_id="1", title="Data Scientist",
-                company="Acme", url="https://x/1")
+            Job(
+                source="greenhouse",
+                source_job_id="1",
+                title="Data Scientist",
+                company="Acme",
+                url="https://x/1",
+            )
         )
         jid = db.list_jobs()[0]["id"]
         if state:
@@ -67,8 +72,13 @@ def test_state_responded_cancels_pending_and_seeds(atlas_app):
     with TestClient(atlas_app) as client:
         jid = _seed_job("applied")
         with DB() as db:
-            db.add_followup(jid, channel="email", touch_number=1,
-                            due_at="2026-07-11T00:00:00+00:00", kind="applied")
+            db.add_followup(
+                jid,
+                channel="email",
+                touch_number=1,
+                due_at="2026-07-11T00:00:00+00:00",
+                kind="applied",
+            )
         assert client.post(f"/api/jobs/{jid}/state", json={"state": "responded"}).status_code == 200
     with DB() as db:
         rows = db.followups_for_job(jid)
@@ -86,8 +96,13 @@ def test_get_followups_buckets_with_drafts(atlas_app):
     with TestClient(atlas_app) as client:
         jid = _seed_job("applied")
         with DB() as db:
-            db.add_followup(jid, channel="email", touch_number=1,
-                            due_at="2020-01-01T00:00:00+00:00", kind="applied")  # muy vencido
+            db.add_followup(
+                jid,
+                channel="email",
+                touch_number=1,
+                due_at="2020-01-01T00:00:00+00:00",
+                kind="applied",
+            )  # muy vencido
         data = client.get("/api/followups").json()["buckets"]
     assert set(data) == {"urgent", "overdue", "waiting", "cold"}
     assert data["overdue"], "un toque vencido hace años debe caer en OVERDUE"
@@ -102,8 +117,13 @@ def test_followup_sent_requires_confirm_and_seeds_next(atlas_app):
     with TestClient(atlas_app) as client:
         jid = _seed_job("applied")
         with DB() as db:
-            fid = db.add_followup(jid, channel="email", touch_number=1,
-                                  due_at="2026-07-11T00:00:00+00:00", kind="applied")
+            fid = db.add_followup(
+                jid,
+                channel="email",
+                touch_number=1,
+                due_at="2026-07-11T00:00:00+00:00",
+                kind="applied",
+            )
         assert client.post(f"/api/followups/{fid}/sent", json={"confirm": False}).status_code == 400
         r = client.post(f"/api/followups/{fid}/sent", json={"confirm": True})
         assert r.status_code == 200 and r.json()["ok"] is True and r.json()["next_id"]
@@ -118,20 +138,33 @@ def test_followup_sent_stops_at_cap(atlas_app):
         jid = _seed_job("applied")
         with DB() as db:
             # toque 1 ya done, toque 2 pending → confirmar toque 2 debe cerrar la cadencia
-            db.add_followup(jid, channel="email", touch_number=1,
-                            due_at="2026-07-11T00:00:00+00:00", kind="applied")
+            db.add_followup(
+                jid,
+                channel="email",
+                touch_number=1,
+                due_at="2026-07-11T00:00:00+00:00",
+                kind="applied",
+            )
             fid1 = db.followups_for_job(jid)[0]["id"]
             db.mark_followup(fid1, "done")
-            fid2 = db.add_followup(jid, channel="email", touch_number=2,
-                                   due_at="2026-07-18T00:00:00+00:00", kind="applied")
+            fid2 = db.add_followup(
+                jid,
+                channel="email",
+                touch_number=2,
+                due_at="2026-07-18T00:00:00+00:00",
+                kind="applied",
+            )
         r = client.post(f"/api/followups/{fid2}/sent", json={"confirm": True})
     assert r.status_code == 200 and r.json()["ok"] is True and r.json()["next_id"] is None
 
 
 def test_followup_sent_rejects_foreign_origin(atlas_app):
     with TestClient(atlas_app) as client:
-        r = client.post("/api/followups/1/sent", json={"confirm": True},
-                        headers={"origin": "https://evil.example.com"})
+        r = client.post(
+            "/api/followups/1/sent",
+            json={"confirm": True},
+            headers={"origin": "https://evil.example.com"},
+        )
     assert r.status_code == 403
 
 
@@ -149,9 +182,14 @@ def test_apply_rec_set_criteria_writes_frontmatter(atlas_app, tmp_path, monkeypa
 
     monkeypatch.setattr(paths, "CRITERIA_PATH", tmp_path / "criteria.md")
     with TestClient(atlas_app) as client:
-        r = client.post("/api/analytics/apply-rec", json={
-            "id": "threshold-66", "action_type": "set_criteria",
-            "payload": {"field": "shortlist_threshold", "value": 66.0}})
+        r = client.post(
+            "/api/analytics/apply-rec",
+            json={
+                "id": "threshold-66",
+                "action_type": "set_criteria",
+                "payload": {"field": "shortlist_threshold", "value": 66.0},
+            },
+        )
         assert r.status_code == 200 and r.json()["ok"] is True
     assert "shortlist_threshold: 66" in (tmp_path / "criteria.md").read_text()
 
@@ -161,9 +199,14 @@ def test_apply_rec_block_company(atlas_app, tmp_path, monkeypatch):
 
     monkeypatch.setattr(paths, "CRITERIA_PATH", tmp_path / "criteria.md")
     with TestClient(atlas_app) as client:
-        r = client.post("/api/analytics/apply-rec", json={
-            "id": "block-ghost", "action_type": "block_company",
-            "payload": {"company": "Ghost Corp"}})
+        r = client.post(
+            "/api/analytics/apply-rec",
+            json={
+                "id": "block-ghost",
+                "action_type": "block_company",
+                "payload": {"company": "Ghost Corp"},
+            },
+        )
         assert r.status_code == 200
     assert "Ghost Corp" in (tmp_path / "criteria.md").read_text()
 
@@ -173,8 +216,11 @@ def test_apply_rec_block_company_is_idempotent(atlas_app, tmp_path, monkeypatch)
     import engine.paths as paths
 
     monkeypatch.setattr(paths, "CRITERIA_PATH", tmp_path / "criteria.md")
-    body = {"id": "block-ghost", "action_type": "block_company",
-            "payload": {"company": "Ghost Corp"}}
+    body = {
+        "id": "block-ghost",
+        "action_type": "block_company",
+        "payload": {"company": "Ghost Corp"},
+    }
     with TestClient(atlas_app) as client:
         assert client.post("/api/analytics/apply-rec", json=body).status_code == 200
         assert client.post("/api/analytics/apply-rec", json=body).status_code == 200
@@ -183,17 +229,51 @@ def test_apply_rec_block_company_is_idempotent(atlas_app, tmp_path, monkeypatch)
 
 def test_apply_rec_rejects_unknown_action_and_field(atlas_app):
     with TestClient(atlas_app) as client:
-        assert client.post("/api/analytics/apply-rec", json={
-            "id": "x", "action_type": "rm-rf", "payload": {}}).status_code == 400
-        assert client.post("/api/analytics/apply-rec", json={
-            "id": "x", "action_type": "set_criteria",
-            "payload": {"field": "roles", "value": ["hacker"]}}).status_code == 400
+        assert (
+            client.post(
+                "/api/analytics/apply-rec", json={"id": "x", "action_type": "rm-rf", "payload": {}}
+            ).status_code
+            == 400
+        )
+        assert (
+            client.post(
+                "/api/analytics/apply-rec",
+                json={
+                    "id": "x",
+                    "action_type": "set_criteria",
+                    "payload": {"field": "roles", "value": ["hacker"]},
+                },
+            ).status_code
+            == 400
+        )
+
+
+def test_apply_rec_set_criteria_rejects_non_coercible_value(atlas_app, tmp_path, monkeypatch):
+    """Un value no coercible (p. ej. "abc" para shortlist_threshold: float) devuelve 400, no 500."""
+    import engine.paths as paths
+
+    monkeypatch.setattr(paths, "CRITERIA_PATH", tmp_path / "criteria.md")
+    with TestClient(atlas_app) as client:
+        r = client.post(
+            "/api/analytics/apply-rec",
+            json={
+                "id": "threshold-bad",
+                "action_type": "set_criteria",
+                "payload": {"field": "shortlist_threshold", "value": "abc"},
+            },
+        )
+    assert r.status_code == 400
 
 
 def test_apply_rec_rejects_foreign_origin(atlas_app):
     with TestClient(atlas_app) as client:
-        r = client.post("/api/analytics/apply-rec",
-                        json={"id": "x", "action_type": "set_criteria",
-                              "payload": {"field": "shortlist_threshold", "value": 66.0}},
-                        headers={"origin": "https://evil.example.com"})
+        r = client.post(
+            "/api/analytics/apply-rec",
+            json={
+                "id": "x",
+                "action_type": "set_criteria",
+                "payload": {"field": "shortlist_threshold", "value": 66.0},
+            },
+            headers={"origin": "https://evil.example.com"},
+        )
     assert r.status_code == 403

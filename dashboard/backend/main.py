@@ -410,10 +410,15 @@ def api_apply_rec(body: RecBody):
     from engine.config import load_criteria, update_criteria_fields
 
     if body.action_type == "set_criteria":
+        from pydantic import ValidationError
+
         field, value = body.payload.get("field"), body.payload.get("value")
         if field not in APPLY_REC_CRITERIA_FIELDS:
             raise HTTPException(400, f"campo no aplicable por rec: {field}")
-        update_criteria_fields({field: value})
+        try:
+            update_criteria_fields({field: value})
+        except (ValueError, ValidationError):
+            raise HTTPException(400, f"valor inválido para {field}: {value!r}") from None
         return {"ok": True, "applied": f"{field}={value}"}
     if body.action_type == "block_company":
         company = str(body.payload.get("company") or "").strip()
