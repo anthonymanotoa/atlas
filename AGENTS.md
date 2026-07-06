@@ -75,8 +75,8 @@ surviving only as the functional `warning` color. **Any UI change must follow it
   `useEffect`+`useState` for server data. Every page uses `LoadingState`/`ErrorState`/`EmptyState`
   from `src/components/ui/states.tsx`.
 - `components.json` enables the shadcn CLI/skill; a repo skill `.claude/skills/atlas-design-system/`
-  auto-enforces this. FE lint is `--max-warnings 0`; run `npm --prefix dashboard/frontend run build`
-  (it is **not** part of `check.sh`).
+  auto-enforces this. FE lint is `--max-warnings 0`; the production build
+  (`npm --prefix dashboard/frontend run build`) runs as the last step of `check.sh`.
 
 ## Knowledge graph (graphify)
 

@@ -561,6 +561,21 @@ def api_delete_story(story_id: int, db: DB = Depends(get_db)):
 # WAL handles the background writer + the shared reader concurrently.
 _DISCOVER_LOCK = Lock()
 _discovering = False
+_BUSY_JOBS = 0  # long-running, lock-free handlers bracket themselves with _busy_acquire/_release
+# so api_switch_profile can refuse to switch mid-flight instead of letting a bg thread or a
+# lock-free request keep reading/writing under paths that just changed out from under it.
+
+
+def _busy_acquire() -> None:
+    global _BUSY_JOBS
+    with _DISCOVER_LOCK:
+        _BUSY_JOBS += 1
+
+
+def _busy_release() -> None:
+    global _BUSY_JOBS
+    with _DISCOVER_LOCK:
+        _BUSY_JOBS = max(0, _BUSY_JOBS - 1)
 
 
 def _run_discover_and_score(only: set[str] | None, profile_id: str | None) -> None:
@@ -570,10 +585,15 @@ def _run_discover_and_score(only: set[str] | None, profile_id: str | None) -> No
         from engine.discovery.runner import discover as run_discover
         from engine.scoring.run import score_jobs
 
-        # Re-pin the profile captured at enqueue time so a concurrent dashboard switch
-        # can't make this run land in another profile's DB/criteria.
-        if profile_id is not None:
-            paths.set_profile(profile_id)
+        # The profile was pinned at enqueue time. A switch is refused while we run
+        # (api_switch_profile checks _discovering), so a mismatch here means the pin
+        # raced a switch — abort rather than flip process-global paths from a bg thread.
+        if profile_id != paths.PROFILE_ID:
+            with DB() as db:
+                db.log_event(
+                    None, "error", {"stage": "discover_bg", "error": "aborted: profile switched"}
+                )
+            return
         with DB() as db:  # own connection — see note above
             run_discover(db, only=only)
             # rescore=True so a "Buscar" also re-evaluates already discovered/scored/
@@ -769,10 +789,16 @@ def _run_liveness_sweep(limit: int, profile_id: str | None) -> None:
     try:
         from engine.discovery.liveness import sweep_liveness
 
-        # Re-pin the profile captured at enqueue time so a concurrent dashboard
-        # switch can't make this run land in another profile's DB.
-        if profile_id is not None:
-            paths.set_profile(profile_id)
+        # The profile was pinned at enqueue time. A switch is refused while we run
+        # (api_switch_profile checks _liveness_running), so a mismatch here means the
+        # pin raced a switch — abort rather than flip process-global paths from a bg
+        # thread (see the identical guard on _run_discover_and_score, plan 021).
+        if profile_id != paths.PROFILE_ID:
+            with DB() as db:
+                db.log_event(
+                    None, "error", {"stage": "liveness_bg", "error": "aborted: profile switched"}
+                )
+            return
         with DB() as db:  # own connection — never holds the API lock on network
             sweep_liveness(db, limit=limit)
     except Exception as e:  # noqa: BLE001 — record the failure instead of dropping it silently
@@ -805,7 +831,9 @@ def api_liveness_status():
 
 
 @app.get("/api/brief")
-def api_brief():
+def api_brief(
+    _: DB = Depends(get_db),
+):  # unused DB; holds _DB_LOCK so a profile switch can't flip paths mid-read
     path = paths.OUTBOX_DIR / "MORNING_BRIEF.md"
     return {
         "markdown": path.read_text()
@@ -874,7 +902,9 @@ def api_cv_download(job_id: str, version_id: int, fmt: str = "docx", db: DB = De
 
 
 @app.get("/api/cv/library")
-def api_cv_library():
+def api_cv_library(
+    _: DB = Depends(get_db),
+):  # unused DB; holds _DB_LOCK so a profile switch can't flip paths mid-read
     """The per-profile folder where every tailored CV is saved (so the user can browse them
     all in Finder), plus a listing of what's there. Read-only; download stays per-version."""
     from engine.cv.naming import library_dir
@@ -1231,11 +1261,17 @@ def api_portfolio_generate(body: PortfolioBody):
     from engine.config import load_master_cv
     from engine.portfolio.builder import generate_portfolio
 
-    version = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
-    path = generate_portfolio(load_master_cv(), version=version, include_github=body.include_github)
-    with DB() as db:  # own connection — does not hold the shared API lock
-        pid = db.add_portfolio(version=version, path_html=str(path))
-    return {"ok": True, "id": pid, "version": version, "path": str(path)}
+    _busy_acquire()
+    try:
+        version = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
+        path = generate_portfolio(
+            load_master_cv(), version=version, include_github=body.include_github
+        )
+        with DB() as db:  # own connection — does not hold the shared API lock
+            pid = db.add_portfolio(version=version, path_html=str(path))
+        return {"ok": True, "id": pid, "version": version, "path": str(path)}
+    finally:
+        _busy_release()
 
 
 @app.get("/api/portfolio/{portfolio_id}/preview")
@@ -1251,7 +1287,9 @@ def api_portfolio_preview(portfolio_id: int, db: DB = Depends(get_db)):
 
 
 @app.get("/api/portfolio/research")
-def api_portfolio_research():
+def api_portfolio_research(
+    _: DB = Depends(get_db),
+):  # unused DB; holds _DB_LOCK so a profile switch can't flip paths mid-read
     """Curated, verified reference portfolios + the patterns behind them + a detailed,
     personalized LLM prompt (built from the user's CV) to commission their own portfolio.
     Everything the user needs to review the examples and brief an LLM, in one place."""
@@ -1464,9 +1502,15 @@ def api_switch_profile(body: ProfileBody):
         raise HTTPException(400, "invalid profile id")
     if not profiles.exists(body.id):
         raise HTTPException(404, "unknown profile")
-    profiles.set_active(body.id)  # persist registry.json "active"
-    paths.set_profile(body.id)  # re-point the path globals
-    with _DB_LOCK:  # reopen the shared connection on the new profile's DB
+    with _DISCOVER_LOCK:
+        busy = _discovering or _BUSY_JOBS
+    with _LIVENESS_LOCK:
+        busy = busy or _liveness_running
+    if busy:
+        raise HTTPException(409, "background work in progress — retry when it finishes")
+    with _DB_LOCK:  # atomic vs. every get_db request: registry + paths + conn flip together
+        profiles.set_active(body.id)  # persist registry.json "active"
+        paths.set_profile(body.id)  # re-point the path globals
         if _DB is not None:
             _DB.close()
         _DB = DB(check_same_thread=False)

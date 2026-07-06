@@ -25,5 +25,8 @@ npm --prefix dashboard/frontend run format:check
 npm --prefix dashboard/frontend run typecheck
 npm --prefix dashboard/frontend test
 
+echo "==> Frontend: production build"
+npm --prefix dashboard/frontend run build
+
 echo ""
 echo "✓ All checks passed."

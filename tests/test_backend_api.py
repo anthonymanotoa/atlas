@@ -291,6 +291,135 @@ def test_discover_endpoint_runs_deterministic_pipeline(atlas_app, monkeypatch):
         assert client.get("/api/discover/status").json() == {"running": False}
 
 
+# ── Plan 021: close the cross-profile race windows around profile switching ───
+def test_switch_profile_refused_while_discovering(atlas_app, monkeypatch):
+    import importlib
+
+    backend_main = importlib.import_module("dashboard.backend.main")
+    # No registry in legacy test mode; stub existence so we reach the busy check
+    # instead of a 404 from profiles.exists — the 404-path is covered separately below.
+    monkeypatch.setattr(backend_main.profiles, "exists", lambda pid: True)
+    with TestClient(atlas_app) as client:
+        backend_main._discovering = True
+        try:
+            resp = client.post("/api/profile", json={"id": "owner"})
+        finally:
+            backend_main._discovering = False
+    assert resp.status_code == 409
+
+
+def test_discover_bg_aborts_on_profile_mismatch(atlas_app, monkeypatch):
+    import importlib
+
+    import engine.discovery.runner as runner_mod
+    import engine.paths as paths_mod
+
+    backend_main = importlib.import_module("dashboard.backend.main")
+
+    # Use flag-lists, not raising spies: _run_discover_and_score wraps its body in a
+    # broad `except Exception`, so an AssertionError raised from inside would be
+    # silently swallowed and logged as an ordinary error — making the test pass
+    # even if the abort guard were deleted. Recording calls in a list survives that
+    # except clause because nothing raises past the function boundary.
+    set_profile_calls = []
+    discover_calls = []
+
+    def spy_set_profile(profile_id):
+        set_profile_calls.append(profile_id)
+
+    def spy_discover(db, **kw):
+        discover_calls.append(kw)
+
+    monkeypatch.setattr(paths_mod, "set_profile", spy_set_profile)
+    monkeypatch.setattr(runner_mod, "discover", spy_discover)
+
+    with TestClient(atlas_app):
+        # atlas_app forces legacy mode, so paths.PROFILE_ID is None; a non-None
+        # enqueue-time profile_id is a mismatch → abort before touching paths/discover.
+        backend_main._run_discover_and_score(None, "some-other-profile")
+
+    assert set_profile_calls == [], "abort guard must not re-pin paths.PROFILE_ID"
+    assert discover_calls == [], "abort guard must not run discovery"
+
+    # Confirm the abort path logged the expected event. `events.type` is the log_event
+    # `type_` arg ("error" here); the stage/error fields live inside the JSON `detail`.
+    import json
+
+    import engine.db.models as db_models
+
+    with db_models.DB() as db:
+        rows = db.conn.execute(
+            "SELECT detail FROM events WHERE type = 'error' ORDER BY id DESC LIMIT 1"
+        ).fetchall()
+    assert len(rows) == 1
+    detail = json.loads(rows[0]["detail"])
+    assert detail == {"stage": "discover_bg", "error": "aborted: profile switched"}
+
+
+def test_switch_profile_unknown_id_404(atlas_app):
+    with TestClient(atlas_app) as client:
+        resp = client.post("/api/profile", json={"id": "nope"})
+    assert resp.status_code == 404
+
+
+def test_switch_profile_refused_while_liveness_sweep_running(atlas_app, monkeypatch):
+    import importlib
+
+    backend_main = importlib.import_module("dashboard.backend.main")
+    monkeypatch.setattr(backend_main.profiles, "exists", lambda pid: True)
+    with TestClient(atlas_app) as client:
+        backend_main._liveness_running = True
+        try:
+            resp = client.post("/api/profile", json={"id": "owner"})
+        finally:
+            backend_main._liveness_running = False
+    assert resp.status_code == 409
+
+
+def test_liveness_sweep_bg_aborts_on_profile_mismatch(atlas_app, monkeypatch):
+    import importlib
+
+    import engine.discovery.liveness as liveness_mod
+    import engine.paths as paths_mod
+
+    backend_main = importlib.import_module("dashboard.backend.main")
+
+    # Same rationale as test_discover_bg_aborts_on_profile_mismatch: record calls
+    # rather than raise, since _run_liveness_sweep also wraps its body in a broad
+    # `except Exception` that would silently swallow a raising spy.
+    set_profile_calls = []
+    sweep_calls = []
+
+    def spy_set_profile(profile_id):
+        set_profile_calls.append(profile_id)
+
+    def spy_sweep(db, **kw):
+        sweep_calls.append(kw)
+
+    monkeypatch.setattr(paths_mod, "set_profile", spy_set_profile)
+    monkeypatch.setattr(liveness_mod, "sweep_liveness", spy_sweep)
+
+    with TestClient(atlas_app):
+        # atlas_app forces legacy mode, so paths.PROFILE_ID is None; a non-None
+        # enqueue-time profile_id is a mismatch → abort before touching paths/sweep.
+        backend_main._run_liveness_sweep(40, "some-other-profile")
+
+    assert set_profile_calls == [], "abort guard must not re-pin paths.PROFILE_ID"
+    assert sweep_calls == [], "abort guard must not run the liveness sweep"
+
+    import json
+
+    import engine.db.models as db_models
+
+    with db_models.DB() as db:
+        rows = db.conn.execute(
+            "SELECT detail FROM events WHERE type = 'error' ORDER BY id DESC LIMIT 1"
+        ).fetchall()
+    assert len(rows) == 1
+    detail = json.loads(rows[0]["detail"])
+    assert detail == {"stage": "liveness_bg", "error": "aborted: profile switched"}
+
+
 # ── SPA fallback (Atlas v2 F1): el router de frontend necesita deep links ────
 
 
