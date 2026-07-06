@@ -971,6 +971,38 @@ class DB:
         self.conn.commit()
         return cur.rowcount > 0
 
+    # ── upskill reports (F4 §7.2) ──────────────────────────────────────────────
+    def add_upskill_report(
+        self, *, intent_id: str | None, report_md: str, heatmap: list, hard_gaps: dict
+    ) -> int:
+        cur = self.conn.execute(
+            """INSERT INTO upskill_reports (intent_id, report_md, heatmap, hard_gaps, created_at)
+               VALUES (?,?,?,?,?)""",
+            (intent_id, report_md, json.dumps(heatmap), json.dumps(hard_gaps), now_iso()),
+        )
+        self.conn.commit()
+        return int(cur.lastrowid)
+
+    def _parse_upskill(self, row) -> dict:
+        d = dict(row)
+        d["heatmap"] = _loads(d.get("heatmap"), [])
+        d["hard_gaps"] = _loads(d.get("hard_gaps"), {})
+        return d
+
+    def get_upskill_report(self, report_id: int) -> dict | None:
+        row = self.conn.execute("SELECT * FROM upskill_reports WHERE id=?", (report_id,)).fetchone()
+        return self._parse_upskill(row) if row else None
+
+    def list_upskill_reports(self, limit: int = 20) -> list[dict]:
+        rows = self.conn.execute(
+            "SELECT * FROM upskill_reports ORDER BY created_at DESC, id DESC LIMIT ?", (int(limit),)
+        ).fetchall()
+        return [self._parse_upskill(r) for r in rows]
+
+    def latest_upskill_report(self) -> dict | None:
+        rows = self.list_upskill_reports(limit=1)
+        return rows[0] if rows else None
+
 
 def _b(v: bool | None) -> int | None:
     return None if v is None else int(bool(v))

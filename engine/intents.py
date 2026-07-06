@@ -336,3 +336,61 @@ def _write_legitimacy(db: DB, intent: dict, result: dict) -> str:
 
 _CONTEXT_BUILDERS["legitimacy_batch"] = _ctx_legitimacy
 _RESULT_WRITERS["legitimacy_batch"] = _write_legitimacy
+
+
+# ── upskill_report (F4 §7.2) ──────────────────────────────────────────────────
+# Two passes. Pass 1 (engine.upskill.hard_skill_gaps) is DETERMINISTIC ($0): the weighted
+# missing-skill inventory over the jobs in scope. The context builder injects it plus the
+# previous report so the brain can diff. Pass 2 is the brain synthesizing the study plan +
+# severity heatmap (brain/prompts/upskill.md). The writer only VALIDATES the brain's JSON
+# (non-empty report_md + a heatmap of {skill, severity ∈ _SEVERITIES, note}) and PERSISTS it
+# alongside a fresh pass-1 snapshot — no LLM here. Malformed → raises, leaving the intent
+# `running` for a corrected retry.
+_SEVERITIES = ("Critical", "High", "Medium", "Low")
+
+
+def _ctx_upskill(db: DB, intent: dict) -> dict:
+    from engine.upskill import hard_skill_gaps
+
+    states = intent["payload"].get("states") or ["shortlisted"]
+    prev = db.latest_upskill_report()
+    return {
+        "hard_gaps": hard_skill_gaps(db, states),
+        "previous_report": (
+            {
+                "report_md": prev["report_md"],
+                "heatmap": prev["heatmap"],
+                "created_at": prev["created_at"],
+            }
+            if prev
+            else None
+        ),
+    }
+
+
+def _write_upskill(db: DB, intent: dict, result: dict) -> str:
+    report_md = (result.get("report_md") or "").strip()
+    if not report_md:
+        raise ValueError("upskill result needs a non-empty report_md")
+    heatmap = result.get("heatmap", [])
+    if not isinstance(heatmap, list):
+        raise ValueError("heatmap must be a list")
+    for h in heatmap:
+        if not isinstance(h, dict) or h.get("severity") not in _SEVERITIES:
+            raise ValueError(f"every heatmap entry needs severity ∈ {_SEVERITIES}")
+        if not (h.get("skill") or "").strip():
+            raise ValueError("every heatmap entry needs a skill")
+    states = intent["payload"].get("states") or ["shortlisted"]
+    from engine.upskill import hard_skill_gaps
+
+    rid = db.add_upskill_report(
+        intent_id=intent["id"],
+        report_md=report_md,
+        heatmap=heatmap,
+        hard_gaps=hard_skill_gaps(db, states),
+    )
+    return f"upskill_report:{rid}"
+
+
+_CONTEXT_BUILDERS["upskill_report"] = _ctx_upskill
+_RESULT_WRITERS["upskill_report"] = _write_upskill

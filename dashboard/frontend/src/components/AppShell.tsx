@@ -30,6 +30,7 @@ import { HelpGuide } from "./HelpGuide";
 import { Button } from "./ui/button";
 import { Card } from "./ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog";
+import { UpskillIcon } from "./ui/icons";
 import { Kbd } from "./ui/kbd";
 import { ScrollArea } from "./ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
@@ -39,6 +40,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 const NAV = [
   { to: "/pipeline", label: "Pipeline", icon: Kanban },
   { to: "/analytics", label: "Analítica", icon: ChartNoAxesColumn },
+  { to: "/upskill", label: "Upskilling", icon: UpskillIcon },
   { to: "/portfolio", label: "Portafolio", icon: Globe },
 ];
 

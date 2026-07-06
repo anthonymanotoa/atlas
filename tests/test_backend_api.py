@@ -347,3 +347,34 @@ def test_spa_fallback_without_built_dist_is_404(atlas_app, tmp_path, monkeypatch
     monkeypatch.setattr(backend, "_DIST", tmp_path / "no-dist")
     with TestClient(atlas_app) as client:
         assert client.get("/pipeline").status_code == 404
+
+
+# ── F4 §7.2: upskill report endpoints (read-only; $0) ────────────────────────────
+def test_upskill_latest_is_null_when_empty(atlas_app):
+    with TestClient(atlas_app) as client:
+        assert client.get("/api/upskill/latest").json() == {"report": None}
+
+
+def test_upskill_latest_returns_persisted_report(atlas_app):
+    from engine.db.models import DB
+
+    with TestClient(atlas_app) as client:
+        with DB() as db:
+            rid = db.add_upskill_report(
+                intent_id=None,
+                report_md="# Plan de upskilling\n\n## Kubernetes",
+                heatmap=[{"skill": "Kubernetes", "severity": "Critical", "note": "gate"}],
+                hard_gaps={"skills": [{"skill": "kubernetes", "score": 0.7}], "jobs_considered": 1},
+            )
+        latest = client.get("/api/upskill/latest").json()["report"]
+        assert latest["id"] == rid
+        assert latest["report_md"].startswith("# Plan")
+        assert latest["heatmap"][0]["severity"] == "Critical"  # parsed from json
+        assert latest["hard_gaps"]["jobs_considered"] == 1
+        one = client.get(f"/api/upskill/{rid}")
+        assert one.status_code == 200 and one.json()["id"] == rid
+
+
+def test_upskill_report_unknown_id_is_404(atlas_app):
+    with TestClient(atlas_app) as client:
+        assert client.get("/api/upskill/999999").status_code == 404

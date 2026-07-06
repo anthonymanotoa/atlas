@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import type { Job } from "../api";
 import { STATE_ES } from "../lib";
+import { UpskillIcon } from "./ui/icons";
 import {
   CommandEmpty,
   CommandGroup,
@@ -23,6 +24,7 @@ import {
 const GOTO = [
   { to: "/pipeline", label: "Ir a Pipeline", icon: Kanban },
   { to: "/analytics", label: "Ir a Analítica", icon: ChartNoAxesColumn },
+  { to: "/upskill", label: "Ir a Upskilling", icon: UpskillIcon },
   { to: "/portfolio", label: "Ir a Portafolio", icon: Globe },
   { to: "/settings", label: "Ir a Ajustes", icon: SettingsIcon },
 ];

@@ -664,6 +664,22 @@ def api_get_intent(intent_id: str, db: DB = Depends(get_db)):
     return row
 
 
+# ── upskill reports (F4 §7.2): the /upskill view reads the latest gap report. ──
+# Read-only ($0): pass 1 (hard_gaps) is deterministic and pass 2 (the study plan) was written
+# by the brain offline; these endpoints only surface the persisted row.
+@app.get("/api/upskill/latest")
+def api_upskill_latest(db: DB = Depends(get_db)):
+    return {"report": db.latest_upskill_report()}
+
+
+@app.get("/api/upskill/{report_id}")
+def api_upskill_report(report_id: int, db: DB = Depends(get_db)):
+    row = db.get_upskill_report(report_id)
+    if not row:
+        raise HTTPException(404, "upskill report not found")
+    return row
+
+
 # ── cv_reviews (F4 §7.2): read a job's reviews + apply edits / resolve flags ───
 # apply-edit and resolve-flag are DETERMINISTIC ($0): no LLM. They replay a structured
 # edit the brain already produced onto the tailored CV / message body and re-render.

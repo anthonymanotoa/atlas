@@ -317,3 +317,15 @@ CREATE TABLE IF NOT EXISTS cv_reviews (
     created_at    TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_cv_reviews_job ON cv_reviews(job_id);
+
+-- Upskill / gap reports (F4 §7.2): pasada 1 determinista (hard_gaps) + síntesis LLM
+-- (report_md + heatmap). Una fila por corrida; la vista /upskill muestra la última.
+CREATE TABLE IF NOT EXISTS upskill_reports (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    intent_id  TEXT REFERENCES intents(id) ON DELETE SET NULL,
+    report_md  TEXT NOT NULL,                 -- el plan de estudio en Markdown
+    heatmap    TEXT NOT NULL DEFAULT '[]',    -- json [{skill, severity, note}]
+    hard_gaps  TEXT NOT NULL DEFAULT '{}',    -- json: la pasada 1 determinista que lo alimentó
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_upskill_created ON upskill_reports(created_at);

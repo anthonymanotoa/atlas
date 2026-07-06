@@ -230,6 +230,22 @@ export type CvReview = {
   created_at: string;
 };
 
+// F4 §7.2 upskill_report — análisis de brechas en dos pasadas: (1) diff duro de skills
+// (determinista, engine.upskill.hard_skill_gaps) + (2) síntesis del brain (report_md + heatmap).
+// La web solo LEE el reporte persistido; el trabajo LLM lo hizo el brain offline ($0).
+export type UpskillHeatItem = {
+  skill: string;
+  severity: "Critical" | "High" | "Medium" | "Low";
+  note: string;
+};
+export type UpskillReport = {
+  id: number;
+  report_md: string;
+  heatmap: UpskillHeatItem[];
+  hard_gaps: { skills?: { skill: string; score: number; occurrences: number }[] };
+  created_at: string;
+};
+
 export type JobDetail = {
   job: Job;
   cv_versions: CvVersion[];
@@ -429,6 +445,9 @@ export const api = {
       index,
       action,
     }),
+  // F4 §7.2 upskill_report: lee el último reporte de brechas (read-only, $0 — la síntesis la
+  // hizo el brain offline; la pasada 1 determinista se persiste junto al plan para auditoría).
+  upskillLatest: () => get<{ report: UpskillReport | null }>("/api/upskill/latest"),
   exportUrl: (columns?: string[], state?: string) => {
     const p = new URLSearchParams();
     if (columns?.length) p.set("columns", columns.join(","));

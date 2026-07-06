@@ -4,6 +4,7 @@ import {
   Brain,
   Circle,
   Flag,
+  GraduationCap,
   Handshake,
   type LucideIcon,
   MessageSquare,
@@ -35,3 +36,4 @@ export const SalaryIcon = Banknote; // 💰 salary
 export const InsightsIcon = Brain; // 🧠 company learnings
 export const CelebrateIcon = PartyPopper; // 🎉 all-clear empty state
 export const DowntimeIcon = TriangleAlert; // ⚠️ downtime warning
+export const UpskillIcon = GraduationCap; // 🎓 upskilling / gap analysis

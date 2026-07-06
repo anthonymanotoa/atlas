@@ -6,6 +6,7 @@ import { OnboardingPage } from "./pages/OnboardingPage";
 import { PipelinePage } from "./pages/PipelinePage";
 import { PortfolioPage } from "./pages/PortfolioPage";
 import { SettingsPage } from "./pages/SettingsPage";
+import { UpskillPage } from "./pages/UpskillPage";
 
 export const routes: RouteObject[] = [
   {
@@ -16,6 +17,7 @@ export const routes: RouteObject[] = [
       { path: "pipeline", element: <PipelinePage /> },
       { path: "jobs/:id", element: <JobDetailPage /> },
       { path: "analytics", element: <AnalyticsPage /> },
+      { path: "upskill", element: <UpskillPage /> },
       { path: "portfolio", element: <PortfolioPage /> },
       { path: "settings", element: <SettingsPage /> },
       { path: "onboarding", element: <OnboardingPage /> },
