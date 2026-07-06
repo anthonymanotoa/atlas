@@ -288,3 +288,49 @@ def test_discover_endpoint_runs_deterministic_pipeline(atlas_app, monkeypatch):
         # The BackgroundTask runs within the request cycle under TestClient.
         assert calls["discover"] == 1 and calls["score"] == 1
         assert client.get("/api/discover/status").json() == {"running": False}
+
+
+# ── Plan 021: close the cross-profile race windows around profile switching ───
+def test_switch_profile_refused_while_discovering(atlas_app, monkeypatch):
+    import importlib
+
+    backend_main = importlib.import_module("dashboard.backend.main")
+    # No registry in legacy test mode; stub existence so we reach the busy check
+    # instead of a 404 from profiles.exists — the 404-path is covered separately below.
+    monkeypatch.setattr(backend_main.profiles, "exists", lambda pid: True)
+    with TestClient(atlas_app) as client:
+        backend_main._discovering = True
+        try:
+            resp = client.post("/api/profile", json={"id": "owner"})
+        finally:
+            backend_main._discovering = False
+    assert resp.status_code == 409
+
+
+def test_discover_bg_aborts_on_profile_mismatch(atlas_app, monkeypatch):
+    import importlib
+
+    import engine.discovery.runner as runner_mod
+    import engine.paths as paths_mod
+
+    backend_main = importlib.import_module("dashboard.backend.main")
+
+    def spy_set_profile(profile_id):
+        raise AssertionError("must not be called")
+
+    def spy_discover(db, **kw):
+        raise AssertionError("must not be called")
+
+    monkeypatch.setattr(paths_mod, "set_profile", spy_set_profile)
+    monkeypatch.setattr(runner_mod, "discover", spy_discover)
+
+    with TestClient(atlas_app):
+        # atlas_app forces legacy mode, so paths.PROFILE_ID is None; a non-None
+        # enqueue-time profile_id is a mismatch → abort before touching paths/discover.
+        backend_main._run_discover_and_score(None, "some-other-profile")
+
+
+def test_switch_profile_unknown_id_404(atlas_app):
+    with TestClient(atlas_app) as client:
+        resp = client.post("/api/profile", json={"id": "nope"})
+    assert resp.status_code == 404

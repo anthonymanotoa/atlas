@@ -24,7 +24,7 @@ a dependency says otherwise; honor each plan's STOP conditions; update your row 
 
 | Plan | Title | Priority | Effort | Depends on | Status |
 |------|-------|----------|--------|------------|--------|
-| 021 | Close the cross-profile race windows around profile switching | P1 | M | — | TODO |
+| 021 | Close the cross-profile race windows around profile switching | P1 | M | — | DONE — switch endpoint atomic under `_DB_LOCK` + refuses (409) while `_discovering`/`_BUSY_JOBS`; discover bg task aborts on profile mismatch instead of re-pinning paths; `api_portfolio_generate` bracketed with `_busy_acquire/_release`; `api_brief`/`api_cv_library`/`api_portfolio_research` serialized via `Depends(get_db)`; 3 new regression tests (183 total) |
 | 022 | Fix actively-wrong docs (public-repo claim, stale counts, dev-deps note) | P1 | S | — | TODO |
 | 023 | Add the frontend production build to `./scripts/check.sh` | P2 | S | — | TODO |
 | 024 | Guard `_first_name()` against whitespace-only names | P2 | S | — | TODO |
