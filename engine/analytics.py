@@ -10,6 +10,7 @@ from typing import Any
 from engine import heartbeat
 from engine.config import Criteria
 from engine.db.models import DB
+from engine.normalize import norm_company
 from engine.referrals.connections import match_referrals
 
 FUNNEL = [
@@ -200,6 +201,82 @@ def response_times(db: DB) -> dict:
         "avg_days": round(statistics.fmean(days), 1),
         "median_days": round(statistics.median(days), 1),
         "p90_days": round(days[int(0.9 * (len(days) - 1))], 1),
+    }
+
+
+def recommendations(db: DB, criteria: Criteria) -> list[dict]:
+    """Recomendaciones deterministas accionables (§6.2). Umbrales fijos y explicables.
+
+    Rec = {"id", "text", "action_type": "set_criteria"|"block_company"|"none", "payload"}.
+    Conservadora por diseño: nada dispara con muestra pequeña (nunca bloquea por 1 rechazo,
+    nunca sube el threshold con <3 positivos). Sin red, sin LLM — sólo conteos/umbrales.
+    """
+    recs: list[dict] = []
+    # 1. Score floor empírico → subir shortlist_threshold.
+    floor = score_floor(db)
+    positives = db.conn.execute(
+        f"SELECT COUNT(*) AS n FROM jobs WHERE fit_score IS NOT NULL AND {_POSITIVE_JOBS_WHERE}"
+    ).fetchone()["n"]
+    if floor is not None and positives >= 3 and floor > criteria.shortlist_threshold + 2:
+        value = float(int(floor))
+        recs.append(
+            {
+                "id": f"threshold-{int(value)}",
+                "text": (
+                    f"Ningún resultado positivo bajo score {floor:.0f} ({positives} positivos): "
+                    f"sube shortlist_threshold de {criteria.shortlist_threshold:.0f} a {value:.0f}."
+                ),
+                "action_type": "set_criteria",
+                "payload": {"field": "shortlist_threshold", "value": value},
+            }
+        )
+    # 2. Empresas que nunca responden → blocklist (≥3 aplicaciones, 0 respuestas, no bloqueada aún).
+    blocked = {norm_company(c) for c in criteria.company_blocklist}
+    rows = db.conn.execute(
+        """SELECT company, COUNT(*) AS n FROM jobs
+           WHERE applied_at IS NOT NULL AND responded_at IS NULL
+             AND interview_at IS NULL AND offer_at IS NULL
+           GROUP BY company HAVING n >= 3"""
+    ).fetchall()
+    for r in rows:
+        if norm_company(r["company"]) in blocked:
+            continue
+        recs.append(
+            {
+                "id": f"block-{norm_company(r['company'])}",
+                "text": f"{r['n']} aplicaciones a {r['company']} sin ninguna respuesta: bloquéala.",
+                "action_type": "block_company",
+                "payload": {"company": r["company"]},
+            }
+        )
+    # 3. Role-terms que no convierten (informativa — quitar un término es decisión del usuario).
+    for row in conversion_by(db, "role_term", criteria):
+        if row["key"] != "otro" and row["applied"] >= 5 and row["responded"] == 0:
+            recs.append(
+                {
+                    "id": f"term-{row['key'].replace(' ', '-')}",
+                    "text": (
+                        f"El término '{row['key']}' lleva {row['applied']} aplicaciones sin "
+                        f"respuesta — considera quitarlo de roles en Ajustes."
+                    ),
+                    "action_type": "none",
+                    "payload": {"term": row["key"]},
+                }
+            )
+    return recs
+
+
+def analytics_payload(db: DB, criteria: Criteria) -> dict:
+    """Composición completa para GET /api/analytics (§6.2)."""
+    return {
+        "funnel": funnel(db),
+        "score_floor": score_floor(db),
+        "by_source": conversion_by(db, "source"),
+        "by_ats": conversion_by(db, "ats"),
+        "by_remote_policy": conversion_by(db, "remote_policy"),
+        "by_role_term": conversion_by(db, "role_term", criteria),
+        "response_times": response_times(db),
+        "recommendations": recommendations(db, criteria),
     }
 
 

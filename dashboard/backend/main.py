@@ -384,6 +384,48 @@ def api_followup_sent(followup_id: int, body: FollowupSentBody, db: DB = Depends
     return res
 
 
+# ── Analytics + loop de aprendizaje (F3 §6.2) ─────────────────────────────────
+# GET expone funnel/score_floor/conversiones/tiempos/recomendaciones (determinista, $0).
+# apply-rec cierra el loop: aplica UNA recomendación editando criteria.md por el mutator
+# validado (update_criteria_fields → sólo el frontmatter del perfil activo, gitignorado,
+# nunca el .example). Allowlist de campos: un rec jamás toca roles/deal_breakers/etc.
+APPLY_REC_CRITERIA_FIELDS = frozenset({"shortlist_threshold"})
+
+
+class RecBody(BaseModel):
+    id: str
+    action_type: str
+    payload: dict = {}
+
+
+@app.get("/api/analytics")
+def api_analytics(db: DB = Depends(get_db)):
+    from engine.config import load_criteria
+
+    return analytics.analytics_payload(db, load_criteria())
+
+
+@app.post("/api/analytics/apply-rec", dependencies=[Depends(require_trusted_origin)])
+def api_apply_rec(body: RecBody):
+    from engine.config import load_criteria, update_criteria_fields
+
+    if body.action_type == "set_criteria":
+        field, value = body.payload.get("field"), body.payload.get("value")
+        if field not in APPLY_REC_CRITERIA_FIELDS:
+            raise HTTPException(400, f"campo no aplicable por rec: {field}")
+        update_criteria_fields({field: value})
+        return {"ok": True, "applied": f"{field}={value}"}
+    if body.action_type == "block_company":
+        company = str(body.payload.get("company") or "").strip()
+        if not company:
+            raise HTTPException(400, "payload.company requerido")
+        current = load_criteria().company_blocklist
+        if company not in current:
+            update_criteria_fields({"company_blocklist": [*current, company]})
+        return {"ok": True, "applied": f"blocked:{company}"}
+    raise HTTPException(400, f"action_type no soportado: {body.action_type}")
+
+
 # ── On-demand discover + score (plan 019) ─────────────────────────────────────
 # Lets the cockpit pull fresh jobs between scheduled brain runs. Progress model:
 # fire-and-forget + poll (the SPA polls /api/discover/status). The run is

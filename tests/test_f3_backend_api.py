@@ -133,3 +133,67 @@ def test_followup_sent_rejects_foreign_origin(atlas_app):
         r = client.post("/api/followups/1/sent", json={"confirm": True},
                         headers={"origin": "https://evil.example.com"})
     assert r.status_code == 403
+
+
+# ── §6.2 Analytics + apply-rec ────────────────────────────────────────────────
+def test_get_analytics_shape(atlas_app):
+    with TestClient(atlas_app) as client:
+        _seed_job("applied")
+        p = client.get("/api/analytics").json()
+    assert {"funnel", "score_floor", "recommendations", "response_times"} <= set(p)
+    assert p["funnel"][0]["stage"] == "discovered"
+
+
+def test_apply_rec_set_criteria_writes_frontmatter(atlas_app, tmp_path, monkeypatch):
+    import engine.paths as paths
+
+    monkeypatch.setattr(paths, "CRITERIA_PATH", tmp_path / "criteria.md")
+    with TestClient(atlas_app) as client:
+        r = client.post("/api/analytics/apply-rec", json={
+            "id": "threshold-66", "action_type": "set_criteria",
+            "payload": {"field": "shortlist_threshold", "value": 66.0}})
+        assert r.status_code == 200 and r.json()["ok"] is True
+    assert "shortlist_threshold: 66" in (tmp_path / "criteria.md").read_text()
+
+
+def test_apply_rec_block_company(atlas_app, tmp_path, monkeypatch):
+    import engine.paths as paths
+
+    monkeypatch.setattr(paths, "CRITERIA_PATH", tmp_path / "criteria.md")
+    with TestClient(atlas_app) as client:
+        r = client.post("/api/analytics/apply-rec", json={
+            "id": "block-ghost", "action_type": "block_company",
+            "payload": {"company": "Ghost Corp"}})
+        assert r.status_code == 200
+    assert "Ghost Corp" in (tmp_path / "criteria.md").read_text()
+
+
+def test_apply_rec_block_company_is_idempotent(atlas_app, tmp_path, monkeypatch):
+    """Aplicar el mismo block dos veces no duplica la empresa en el blocklist."""
+    import engine.paths as paths
+
+    monkeypatch.setattr(paths, "CRITERIA_PATH", tmp_path / "criteria.md")
+    body = {"id": "block-ghost", "action_type": "block_company",
+            "payload": {"company": "Ghost Corp"}}
+    with TestClient(atlas_app) as client:
+        assert client.post("/api/analytics/apply-rec", json=body).status_code == 200
+        assert client.post("/api/analytics/apply-rec", json=body).status_code == 200
+    assert (tmp_path / "criteria.md").read_text().count("Ghost Corp") == 1
+
+
+def test_apply_rec_rejects_unknown_action_and_field(atlas_app):
+    with TestClient(atlas_app) as client:
+        assert client.post("/api/analytics/apply-rec", json={
+            "id": "x", "action_type": "rm-rf", "payload": {}}).status_code == 400
+        assert client.post("/api/analytics/apply-rec", json={
+            "id": "x", "action_type": "set_criteria",
+            "payload": {"field": "roles", "value": ["hacker"]}}).status_code == 400
+
+
+def test_apply_rec_rejects_foreign_origin(atlas_app):
+    with TestClient(atlas_app) as client:
+        r = client.post("/api/analytics/apply-rec",
+                        json={"id": "x", "action_type": "set_criteria",
+                              "payload": {"field": "shortlist_threshold", "value": 66.0}},
+                        headers={"origin": "https://evil.example.com"})
+    assert r.status_code == 403
