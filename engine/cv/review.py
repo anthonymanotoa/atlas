@@ -89,8 +89,8 @@ def apply_edit(db: DB, review_id: int, index: int) -> dict:
             raise ValueError(f"no {target} message drafted for this job")
         msg = msgs[-1]
         body = msg.get("body") or ""
-        if edit["old_string"] not in body:
-            raise ValueError("old_string not found in the message body")
+        if body.count(edit["old_string"]) != 1:
+            raise ValueError("old_string must appear exactly once in the message body")
         db.conn.execute(
             "UPDATE messages SET body=? WHERE id=?",
             (body.replace(edit["old_string"], edit["new_string"], 1), msg["id"]),

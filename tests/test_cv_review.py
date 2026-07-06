@@ -214,6 +214,88 @@ def test_apply_edit_non_matching_old_string_fails_gracefully(db):
     assert not db.cv_versions_for(jid)  # nothing re-rendered
 
 
+# ── Task 7: apply_edit on a message body (cover letter / recruiter / hiring_manager) ──
+# The message branch must mirror the cv branch's uniqueness guard: old_string appears
+# EXACTLY once, or the edit is refused with the body left untouched.
+_COVER_LETTER = (
+    "Dear Hiring Manager,\n\n"
+    "I am excited to apply for the Data Scientist role at Acme. "
+    "My background in Python and SQL analytics is a strong match.\n\n"
+    "Sincerely,\nJane Doe"
+)
+
+
+def _add_review_with_message_edit(db, jid, old_string, new_string="x"):
+    return db.add_cv_review(
+        jid,
+        intent_id=None,
+        cv_version_id=None,
+        edits=[
+            {
+                "file": "cover_letter",
+                "old_string": old_string,
+                "new_string": new_string,
+                "reason": "t",
+            }
+        ],
+        critique={
+            "missed_keywords": [],
+            "company_angles": [],
+            "reframing": [],
+            "tone_register": [],
+        },
+        flags=[],
+    )
+
+
+def test_apply_edit_on_message_unique_old_string_applies(db):
+    from engine.cv.review import apply_edit
+
+    jid = db.list_jobs()[0]["id"]
+    mid = db.add_message(jid, channel="email", kind="cover_letter", body=_COVER_LETTER)
+    rid = _add_review_with_message_edit(db, jid, old_string="Jane Doe", new_string="Jane A. Doe")
+    out = apply_edit(db, rid, 0)
+    assert out["ok"] and out["applied_ref"] == f"message:{mid}"
+    body = db.messages_for(jid)[-1]["body"]
+    assert "Jane A. Doe" in body and "Jane Doe" not in body
+    assert db.get_cv_review(rid)["edits"][0]["applied"] is True
+
+
+def test_apply_edit_on_message_non_unique_old_string_fails_and_leaves_body(db):
+    from engine.cv.review import apply_edit
+
+    jid = db.list_jobs()[0]["id"]
+    # A body where "Acme" appears twice — the ambiguous edit the guard must refuse.
+    body = "Acme is great. I want to work at Acme."
+    db.add_message(jid, channel="email", kind="cover_letter", body=body)
+    assert body.count("Acme") == 2
+    rid = _add_review_with_message_edit(db, jid, old_string="Acme", new_string="Acme Corp")
+    with pytest.raises(ValueError):  # not a 500 — a careful, refused edit
+        apply_edit(db, rid, 0)
+    assert db.messages_for(jid)[-1]["body"] == body  # body UNCHANGED
+    assert db.get_cv_review(rid)["edits"][0].get("applied") is not True
+
+
+def test_apply_edit_on_message_absent_old_string_fails(db):
+    from engine.cv.review import apply_edit
+
+    jid = db.list_jobs()[0]["id"]
+    db.add_message(jid, channel="email", kind="cover_letter", body=_COVER_LETTER)
+    rid = _add_review_with_message_edit(db, jid, old_string="this-string-is-not-in-the-letter")
+    with pytest.raises(ValueError):
+        apply_edit(db, rid, 0)
+    assert db.messages_for(jid)[-1]["body"] == _COVER_LETTER  # untouched
+
+
+def test_apply_edit_message_missing_draft_fails(db):
+    from engine.cv.review import apply_edit
+
+    jid = db.list_jobs()[0]["id"]
+    rid = _add_review_with_message_edit(db, jid, old_string="anything")
+    with pytest.raises(ValueError):  # no cover_letter drafted → refused, not a 500
+        apply_edit(db, rid, 0)
+
+
 def test_apply_edit_index_out_of_range_raises(db):
     from engine.cv.review import apply_edit
 
