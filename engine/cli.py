@@ -665,5 +665,142 @@ def portfolio_open() -> None:
     console.print(f"Abriendo {p['path_html']}")
 
 
+# ── intents (F4) — la cola que el brain drena como paso 0 de "corre atlas" ─────
+intents_app = typer.Typer(help="Cola de intents (handoff web → brain). El brain la drena.")
+app.add_typer(intents_app, name="intents")
+
+
+@intents_app.command("list")
+def intents_list(
+    status: str = typer.Option("pending", help="pending|running|done|error|all"),
+    json_out: bool = typer.Option(False, "--json", help="JSON para el brain."),
+) -> None:
+    """List queued intents (the brain drains these as step 0)."""
+    import json as _json
+
+    from engine import intents as eng_intents
+
+    with _db() as db:
+        rows = eng_intents.list_intents(db, status=None if status == "all" else status)
+    if json_out:
+        print(_json.dumps(rows, indent=2, ensure_ascii=False))
+        return
+    table = Table(title=f"Intents ({status})")
+    for col in ("id", "type", "job", "status", "created", "result/error"):
+        table.add_column(col)
+    for r in rows:
+        table.add_row(
+            r["id"],
+            r["type"],
+            (r.get("job_id") or "—")[:18],
+            r["status"],
+            (r.get("created_at") or "")[:16],
+            (r.get("result_ref") or r.get("error") or "")[:30],
+        )
+    console.print(table)
+
+
+@intents_app.command("start")
+def intents_start(intent_id: str) -> None:
+    """Mark an intent running and print which prompt file drives it."""
+    from engine import intents as eng_intents
+
+    with _db() as db:
+        try:
+            eng_intents.mark_running(db, intent_id)
+            row = eng_intents.get_intent(db, intent_id)
+        except ValueError as e:
+            console.print(f"[red]✗[/] {e}")
+            raise typer.Exit(2) from None
+    console.print(
+        f"[green]✓[/] {intent_id} → running. Prompt: "
+        f"brain/prompts/{eng_intents.PROMPT_FILES[row['type']]}"
+    )
+
+
+@intents_app.command("context")
+def intents_context(intent_id: str) -> None:
+    """Print the deterministic context JSON the brain needs for this intent."""
+    import json as _json
+
+    from engine import intents as eng_intents
+
+    with _db() as db:
+        try:
+            ctx = eng_intents.context_for(db, intent_id)
+        except ValueError as e:
+            console.print(f"[red]✗[/] {e}")
+            raise typer.Exit(2) from None
+    print(_json.dumps(ctx, indent=2, ensure_ascii=False))
+
+
+@intents_app.command("complete")
+def intents_complete(
+    intent_id: str,
+    result_file: str = typer.Option(..., "--result-file", help="JSON con el resultado."),
+) -> None:
+    """Validate the brain's result JSON and write it to the destination tables."""
+    import json as _json
+    from pathlib import Path
+
+    from engine import intents as eng_intents
+
+    p = Path(result_file).expanduser()
+    if not p.exists():
+        console.print(f"[red]✗[/] no existe: {p}")
+        raise typer.Exit(2)
+    try:
+        result = _json.loads(p.read_text())
+    except _json.JSONDecodeError as e:
+        console.print(f"[red]✗ JSON inválido:[/] {e}")
+        raise typer.Exit(2) from None
+    with _db() as db:
+        try:
+            ref = eng_intents.apply_result(db, intent_id, result)
+        except ValueError as e:
+            console.print(
+                f"[red]✗ resultado rechazado:[/] {e}\n"
+                "  (el intent sigue running — corrige el JSON y reintenta)"
+            )
+            raise typer.Exit(2) from None
+    console.print(f"[green]✓[/] {intent_id} → done ({ref})")
+
+
+@intents_app.command("fail")
+def intents_fail(
+    intent_id: str,
+    error: str = typer.Option(..., "--error", help="Por qué no se pudo ejecutar."),
+) -> None:
+    """Mark an intent as errored (visible in the web panel)."""
+    from engine import intents as eng_intents
+
+    with _db() as db:
+        try:
+            eng_intents.mark_error(db, intent_id, error)
+        except ValueError as e:
+            console.print(f"[red]✗[/] {e}")
+            raise typer.Exit(2) from None
+    console.print(f"[yellow]![/] {intent_id} → error registrado")
+
+
+# ── cv — utilidades de CV para el brain ────────────────────────────────────────
+cv_app = typer.Typer(help="Utilidades de CV para el brain.")
+app.add_typer(cv_app, name="cv")
+
+
+@cv_app.command("dump")
+def cv_dump(job_id: str) -> None:
+    """Dump the tailored CV YAML for a job (input for the LLM reviewer / PDF fixes)."""
+    from engine.cv.review import dump_tailored_cv
+
+    with _db() as db:
+        try:
+            path = dump_tailored_cv(db, job_id)
+        except ValueError as e:
+            console.print(f"[red]✗[/] {e}")
+            raise typer.Exit(2) from None
+    console.print(f"[green]✓[/] {path}")
+
+
 if __name__ == "__main__":
     app()

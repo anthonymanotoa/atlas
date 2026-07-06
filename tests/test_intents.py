@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import pytest
 
+import engine.paths as paths
 from engine import intents
 from engine.db.models import DB
 
@@ -124,3 +125,196 @@ def test_apply_result_routes_to_registered_writer(db, monkeypatch):
     assert seen == {"intent_type": "upskill_report", "result": {"score": 7}}
     row = intents.get_intent(db, iid)
     assert row["status"] == "done" and row["result_ref"] == "upskill_report:42"
+
+
+def test_context_for_includes_prompt_file_and_job(db):
+    from engine.normalize import Job
+
+    db.upsert_job(
+        Job(
+            source="greenhouse",
+            source_job_id="9",
+            title="ML Engineer",
+            company="Beta",
+            url="https://x/9",
+            description="d" * 9000,
+        )
+    )
+    jid = db.list_jobs()[0]["id"]
+    iid = intents.enqueue(db, "cover_letter", {"language": "en"}, job_id=jid)
+    ctx = intents.context_for(db, iid)
+    assert ctx["prompt_file"] == "brain/prompts/cover_letter.md"
+    assert ctx["job"]["id"] == jid
+    assert len(ctx["job"]["description"]) == 6000  # recortado
+
+
+def test_apply_result_requires_running_and_known_writer(db):
+    iid = intents.enqueue(db, "upskill_report", {})
+    with pytest.raises(ValueError):  # aún pending
+        intents.apply_result(db, iid, {})
+    intents.mark_running(db, iid)
+    with pytest.raises(ValueError):  # writer no registrado todavía (llega en Task 10)
+        intents.apply_result(db, iid, {})
+    assert intents.get_intent(db, iid)["status"] == "running"  # no se corrompe el estado
+
+
+# ── CLI layer (Task 3) — el brain drena la cola vía estos comandos ─────────────
+@pytest.fixture
+def cli_db(tmp_path, monkeypatch):
+    """Point the CLI's `_db()` and outbox at a throwaway location, and hand back a
+    live DB on the SAME file so a test can seed rows the CLI will then see."""
+    import engine.paths as paths
+
+    db_path = tmp_path / "atlas.db"
+    monkeypatch.setattr(paths, "DB_PATH", db_path)
+    monkeypatch.setattr(paths, "OUTBOX_DIR", tmp_path / "outbox")
+    with DB(db_path) as d:
+        yield d
+
+
+def _run(args):
+    from typer.testing import CliRunner
+
+    from engine.cli import app
+
+    return CliRunner().invoke(app, args)
+
+
+def test_cli_intents_list_shows_pending(cli_db):
+    intents.enqueue(cli_db, "cv_review", {"language": "en"})
+    res = _run(["intents", "list"])
+    assert res.exit_code == 0, res.output
+    assert "cv_review" in res.output
+
+
+def test_cli_intents_list_json_empty(cli_db):
+    res = _run(["intents", "list", "--json"])
+    assert res.exit_code == 0, res.output
+    import json
+
+    assert json.loads(res.output) == []
+
+
+def test_cli_intents_start_marks_running_and_emits_prompt(cli_db):
+    iid = intents.enqueue(cli_db, "cover_letter", {})
+    res = _run(["intents", "start", iid])
+    assert res.exit_code == 0, res.output
+    assert "running" in res.output
+    assert "brain/prompts/cover_letter.md" in res.output
+    assert intents.get_intent(cli_db, iid)["status"] == "running"
+
+
+def test_cli_intents_start_unknown_id_exits_nonzero(cli_db):
+    res = _run(["intents", "start", "in_nope"])
+    assert res.exit_code == 2
+
+
+def test_cli_intents_context_emits_json(cli_db):
+    from engine.normalize import Job
+
+    cli_db.upsert_job(
+        Job(
+            source="greenhouse",
+            source_job_id="3",
+            title="Data Scientist",
+            company="Acme",
+            url="https://x/3",
+            description="Python + SQL.",
+        )
+    )
+    jid = cli_db.list_jobs()[0]["id"]
+    iid = intents.enqueue(cli_db, "cv_review", {}, job_id=jid)
+    res = _run(["intents", "context", iid])
+    assert res.exit_code == 0, res.output
+    import json
+
+    ctx = json.loads(res.output)
+    assert ctx["prompt_file"] == "brain/prompts/cv_review.md"
+    assert ctx["job"]["id"] == jid
+
+
+def test_cli_intents_complete_valid_result_applies_and_marks_done(cli_db, monkeypatch):
+    """A VALID result → apply_result writes the ref and the intent becomes done."""
+    monkeypatch.setitem(
+        intents._RESULT_WRITERS, "upskill_report", lambda db, i, r: "upskill_report:7"
+    )
+    iid = intents.enqueue(cli_db, "upskill_report", {})
+    intents.mark_running(cli_db, iid)
+    p = _tmp_json({"score": 9})
+    res = _run(["intents", "complete", iid, "--result-file", str(p)])
+    assert res.exit_code == 0, res.output
+    row = intents.get_intent(cli_db, iid)
+    assert row["status"] == "done" and row["result_ref"] == "upskill_report:7"
+
+
+def test_cli_intents_complete_invalid_result_does_not_mark_done(cli_db, monkeypatch):
+    """An INVALID result (writer rejects) → non-zero exit and the intent stays running,
+    NEVER falsely done. This is the $0/integrity guard for the queue."""
+
+    def _reject(db, intent, result):
+        raise ValueError("missing required field")
+
+    monkeypatch.setitem(intents._RESULT_WRITERS, "upskill_report", _reject)
+    iid = intents.enqueue(cli_db, "upskill_report", {})
+    intents.mark_running(cli_db, iid)
+    p = _tmp_json({"bad": True})
+    res = _run(["intents", "complete", iid, "--result-file", str(p)])
+    assert res.exit_code == 2
+    assert intents.get_intent(cli_db, iid)["status"] == "running"  # NOT done
+
+
+def test_cli_intents_complete_missing_file_exits_nonzero(cli_db):
+    iid = intents.enqueue(cli_db, "upskill_report", {})
+    intents.mark_running(cli_db, iid)
+    res = _run(["intents", "complete", iid, "--result-file", "/no/such/file.json"])
+    assert res.exit_code == 2
+    assert intents.get_intent(cli_db, iid)["status"] == "running"
+
+
+def test_cli_intents_fail_marks_error(cli_db):
+    iid = intents.enqueue(cli_db, "upskill_report", {})
+    intents.mark_running(cli_db, iid)
+    res = _run(["intents", "fail", iid, "--error", "no browser"])
+    assert res.exit_code == 0, res.output
+    row = intents.get_intent(cli_db, iid)
+    assert row["status"] == "error" and row["error"] == "no browser"
+
+
+def test_cli_cv_dump_outputs_path(cli_db):
+    from engine.normalize import Job
+
+    cli_db.upsert_job(
+        Job(
+            source="greenhouse",
+            source_job_id="5",
+            title="Data Scientist",
+            company="Acme",
+            url="https://x/5",
+            description="We need Python and SQL for analytics.",
+        )
+    )
+    jid = cli_db.list_jobs()[0]["id"]
+    res = _run(["cv", "dump", jid])
+    assert res.exit_code == 0, res.output
+    # Rich wraps the printed path at the terminal width; collapse whitespace to assert
+    # on the filename regardless of where the console broke the line.
+    assert "cv_for_review.yaml" in "".join(res.output.split())
+    assert (paths.OUTBOX_DIR / jid / "cv_for_review.yaml").exists()
+
+
+def test_cli_cv_dump_unknown_job_exits_nonzero(cli_db):
+    res = _run(["cv", "dump", "nope"])
+    assert res.exit_code == 2
+
+
+def _tmp_json(obj):
+    """Write `obj` as JSON to a fresh temp file and return its Path."""
+    import json
+    import os
+    import tempfile
+    from pathlib import Path
+
+    fd, name = tempfile.mkstemp(suffix=".json")
+    with os.fdopen(fd, "w") as fh:
+        fh.write(json.dumps(obj))
+    return Path(name)
