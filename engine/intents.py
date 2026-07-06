@@ -457,3 +457,47 @@ def _write_interview_prep_deep(db: DB, intent: dict, result: dict) -> str:
 
 _CONTEXT_BUILDERS["interview_prep_deep"] = _ctx_interview_prep_deep
 _RESULT_WRITERS["interview_prep_deep"] = _write_interview_prep_deep
+
+
+# ── profile_expand (F4 §7.2) ──────────────────────────────────────────────────
+# The brain MINES public sources the candidate already produced (GitHub repos, portfolio,
+# official cert syllabi) and proposes ADDITIVE, source-annotated enrichment to the master CV.
+# The context builder hands the brain the current skills (so it doesn't re-propose them) + where
+# to look. The writer only VALIDATES the brain's proposed items (target ∈ EXPAND_TARGETS, non-
+# empty value + source) and PERSISTS them as a DRAFT — nothing touches the CV yet. Confirmation
+# is PER ITEM in the web (engine.profile_expand.apply_items). No LLM here ($0 invariant); a
+# malformed result raises and leaves the intent `running` for a corrected retry.
+def _ctx_profile_expand(db: DB, intent: dict) -> dict:
+    import engine.paths as paths
+    from engine.config import load_master_cv
+
+    p = intent["payload"]
+    cv = load_master_cv()
+    return {
+        "master_cv_path": str(paths.MASTER_CV_PATH),
+        "current_skills": cv.get("skills") or [],
+        "github_user": p.get("github_user"),
+        "portfolio_url": p.get("portfolio_url"),
+        "cert_names": p.get("cert_names") or [],
+    }
+
+
+def _write_profile_expand(db: DB, intent: dict, result: dict) -> str:
+    from engine.profile_expand import EXPAND_TARGETS
+
+    items = result.get("items")
+    if not isinstance(items, list) or not items:
+        raise ValueError("result.items must be a non-empty list")
+    for it in items:
+        if not isinstance(it, dict) or it.get("target") not in EXPAND_TARGETS:
+            raise ValueError(f"every item needs target ∈ {EXPAND_TARGETS}")
+        if it.get("value") in (None, "", {}, []):
+            raise ValueError("every item needs a non-empty value")
+        if not (it.get("source") or "").strip():
+            raise ValueError("every item needs a source (provenance is mandatory)")
+    exp_id = db.add_profile_expansion(intent_id=intent["id"], items=items)
+    return f"profile_expansion:{exp_id}"
+
+
+_CONTEXT_BUILDERS["profile_expand"] = _ctx_profile_expand
+_RESULT_WRITERS["profile_expand"] = _write_profile_expand

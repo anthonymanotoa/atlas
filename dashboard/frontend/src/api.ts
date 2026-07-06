@@ -248,6 +248,21 @@ export type UpskillReport = {
   created_at: string;
 };
 
+// F4 §7.2 profile_expand — el brain escanea GitHub/portfolio/syllabi de certs y propone
+// ADICIONES al perfil, con fuente anotada. La web lee el borrador y confirma ítem por ítem
+// antes de que nada toque el master CV; apply es determinista ($0 — el escaneo lo hizo el brain).
+export type ProfileExpandItem = {
+  target: "skills" | "experience_highlight" | "project" | "certification";
+  value: unknown;
+  source: string;
+  applied?: boolean;
+};
+export type ProfileExpansion = {
+  id: number;
+  items: ProfileExpandItem[];
+  created_at: string;
+};
+
 export type JobDetail = {
   job: Job;
   cv_versions: CvVersion[];
@@ -460,6 +475,14 @@ export const api = {
   // F4 §7.2 upskill_report: lee el último reporte de brechas (read-only, $0 — la síntesis la
   // hizo el brain offline; la pasada 1 determinista se persiste junto al plan para auditoría).
   upskillLatest: () => get<{ report: UpskillReport | null }>("/api/upskill/latest"),
+  // F4 §7.2 profile_expand: leer los borradores de expansión del perfil y aplicar SOLO los ítems
+  // confirmados (por índice) al master CV. apply es determinista ($0), aditivo e idempotente.
+  profileExpansions: () => get<{ expansions: ProfileExpansion[] }>("/api/profile-expansions"),
+  applyProfileExpansion: (id: number, indices: number[]) =>
+    post<{ ok: boolean; applied: number; skipped_existing: number }>(
+      `/api/profile-expansions/${id}/apply`,
+      { indices },
+    ),
   exportUrl: (columns?: string[], state?: string) => {
     const p = new URLSearchParams();
     if (columns?.length) p.set("columns", columns.join(","));

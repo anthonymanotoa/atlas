@@ -12,6 +12,7 @@ import { useCsvColumns, useCvLibrary, useSetSetting, useSettings } from "../hook
 import { useProfiles, useRenameProfile } from "../hooks/useProfiles";
 import { copy } from "../lib";
 import { SettingsOps } from "../components/SettingsOps";
+import { ProfileExpandSection } from "../components/ProfileExpandSection";
 
 export function SettingsPage() {
   const settingsQ = useSettings();
@@ -190,6 +191,11 @@ export function SettingsPage() {
           </a>
         </div>
       </section>
+
+      <Separator className="my-4" />
+
+      {/* F4 §7.2: expandir el perfil desde fuentes públicas, con confirmación por ítem. */}
+      <ProfileExpandSection />
 
       <Separator className="my-4" />
 

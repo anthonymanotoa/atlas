@@ -1017,6 +1017,41 @@ class DB:
         rows = self.list_upskill_reports(limit=1)
         return rows[0] if rows else None
 
+    # ── profile expansions (F4 §7.2) ───────────────────────────────────────────
+    def add_profile_expansion(self, *, intent_id: str | None, items: list) -> int:
+        cur = self.conn.execute(
+            "INSERT INTO profile_expansions (intent_id, items, created_at) VALUES (?,?,?)",
+            (intent_id, json.dumps(items), now_iso()),
+        )
+        self.conn.commit()
+        return int(cur.lastrowid)
+
+    def get_profile_expansion(self, exp_id: int) -> dict | None:
+        row = self.conn.execute("SELECT * FROM profile_expansions WHERE id=?", (exp_id,)).fetchone()
+        if not row:
+            return None
+        d = dict(row)
+        d["items"] = _loads(d.get("items"), [])
+        return d
+
+    def list_profile_expansions(self, limit: int = 20) -> list[dict]:
+        rows = self.conn.execute(
+            "SELECT * FROM profile_expansions ORDER BY created_at DESC, id DESC LIMIT ?",
+            (int(limit),),
+        ).fetchall()
+        out = []
+        for r in rows:
+            d = dict(r)
+            d["items"] = _loads(d.get("items"), [])
+            out.append(d)
+        return out
+
+    def set_profile_expansion(self, exp_id: int, items: list) -> None:
+        self.conn.execute(
+            "UPDATE profile_expansions SET items=? WHERE id=?", (json.dumps(items), exp_id)
+        )
+        self.conn.commit()
+
 
 def _b(v: bool | None) -> int | None:
     return None if v is None else int(bool(v))

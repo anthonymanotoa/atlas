@@ -680,6 +680,35 @@ def api_upskill_report(report_id: int, db: DB = Depends(get_db)):
     return row
 
 
+# ── profile expansions (F4 §7.2): additive, source-annotated CV enrichment ─────
+# GET surfaces the brain's DRAFT proposals (latest first); apply writes ONLY the confirmed item
+# indices to the (gitignored) master CV via engine.profile_expand.apply_items. Deterministic
+# ($0): no LLM here — the scan was the brain offline. apply is additive + idempotent and never
+# clobbers existing CV content, so the origin-guarded POST is the sole confirmation gate.
+class ApplyExpansionBody(BaseModel):
+    indices: list[int]
+
+
+@app.get("/api/profile-expansions")
+def api_profile_expansions(db: DB = Depends(get_db)):
+    return {"expansions": db.list_profile_expansions()}
+
+
+@app.post(
+    "/api/profile-expansions/{exp_id}/apply",
+    dependencies=[Depends(require_trusted_origin)],
+)
+def api_apply_expansion(exp_id: int, body: ApplyExpansionBody, db: DB = Depends(get_db)):
+    from engine.profile_expand import apply_items
+
+    if not db.get_profile_expansion(exp_id):
+        raise HTTPException(404, "expansion not found")
+    try:
+        return apply_items(exp_id, body.indices)
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from None
+
+
 # ── cv_reviews (F4 §7.2): read a job's reviews + apply edits / resolve flags ───
 # apply-edit and resolve-flag are DETERMINISTIC ($0): no LLM. They replay a structured
 # edit the brain already produced onto the tailored CV / message body and re-render.

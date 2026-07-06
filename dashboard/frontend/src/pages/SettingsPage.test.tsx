@@ -19,6 +19,8 @@ const { api } = vi.hoisted(() => ({
     addCompany: vi.fn(),
     suggestCompanies: vi.fn(),
     importConnections: vi.fn(),
+    // SettingsPage also mounts <ProfileExpandSection/> (F4 §7.2), which reads this on mount.
+    profileExpansions: vi.fn(),
     exportUrl: (cols?: string[]) => `/api/export?columns=${(cols ?? []).join(",")}`,
   },
 }));
@@ -68,6 +70,7 @@ beforeEach(() => {
     sources: [],
     safeguards: { api_key_unset: true, base_url_default: true },
   });
+  api.profileExpansions.mockResolvedValue({ expansions: [] });
 });
 
 describe("SettingsPage", () => {

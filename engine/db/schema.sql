@@ -331,3 +331,14 @@ CREATE TABLE IF NOT EXISTS upskill_reports (
     created_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_upskill_created ON upskill_reports(created_at);
+
+-- Profile expansions (F4 §7.2): additive, source-annotated enrichment drafts from the brain.
+-- The web confirms items one by one; only confirmed items are written to the (gitignored)
+-- master CV. Nothing here is applied automatically.
+CREATE TABLE IF NOT EXISTS profile_expansions (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    intent_id  TEXT REFERENCES intents(id) ON DELETE SET NULL,
+    items      TEXT NOT NULL DEFAULT '[]',    -- json [{target, value, source, applied?}]
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_profile_exp_created ON profile_expansions(created_at);

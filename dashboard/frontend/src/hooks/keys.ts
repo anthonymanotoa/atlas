@@ -14,4 +14,5 @@ export const qk = {
   intents: ["intents"] as const,
   cvReviews: (jobId: string) => ["cv-reviews", jobId] as const,
   upskill: ["upskill"] as const,
+  profileExpansions: ["profile-expansions"] as const,
 };
