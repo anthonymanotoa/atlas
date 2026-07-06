@@ -256,3 +256,13 @@ CREATE TABLE IF NOT EXISTS peer_portfolios (
     notes              TEXT,
     reviewed_at        TEXT
 );
+
+-- Posting archive (F2 hygiene): an immutable snapshot of the posting captured when the
+-- user marks Applied — evidence for prep/negotiation even after the posting dies.
+CREATE TABLE IF NOT EXISTS posting_snapshots (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    job_id      TEXT NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
+    captured_at TEXT NOT NULL,
+    payload     TEXT NOT NULL                      -- json: title/company/location/description/salary/url/date_posted
+);
+CREATE INDEX IF NOT EXISTS idx_snapshots_job ON posting_snapshots(job_id);

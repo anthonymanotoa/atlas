@@ -270,6 +270,7 @@ def api_set_state(job_id: str, body: StateBody, db: DB = Depends(get_db)):
     db.set_state(job_id, body.state, {"via": "dashboard"})
     # Drive the reply-aware cadence off the same transitions the user makes on the board.
     if body.state == "applied":
+        db.snapshot_posting(job_id)  # archive the posting as evidence (F2)
         followups.schedule(db, job_id, channel="email")
     elif body.state == "responded":
         followups.register_reply(db, job_id)  # cancel pending touches — never pester after a reply
@@ -281,6 +282,7 @@ def api_mark_applied(job_id: str, db: DB = Depends(get_db)):
     from engine.outreach import followups
 
     db.set_state(job_id, "applied", {"via": "dashboard"})
+    db.snapshot_posting(job_id)  # archive the posting as evidence (F2)
     followups.schedule(db, job_id, channel="email")  # start the Day 3/7/14 + breakup cadence
     return {"ok": True}
 

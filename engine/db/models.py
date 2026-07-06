@@ -238,6 +238,49 @@ class DB:
         rows = self.conn.execute("SELECT state, COUNT(*) n FROM jobs GROUP BY state").fetchall()
         return {r["state"]: r["n"] for r in rows}
 
+    # ── posting snapshots (F2) ────────────────────────────────────────────────
+    _SNAPSHOT_FIELDS = (
+        "title",
+        "company",
+        "location",
+        "description",
+        "url",
+        "apply_url",
+        "salary_min",
+        "salary_max",
+        "salary_currency",
+        "salary_interval",
+        "date_posted",
+    )
+
+    def snapshot_posting(self, job_id: str) -> int | None:
+        """Persist an immutable snapshot of the posting at apply time. Idempotent per job."""
+        if self.conn.execute(
+            "SELECT 1 FROM posting_snapshots WHERE job_id=? LIMIT 1", (job_id,)
+        ).fetchone():
+            return None
+        job = self.get_job(job_id)
+        if not job:
+            return None
+        payload = {k: job.get(k) for k in self._SNAPSHOT_FIELDS}
+        cur = self.conn.execute(
+            "INSERT INTO posting_snapshots (job_id, captured_at, payload) VALUES (?,?,?)",
+            (job_id, now_iso(), json.dumps(payload)),
+        )
+        self.conn.commit()
+        return int(cur.lastrowid)
+
+    def snapshots_for(self, job_id: str) -> list[dict]:
+        rows = self.conn.execute(
+            "SELECT * FROM posting_snapshots WHERE job_id=? ORDER BY captured_at", (job_id,)
+        ).fetchall()
+        out = []
+        for r in rows:
+            d = dict(r)
+            d["payload"] = _loads(d.get("payload"), {})
+            out.append(d)
+        return out
+
     # ── cv versions ──────────────────────────────────────────────────────────
     def add_cv_version(
         self,
