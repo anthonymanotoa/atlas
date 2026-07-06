@@ -12,6 +12,14 @@ import re
 from engine.config import Criteria
 from engine.scoring.fit import _required_years
 
+_RESIDENCY_RE = re.compile(r"\bmust (?:be located|reside|live) in\b", re.I)
+# "must be located in …" is only a residency knock-out when the thing you must be located in is a
+# country/place. A timezone / working-hours / region-overlap constraint ("located in a timezone with
+# US overlap") is a benign remote-friendly requirement, NOT a hard knock-out — skip when a time-related
+# token appears just after the match (mirrors the _DEGREE_NOT_REQUIRED denylist guard below).
+_RESIDENCY_TIMEZONE = re.compile(
+    r"\b(?:time[\s-]?zone|hours?|overlap|gmt|utc|[ecmp]st|[cm]et|[ap]m)\b", re.I
+)
 _VISA_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"\bauthori[sz]ed to work in\b", re.I), "pide autorización de trabajo"),
     (re.compile(r"\bwork (?:permit|authori[sz]ation)\b", re.I), "pide permiso de trabajo"),
@@ -25,7 +33,7 @@ _VISA_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     ),
     (re.compile(r"\bu\.?s\.? citizen(?:ship)?\b", re.I), "pide ciudadanía US"),
     (re.compile(r"\bsecurity clearance\b", re.I), "pide security clearance"),
-    (re.compile(r"\bmust (?:be located|reside|live) in\b", re.I), "exige residencia específica"),
+    (_RESIDENCY_RE, "exige residencia específica"),
 ]
 
 _DEGREE_RE = re.compile(
@@ -34,9 +42,19 @@ _DEGREE_RE = re.compile(
     re.I,
 )
 _DEGREE_LEVEL = {
-    "bachelor": 1, "licenciatura": 1, "bsc": 1, "b.s": 1, "ingenier": 1,
-    "master": 2, "maestr": 2, "msc": 2, "m.s": 2,
-    "phd": 3, "ph.d": 3, "doctorado": 3, "doctor": 3,
+    "bachelor": 1,
+    "licenciatura": 1,
+    "bsc": 1,
+    "b.s": 1,
+    "ingenier": 1,
+    "master": 2,
+    "maestr": 2,
+    "msc": 2,
+    "m.s": 2,
+    "phd": 3,
+    "ph.d": 3,
+    "doctorado": 3,
+    "doctor": 3,
 }
 # A degree named as "preferred/nice-to-have but NOT required" is not a knock-out — skip when a
 # negator precedes the "required" token inside the matched span (mirrors the F2 negated-hybrid
@@ -48,12 +66,22 @@ _LANG_RE = re.compile(
     re.I,
 )
 _LANG_CODE = {
-    "english": "en", "inglés": "en", "ingles": "en",
+    "english": "en",
+    "inglés": "en",
+    "ingles": "en",
     "spanish": "es",
-    "german": "de", "alemán": "de", "aleman": "de",
-    "french": "fr", "francés": "fr", "frances": "fr",
-    "portuguese": "pt", "portugués": "pt", "portugues": "pt",
-    "dutch": "nl", "italian": "it", "italiano": "it",
+    "german": "de",
+    "alemán": "de",
+    "aleman": "de",
+    "french": "fr",
+    "francés": "fr",
+    "frances": "fr",
+    "portuguese": "pt",
+    "portugués": "pt",
+    "portugues": "pt",
+    "dutch": "nl",
+    "italian": "it",
+    "italiano": "it",
 }
 
 
@@ -79,11 +107,16 @@ def prescan(job: dict, criteria: Criteria, master_cv: dict) -> list[dict]:
     # 1. Visa / work authorization / clearance / residencia — un solo warning (el primero).
     for rx, label in _VISA_PATTERNS:
         m = rx.search(text)
-        if m:
-            warnings.append(
-                {"code": "work_authorization", "label": label, "evidence": _evidence(text, m)}
-            )
-            break
+        if not m:
+            continue
+        # Residencia: "must be located in a timezone with US overlap" es un requisito de zona
+        # horaria (benigno, remote-friendly), no un knock-out de residencia — no dispares.
+        if rx is _RESIDENCY_RE and _RESIDENCY_TIMEZONE.search(text[m.end() : m.end() + 40]):
+            continue
+        warnings.append(
+            {"code": "work_authorization", "label": label, "evidence": _evidence(text, m)}
+        )
+        break
     # 2. Años muy por encima del candidato (gap > 2 — más laxo que el scorer, es un aviso).
     req = _required_years(job.get("description") or "")
     if req and criteria.candidate_years and req > criteria.candidate_years + 2:
