@@ -12,6 +12,7 @@ import { useNavigate, useParams } from "react-router";
 import { toast } from "sonner";
 import { api } from "../api";
 import { CvReviewPanel } from "../components/CvReviewPanel";
+import { IntentConfirmDialog } from "../components/IntentConfirmDialog";
 import { CompanyInsights } from "../components/job-detail/CompanyInsights";
 import { JobOverview } from "../components/job-detail/JobOverview";
 import { Ledger } from "../components/job-detail/Ledger";
@@ -270,7 +271,18 @@ export function JobDetailPage() {
         </TabsContent>
 
         <TabsContent value="mensajes" className="mt-4">
-          <SectionTitle>Mensajes — qué enviar</SectionTitle>
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <SectionTitle>Mensajes — qué enviar</SectionTitle>
+            <IntentConfirmDialog
+              buttonLabel="Carta personalizada"
+              title="Carta de presentación personalizada (LLM)"
+              what="El brain investiga la empresa en la web y redacta una carta específica para esta vacante, con tu voz (reglas anti-slop) y solo hechos de tu CV."
+              produces="Un borrador nuevo tipo 'Carta de presentación' (variante brain)."
+              where="Aquí, en la lista de mensajes, tras correr el brain."
+              type="cover_letter"
+              jobId={jobId}
+            />
+          </div>
           <div className="space-y-2">
             {d.messages.length === 0 && (
               <Tooltip>

@@ -249,3 +249,50 @@ def _write_cv_review(db: DB, intent: dict, result: dict) -> str:
 
 _CONTEXT_BUILDERS["cv_review"] = _ctx_cv_review
 _RESULT_WRITERS["cv_review"] = _write_cv_review
+
+
+# ── cover_letter (F4 §7.2) ─────────────────────────────────────────────────────
+# Context feeds the brain the master-CV path (exclusive source of truth), what past
+# outcomes taught us about this company, and the drafts already on the job (so the brain
+# improves on the deterministic letter instead of duplicating it). The writer only
+# VALIDATES the brain's JSON and PERSISTS it as a message — no LLM here ($0 invariant).
+_COVER_LETTER_LANGS = ("en", "es")
+
+
+def _ctx_cover_letter(db: DB, intent: dict) -> dict:
+    import engine.paths as paths
+
+    job = db.get_job(intent["job_id"]) or {}
+    return {
+        "master_cv_path": str(paths.MASTER_CV_PATH),
+        "learnings": db.learnings_for_company(job.get("company", "")),
+        "existing_messages": [
+            {"kind": m["kind"], "subject": m.get("subject"), "body": m["body"]}
+            for m in db.messages_for(intent["job_id"])
+        ],
+    }
+
+
+def _write_cover_letter(db: DB, intent: dict, result: dict) -> str:
+    subject = (result.get("subject") or "").strip()
+    body = (result.get("body") or "").strip()
+    if not subject or not body:
+        raise ValueError("cover_letter result needs non-empty subject and body")
+    language = result.get("language") or "en"
+    if language not in _COVER_LETTER_LANGS:
+        raise ValueError(f"language must be one of {_COVER_LETTER_LANGS}")
+    mid = db.add_message(
+        intent["job_id"],
+        channel="email",
+        kind="cover_letter",
+        body=body,
+        subject=subject,
+        variant="brain",
+        language=language,
+        state="draft",
+    )
+    return f"message:{mid}"
+
+
+_CONTEXT_BUILDERS["cover_letter"] = _ctx_cover_letter
+_RESULT_WRITERS["cover_letter"] = _write_cover_letter

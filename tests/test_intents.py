@@ -158,6 +158,103 @@ def test_apply_result_requires_running_and_known_writer(db):
     assert intents.get_intent(db, iid)["status"] == "running"  # no se corrompe el estado
 
 
+# ── cover_letter writer (Task 8) — valida + persiste la carta que redactó el brain ──
+def test_cover_letter_writer_creates_draft_message(db):
+    from engine.normalize import Job
+
+    db.upsert_job(
+        Job(source="lever", source_job_id="2", title="Analyst", company="Zeta", url="https://x/2")
+    )
+    jid = db.list_jobs()[0]["id"]
+    iid = intents.enqueue(db, "cover_letter", {"language": "en"}, job_id=jid)
+    intents.mark_running(db, iid)
+    ref = intents.apply_result(
+        db,
+        iid,
+        {"subject": "Application — Analyst", "body": "Dear team, ...", "language": "en"},
+    )
+    assert ref.startswith("message:")
+    msgs = [m for m in db.messages_for(jid) if m["kind"] == "cover_letter"]
+    assert msgs and msgs[-1]["variant"] == "brain" and msgs[-1]["state"] == "draft"
+    assert msgs[-1]["channel"] == "email" and msgs[-1]["language"] == "en"
+    assert msgs[-1]["subject"] == "Application — Analyst"
+    assert intents.get_intent(db, iid)["status"] == "done"
+
+
+def test_cover_letter_writer_rejects_empty_body(db):
+    from engine.normalize import Job
+
+    db.upsert_job(
+        Job(source="lever", source_job_id="3", title="Analyst", company="Eta", url="https://x/3")
+    )
+    jid = db.list_jobs()[0]["id"]
+    iid = intents.enqueue(db, "cover_letter", {}, job_id=jid)
+    intents.mark_running(db, iid)
+    with pytest.raises(ValueError):
+        intents.apply_result(db, iid, {"subject": "s", "body": ""})
+    # malformed result → no message written and the intent stays running for a retry.
+    assert [m for m in db.messages_for(jid) if m["kind"] == "cover_letter"] == []
+    assert intents.get_intent(db, iid)["status"] == "running"
+
+
+def test_cover_letter_writer_rejects_empty_subject(db):
+    from engine.normalize import Job
+
+    db.upsert_job(
+        Job(source="lever", source_job_id="4", title="Analyst", company="Theta", url="https://x/4")
+    )
+    jid = db.list_jobs()[0]["id"]
+    iid = intents.enqueue(db, "cover_letter", {}, job_id=jid)
+    intents.mark_running(db, iid)
+    with pytest.raises(ValueError):
+        intents.apply_result(db, iid, {"subject": "   ", "body": "a real body"})
+    assert intents.get_intent(db, iid)["status"] == "running"
+
+
+def test_cover_letter_writer_rejects_bad_language(db):
+    from engine.normalize import Job
+
+    db.upsert_job(
+        Job(source="lever", source_job_id="5", title="Analyst", company="Iota", url="https://x/5")
+    )
+    jid = db.list_jobs()[0]["id"]
+    iid = intents.enqueue(db, "cover_letter", {}, job_id=jid)
+    intents.mark_running(db, iid)
+    with pytest.raises(ValueError):
+        intents.apply_result(db, iid, {"subject": "s", "body": "b", "language": "fr"})
+    assert intents.get_intent(db, iid)["status"] == "running"
+
+
+def test_cover_letter_writer_defaults_language_to_en(db):
+    from engine.normalize import Job
+
+    db.upsert_job(
+        Job(source="lever", source_job_id="6", title="Analyst", company="Kappa", url="https://x/6")
+    )
+    jid = db.list_jobs()[0]["id"]
+    iid = intents.enqueue(db, "cover_letter", {}, job_id=jid)
+    intents.mark_running(db, iid)
+    intents.apply_result(db, iid, {"subject": "s", "body": "b"})
+    msgs = [m for m in db.messages_for(jid) if m["kind"] == "cover_letter"]
+    assert msgs and msgs[-1]["language"] == "en"
+
+
+def test_cover_letter_context_exposes_cv_learnings_and_messages(db):
+    import engine.paths as paths
+    from engine.normalize import Job
+
+    db.upsert_job(
+        Job(source="lever", source_job_id="7", title="Analyst", company="Lambda", url="https://x/7")
+    )
+    jid = db.list_jobs()[0]["id"]
+    db.add_message(jid, channel="email", kind="cold_email", body="hi", subject="s")
+    iid = intents.enqueue(db, "cover_letter", {}, job_id=jid)
+    ctx = intents.context_for(db, iid)
+    assert ctx["master_cv_path"] == str(paths.MASTER_CV_PATH)
+    assert isinstance(ctx["learnings"], list)
+    assert any(m["kind"] == "cold_email" for m in ctx["existing_messages"])
+
+
 # ── CLI layer (Task 3) — el brain drena la cola vía estos comandos ─────────────
 @pytest.fixture
 def cli_db(tmp_path, monkeypatch):

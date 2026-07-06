@@ -24,6 +24,8 @@ const { toast, api } = vi.hoisted(() => ({
     addInterviewer: vi.fn(() => Promise.resolve({ ok: true, id: 1 })),
     genPrep: vi.fn(() => Promise.resolve({ ok: true, path: "", markdown: "" })),
     recordOutcome: vi.fn(() => Promise.resolve({ ok: true, learnings: [] })),
+    enqueueIntent: vi.fn(() => Promise.resolve({ ok: true, id: "in_new" })),
+    intents: vi.fn(() => Promise.resolve({ intents: [], pending: 0 })),
   },
 }));
 vi.mock("sonner", async (importOriginal) => ({
@@ -157,6 +159,51 @@ describe("JobDetailPage — página /jobs/:id con tabs", () => {
     await userEvent.click(screen.getByRole("tab", { name: "Mensajes" }));
     await userEvent.click(await screen.findByRole("button", { name: /Generar borradores/ }));
     await waitFor(() => expect(api.prep).toHaveBeenCalledWith("job-1", undefined));
+  });
+
+  it("el tab Mensajes encola una carta personalizada para el brain (cover_letter)", async () => {
+    renderRoutes("/jobs/job-1");
+    await screen.findByText("Senior Data Scientist");
+    await userEvent.click(screen.getByRole("tab", { name: "Mensajes" }));
+    await userEvent.click(await screen.findByRole("button", { name: /Carta personalizada/ }));
+    // El diálogo explica el handoff $0 y el CTA encola el intent tipado a esta vacante.
+    await userEvent.click(await screen.findByRole("button", { name: /Encolar para el brain/ }));
+    await waitFor(() =>
+      expect(api.enqueueIntent).toHaveBeenCalledWith("cover_letter", undefined, "job-1"),
+    );
+  });
+
+  it("el tab Mensajes muestra la carta que persistió el brain y permite copiarla", async () => {
+    const writeText = vi.fn(() => Promise.resolve());
+    Object.assign(navigator, { clipboard: { writeText } });
+    api.job.mockResolvedValue({
+      ...jobDetail(),
+      messages: [
+        {
+          id: 42,
+          job_id: "job-1",
+          channel: "email",
+          kind: "cover_letter",
+          variant: "brain",
+          language: "en",
+          subject: "Application — Senior Data Scientist",
+          body: "Hi Acme team, I want to help you ship models.",
+          state: "draft",
+        },
+      ],
+    });
+    renderRoutes("/jobs/job-1");
+    await screen.findByText("Senior Data Scientist");
+    await userEvent.click(screen.getByRole("tab", { name: "Mensajes" }));
+    // La MessageCard existente renderiza la carta sin cambios (kind → etiqueta ES + cuerpo).
+    expect(await screen.findByText("Carta de presentación")).toBeInTheDocument();
+    expect(screen.getByText(/I want to help you ship models/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /Copiar/ }));
+    await waitFor(() =>
+      expect(writeText).toHaveBeenCalledWith(
+        "Application — Senior Data Scientist\n\nHi Acme team, I want to help you ship models.",
+      ),
+    );
   });
 
   it("si /api/job falla muestra ErrorState y Reintentar vuelve a pedirlo (recupera al éxito)", async () => {
