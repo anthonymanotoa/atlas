@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import json
+import statistics
 from datetime import UTC, datetime
 from typing import Any
 
 from engine import heartbeat
+from engine.config import Criteria
 from engine.db.models import DB
 from engine.referrals.connections import match_referrals
 
@@ -79,6 +81,125 @@ def overview(db: DB) -> dict[str, Any]:
         "last_success": db.meta_get("last_success_ts"),
         "downtime_hours": heartbeat.downtime_hours(db),
         "source_health": db.latest_source_health(),
+    }
+
+
+# ── F3 §6.2: analytics puro sobre SQLite (funnel real, score floor, conversiones) ──
+# El funnel se calcula de las columnas timestamp por etapa de `jobs` (constante FUNNEL),
+# que son la fuente canónica de transiciones — NO de la tabla `events`, cuyo `type` sólo
+# distingue discovered/stage_change/... con el destino enterrado en `detail` JSON. Los
+# positivos se complementan con `application_outcomes.final_state` (usa 'interviewed').
+POSITIVE_OUTCOME_STATES = ("responded", "interviewed", "offer")
+_ATS_SOURCES = frozenset({"greenhouse", "lever", "ashby", "smartrecruiters", "workday"})
+_POSITIVE_JOBS_WHERE = (
+    "(responded_at IS NOT NULL OR interview_at IS NOT NULL OR offer_at IS NOT NULL "
+    "OR id IN (SELECT job_id FROM application_outcomes WHERE final_state IN "
+    "('responded','interviewed','offer')))"
+)
+
+
+def funnel(db: DB) -> list[dict]:
+    """Funnel por transiciones reales (columnas timestamp por etapa de jobs) + tasa vs etapa previa.
+
+    `rate` es la conversión respecto a la etapa inmediatamente anterior (None en discovered).
+    COUNT(col) ya ignora NULLs; los nombres de columna vienen de FUNNEL (constantes del
+    módulo, no input del usuario) → la interpolación es segura.
+    """
+    cols = [col for _, col in FUNNEL]
+    select = ", ".join(f"COUNT({c}) AS {c}" for c in cols)
+    row = db.conn.execute(f"SELECT {select} FROM jobs").fetchone()
+    out: list[dict] = []
+    prev: int | None = None
+    for name, col in FUNNEL:
+        count = row[col]
+        rate = round(count / prev, 3) if prev else None
+        out.append({"stage": name, "count": count, "rate": rate})
+        prev = count
+    return out
+
+
+def score_floor(db: DB) -> float | None:
+    """Score mínimo con outcome positivo — el 'piso' empírico: 'ningún positivo bajo X' (§6.2).
+
+    Positivo = el job alcanzó responded/interview/offer (timestamp) o tiene un
+    application_outcome confirmado en POSITIVE_OUTCOME_STATES. None si no hay ninguno.
+    """
+    row = db.conn.execute(
+        f"SELECT MIN(fit_score) AS floor, COUNT(*) AS n FROM jobs "
+        f"WHERE fit_score IS NOT NULL AND {_POSITIVE_JOBS_WHERE}"
+    ).fetchone()
+    return float(row["floor"]) if row and row["n"] else None
+
+
+def conversion_by(db: DB, dim: str, criteria: Criteria | None = None) -> list[dict]:
+    """Conversión de jobs APLICADOS agrupados por dimensión (§6.2).
+
+    dim ∈ {source, ats, remote_policy, role_term}. Cada fila:
+    {key, applied, responded, interviews, offers, response_rate}, ordenada por applied desc.
+    Sólo se consideran jobs con applied_at (llegaron a postulación).
+    """
+    if dim not in ("source", "ats", "remote_policy", "role_term"):
+        raise ValueError(f"unknown dim: {dim}")
+    jobs = [j for j in db.list_jobs() if j.get("applied_at")]
+
+    def key_of(j: dict) -> str:
+        if dim == "source":
+            return j.get("source") or "unknown"
+        if dim == "ats":
+            s = j.get("source") or "unknown"
+            return s if s in _ATS_SOURCES else "non-ats"
+        if dim == "remote_policy":
+            return (j.get("workplace_type") or "unknown").lower()
+        title = (j.get("title") or "").lower()
+        for t in criteria.all_role_terms if criteria else []:
+            if t in title:
+                return t
+        return "otro"
+
+    groups: dict[str, dict] = {}
+    for j in jobs:
+        k = key_of(j)
+        g = groups.setdefault(
+            k, {"key": k, "applied": 0, "responded": 0, "interviews": 0, "offers": 0}
+        )
+        positive = bool(j.get("responded_at") or j.get("interview_at") or j.get("offer_at"))
+        g["applied"] += 1
+        g["responded"] += 1 if positive else 0
+        g["interviews"] += 1 if (j.get("interview_at") or j.get("offer_at")) else 0
+        g["offers"] += 1 if j.get("offer_at") else 0
+    for g in groups.values():
+        g["response_rate"] = round(g["responded"] / g["applied"], 3) if g["applied"] else None
+    return sorted(groups.values(), key=lambda g: -g["applied"])
+
+
+def response_times(db: DB) -> dict:
+    """Días applied→responded (timestamps de jobs) + response_days confirmados (outcomes).
+
+    Devuelve {n, avg_days, median_days, p90_days}; todos None cuando no hay datos.
+    """
+    days: list[float] = []
+    for j in db.list_jobs():
+        a, r = j.get("applied_at"), j.get("responded_at")
+        if not (a and r):
+            continue
+        try:
+            delta = (datetime.fromisoformat(r) - datetime.fromisoformat(a)).total_seconds() / 86400
+        except (ValueError, TypeError):
+            continue
+        if delta >= 0:
+            days.append(round(delta, 1))
+    rows = db.conn.execute(
+        "SELECT response_days FROM application_outcomes WHERE response_days IS NOT NULL"
+    ).fetchall()
+    days.extend(float(r["response_days"]) for r in rows)
+    if not days:
+        return {"n": 0, "avg_days": None, "median_days": None, "p90_days": None}
+    days.sort()
+    return {
+        "n": len(days),
+        "avg_days": round(statistics.fmean(days), 1),
+        "median_days": round(statistics.median(days), 1),
+        "p90_days": round(days[int(0.9 * (len(days) - 1))], 1),
     }
 
 
