@@ -26,8 +26,9 @@ def test_score_job_records_factor_deltas():
 
 
 def test_deltas_sum_to_final_score_when_unclamped():
-    # A genuinely-unclamped job: role-in-desc (+8) + remote (+15) + must-have (+4) = 50+27 = 77,
-    # comfortably inside the 0–100 bound and with no soft-cap/disq firing, so base + Σdeltas == final.
+    # A genuinely-unclamped job: role no-match (-35, title/desc never say "data scientist") +
+    # remote (+15) + must-have python (+4) = 50-16 = 34, comfortably inside the 0–100 bound with no
+    # soft-cap/disq firing, so base + Σdeltas == final (the point of this reconciliation test).
     job = {"title": "Analytics Engineer", "company": "Acme", "is_remote": 1,
            "workplace_type": "remote", "description": "We use python for data science work."}
     res = score_job(job, CRIT)
