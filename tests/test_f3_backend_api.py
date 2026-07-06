@@ -277,3 +277,57 @@ def test_apply_rec_rejects_foreign_origin(atlas_app):
             headers={"origin": "https://evil.example.com"},
         )
     assert r.status_code == 403
+
+
+# ── §6.3 Story bank ───────────────────────────────────────────────────────────
+def test_stories_crud_and_match(atlas_app):
+    with TestClient(atlas_app) as client:
+        r = client.post(
+            "/api/stories",
+            json={
+                "title": "Pipeline caído en Black Friday",
+                "situation": "ETL caído",
+                "task": "Restaurar",
+                "action": "Rollback en Airflow",
+                "result": "40min",
+                "reflection": "Alertas",
+                "skills": ["python", "airflow"],
+            },
+        )
+        assert r.status_code == 200
+        sid = r.json()["id"]
+        stories = client.get("/api/stories").json()["stories"]
+        assert stories[0]["skills"] == ["python", "airflow"]
+        assert client.put(f"/api/stories/{sid}", json={"result": "35min"}).status_code == 200
+        assert client.get("/api/stories").json()["stories"][0]["result"] == "35min"
+        m = client.get("/api/stories/match", params={"q": "python incident on airflow"}).json()
+        assert m["matches"] and m["matches"][0]["story"]["id"] == sid
+        assert "Situación:" in m["matches"][0]["formatted"]
+        assert client.delete(f"/api/stories/{sid}").status_code == 200
+        assert client.get("/api/stories").json()["stories"] == []
+
+
+def test_stories_put_delete_unknown_404(atlas_app):
+    with TestClient(atlas_app) as client:
+        assert client.put("/api/stories/999", json={"title": "x"}).status_code == 404
+        assert client.delete("/api/stories/999").status_code == 404
+
+
+def test_stories_match_empty_query_returns_no_matches(atlas_app):
+    """Una query vacía (o solo stopwords) no revienta: devuelve matches vacío, no 500."""
+    with TestClient(atlas_app) as client:
+        client.post("/api/stories", json={"title": "x", "situation": "y", "skills": ["python"]})
+        assert client.get("/api/stories/match", params={"q": ""}).json()["matches"] == []
+
+
+def test_stories_post_requires_title(atlas_app):
+    with TestClient(atlas_app) as client:
+        assert client.post("/api/stories", json={"situation": "x"}).status_code == 422
+
+
+def test_stories_mutations_reject_foreign_origin(atlas_app):
+    with TestClient(atlas_app) as client:
+        hdr = {"origin": "https://evil.example.com"}
+        assert client.post("/api/stories", json={"title": "x"}, headers=hdr).status_code == 403
+        assert client.put("/api/stories/1", json={"title": "x"}, headers=hdr).status_code == 403
+        assert client.delete("/api/stories/1", headers=hdr).status_code == 403

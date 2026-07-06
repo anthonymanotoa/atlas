@@ -431,6 +431,73 @@ def api_apply_rec(body: RecBody):
     raise HTTPException(400, f"action_type no soportado: {body.action_type}")
 
 
+# ── Story bank STAR+R (F3 §6.3) ───────────────────────────────────────────────
+# CRUD sobre el banco de historias + un matcher determinista. El matcher rankea las
+# historias por solape (skills 3x + tokens) contra la query, canonicalizando ambos lados
+# con la ontología del perfil (engine.stories.match_stories), y devuelve el bloque STAR+R
+# ya formateado y pegable (format_story). $0: sin red ni LLM.
+class StoryBody(BaseModel):
+    title: str
+    situation: str = ""
+    task: str = ""
+    action: str = ""
+    result: str = ""
+    reflection: str = ""
+    skills: list[str] = []
+
+
+class StoryPatchBody(BaseModel):
+    title: str | None = None
+    situation: str | None = None
+    task: str | None = None
+    action: str | None = None
+    result: str | None = None
+    reflection: str | None = None
+    skills: list[str] | None = None
+
+
+@app.get("/api/stories")
+def api_stories(db: DB = Depends(get_db)):
+    return {"stories": db.list_stories()}  # skills ya parseado a list[str] por el helper
+
+
+@app.get("/api/stories/match")
+def api_match_stories(q: str = "", db: DB = Depends(get_db)):
+    """Historias rankeadas por relevancia a la query, con su bloque STAR+R pegable (top 5)."""
+    from engine.config import load_ontology
+    from engine.stories import format_story, match_stories
+
+    ranked = match_stories(db.list_stories(), q, load_ontology())[:5]
+    return {
+        "matches": [
+            {"story": s, "score": score, "formatted": format_story(s)} for s, score in ranked
+        ]
+    }
+
+
+@app.post("/api/stories", dependencies=[Depends(require_trusted_origin)])
+def api_add_story(body: StoryBody, db: DB = Depends(get_db)):
+    sid = db.add_story(**body.model_dump())
+    return {"ok": True, "id": sid}
+
+
+@app.put("/api/stories/{story_id}", dependencies=[Depends(require_trusted_origin)])
+def api_update_story(story_id: int, body: StoryPatchBody, db: DB = Depends(get_db)):
+    # Solo campos presentes (parche); id desconocido → 404 limpio, nunca un no-op silencioso.
+    fields = {k: v for k, v in body.model_dump().items() if v is not None}
+    if not db.get_story(story_id):
+        raise HTTPException(404, "story not found")
+    db.update_story(story_id, fields)
+    return {"ok": True}
+
+
+@app.delete("/api/stories/{story_id}", dependencies=[Depends(require_trusted_origin)])
+def api_delete_story(story_id: int, db: DB = Depends(get_db)):
+    if not db.delete_story(story_id):  # rowcount 0 → id desconocido
+        raise HTTPException(404, "story not found")
+    return {"ok": True}
+
+
 # ── On-demand discover + score (plan 019) ─────────────────────────────────────
 # Lets the cockpit pull fresh jobs between scheduled brain runs. Progress model:
 # fire-and-forget + poll (the SPA polls /api/discover/status). The run is
