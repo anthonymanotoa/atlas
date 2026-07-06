@@ -153,8 +153,7 @@ def test_create_profile_persists_domain(tmp_registry):
     profiles.create_profile("lucy", "Lucy", domain="architecture")
     assert profiles.domain_of("lucy") == "architecture"
     assert any(
-        p["id"] == "lucy" and p.get("domain") == "architecture"
-        for p in profiles.list_profiles()
+        p["id"] == "lucy" and p.get("domain") == "architecture" for p in profiles.list_profiles()
     )
 
 

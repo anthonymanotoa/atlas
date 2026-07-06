@@ -21,13 +21,17 @@ _ES_JOB = {
 
 
 def test_language_hard_disqualifies_off_language_posting():
-    es_only = Criteria(roles=["arquitecto"], languages=["es"], language_hard=True, remote_required=False)
+    es_only = Criteria(
+        roles=["arquitecto"], languages=["es"], language_hard=True, remote_required=False
+    )
     assert score_job(_EN_JOB, es_only).disqualified is True
     assert score_job(_ES_JOB, es_only).disqualified is False  # Spanish posting survives
 
 
 def test_language_soft_does_not_disqualify_when_not_hard():
-    es_soft = Criteria(roles=["arquitecto"], languages=["es"], remote_required=False)  # hard defaults False
+    es_soft = Criteria(
+        roles=["arquitecto"], languages=["es"], remote_required=False
+    )  # hard defaults False
     assert score_job(_EN_JOB, es_soft).disqualified is False  # penalized, not DQ'd
 
 

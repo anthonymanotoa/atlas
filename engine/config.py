@@ -60,14 +60,37 @@ class Criteria(BaseModel):
     senior_terms: list[str] = Field(default_factory=lambda: ["senior", "sr.", "sr ", "lead"])
     exec_terms: list[str] = Field(
         default_factory=lambda: [
-            "director", "vp ", "vp,", "vice president", "head of", "chief", " cto", " ceo",
-            " cfo", " coo", "svp", "evp", "c-level", "managing director",
+            "director",
+            "vp ",
+            "vp,",
+            "vice president",
+            "head of",
+            "chief",
+            " cto",
+            " ceo",
+            " cfo",
+            " coo",
+            "svp",
+            "evp",
+            "c-level",
+            "managing director",
         ]
     )
     junior_terms: list[str] = Field(
         default_factory=lambda: [
-            "junior", "jr.", "jr ", "intern", "internship", "entry level", "entry-level",
-            "graduate", "trainee", "becario", "practicante", "working student", "apprentice",
+            "junior",
+            "jr.",
+            "jr ",
+            "intern",
+            "internship",
+            "entry level",
+            "entry-level",
+            "graduate",
+            "trainee",
+            "becario",
+            "practicante",
+            "working student",
+            "apprentice",
         ]
     )
     stretch_terms: list[str] = Field(
