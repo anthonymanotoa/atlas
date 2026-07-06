@@ -343,25 +343,14 @@ imports already present in that file):
 Machine-checkable. ALL must hold:
 
 - [ ] `uv run pytest` exits 0; the 3 new tests exist and pass
-- [ ] `uv run ruff check dashboard/backend/main.py tests/test_backend_api.py` and
-      `uv run ruff format --check dashboard/backend/main.py tests/test_backend_api.py`
-      exit 0 (scoped to the files this plan touches — see note below)
+- [ ] `uv run ruff check .` and `uv run ruff format --check .` exit 0
 - [ ] `grep -n "paths.set_profile" dashboard/backend/main.py` shows exactly ONE call —
       the one inside `api_switch_profile` under `_DB_LOCK` (none in the background task)
 - [ ] `grep -n "set_active" dashboard/backend/main.py` shows the call inside the
       `with _DB_LOCK:` block
+- [ ] `./scripts/check.sh` passes
 - [ ] No files outside the in-scope list are modified (`git status`)
 - [ ] `plans/README.md` status row updated
-
-> **Note on the whole-repo gate**: `./scripts/check.sh` (which runs `uv run ruff check .`
-> repo-wide) currently fails independent of this plan, on 3 pre-existing UP037 errors in
-> `engine/portfolio/prompt.py` — confirmed byte-identical to this plan's own baseline
-> commit `413ae10` (`git diff 413ae10..HEAD -- engine/portfolio/prompt.py` is empty).
-> That file is out of scope for plan 021 (see Scope) and is already tracked by a sibling
-> effort (worktree `atlas-ruff-format-realign`, branch `chore/ruff-format-realign`,
-> ~8 files repo-wide). The Done Criteria above are scoped to the files this plan actually
-> touches so they can be verified in isolation; `./scripts/check.sh` should be re-run
-> (and is expected to pass) once `chore/ruff-format-realign` lands.
 
 ## STOP conditions
 
