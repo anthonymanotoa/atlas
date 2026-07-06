@@ -284,3 +284,20 @@ CREATE TABLE IF NOT EXISTS stories (
     created_at  TEXT NOT NULL,
     updated_at  TEXT NOT NULL
 );
+
+-- Intent queue (F4): guided handoff web → brain. The web enqueues; the brain (Claude Code)
+-- drains as step 0 of `corre atlas` and completes each intent with a validated result JSON.
+CREATE TABLE IF NOT EXISTS intents (
+    id           TEXT PRIMARY KEY,              -- in_<hex12>
+    type         TEXT NOT NULL,                 -- cv_review | legitimacy_batch | upskill_report
+                                                --  | interview_prep_deep | profile_expand | cover_letter
+    job_id       TEXT REFERENCES jobs(id) ON DELETE SET NULL,
+    payload      TEXT NOT NULL DEFAULT '{}',    -- json, validated per-type at the API
+    status       TEXT NOT NULL DEFAULT 'pending', -- pending | running | done | error
+    result_ref   TEXT,                          -- e.g. cv_review:3, jobs:12, message:7
+    error        TEXT,
+    created_at   TEXT NOT NULL,
+    completed_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_intents_status ON intents(status, created_at);
+CREATE INDEX IF NOT EXISTS idx_intents_job ON intents(job_id);
