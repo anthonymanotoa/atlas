@@ -13,6 +13,12 @@ const { api } = vi.hoisted(() => ({
     csvColumns: vi.fn(),
     cvLibrary: vi.fn(),
     renameProfile: vi.fn(),
+    // SettingsPage now mounts <SettingsOps/> (F3 §6.5), which reads these on mount.
+    systemHealth: vi.fn(),
+    resolveCompany: vi.fn(),
+    addCompany: vi.fn(),
+    suggestCompanies: vi.fn(),
+    importConnections: vi.fn(),
     exportUrl: (cols?: string[]) => `/api/export?columns=${(cols ?? []).join(",")}`,
   },
 }));
@@ -53,6 +59,15 @@ beforeEach(() => {
   });
   api.cvLibrary.mockResolvedValue({ dir: "/tmp/cvs", count: 2, files: [] });
   api.setSetting.mockResolvedValue({ ok: true, key: "download_dir", value: "/tmp/atlas2" });
+  api.systemHealth.mockResolvedValue({
+    profile: "owner",
+    db: { path: "/tmp/atlas.db", ok: true, jobs: 0 },
+    counts: {},
+    last_run: null,
+    last_success: null,
+    sources: [],
+    safeguards: { api_key_unset: true, base_url_default: true },
+  });
 });
 
 describe("SettingsPage", () => {

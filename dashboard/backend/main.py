@@ -22,6 +22,8 @@ from pydantic import BaseModel
 import engine.paths as paths
 from engine import analytics, profiles
 from engine.db.models import DB
+from engine.discovery import reverse
+from engine.discovery.registry import resolve_ats
 from engine.normalize import STATES, now_iso
 from engine.paths import REPO_ROOT
 
@@ -733,6 +735,168 @@ async def api_cv_import(file: UploadFile):
 @app.get("/api/health")
 def health():
     return {"ok": True}
+
+
+def _probe_company_jobs(ats: str, token: str) -> tuple[int, str | None]:
+    """Cuenta posiciones del board recién resuelto (preview de confirmación). Nunca lanza:
+    si el board no responde devuelve (0, None) — la resolución del ATS ya fue exitosa."""
+    from engine.discovery import reverse as _rev
+    from engine.discovery.http import get_json, make_client
+
+    urls = {
+        "greenhouse": _rev.GREENHOUSE_URL.format(token=token),
+        "lever": _rev.LEVER_URL.format(token=token),
+        "ashby": _rev.ASHBY_URL.format(token=token),
+    }
+    url = urls.get(ats)
+    if not url:
+        return 0, None
+    client = make_client(timeout=10)
+    try:
+        data = get_json(client, url, retries=0)
+        titles = [t for t in _rev._titles(ats, data) if t]
+        return len(titles), None
+    except Exception:  # noqa: BLE001 — preview only; a dead board must not break resolution
+        return 0, None
+    finally:
+        client.close()
+
+
+# ── Exponer CLI-only en la web (F3 §6.5): resolve/add company, suggest, connections, health ──
+class ResolveBody(BaseModel):
+    url: str
+
+
+class CompanyEntryBody(BaseModel):
+    # company/ats are optional HERE (not on CompanyTarget) so a bad payload reaches the handler
+    # and fails as a clean 400 via save_company's CompanyTarget validation — never a 422 shape
+    # error (the contract: add → 400 si la entrada no valida CompanyTarget).
+    company: str = ""
+    ats: str = ""
+    token: str | None = None
+    eu: bool = False
+    instance: str | None = None
+    careers_url: str | None = None
+
+
+class SuggestBody(BaseModel):
+    names: list[str] = []
+
+
+@app.post("/api/companies/resolve", dependencies=[Depends(require_trusted_origin)])
+def api_resolve_company(body: ResolveBody, db: DB = Depends(get_db)):
+    """resolve-ats en la web: detecta el ATS de una URL de carreras y previsualiza el board."""
+    from engine.config import load_companies
+    from engine.normalize import norm_company
+
+    url = (body.url or "").strip()
+    if not url:
+        raise HTTPException(400, "url requerida")
+    contract = resolve_ats(url)  # None si no hay ATS conocido — NO es un error
+    if not contract:
+        return {
+            "resolved": False,
+            "company": None,
+            "ats": None,
+            "token": None,
+            "preview_jobs_count": 0,
+            "already_configured": False,
+        }
+    token = contract.get("token") or ""
+    count, company_name = _probe_company_jobs(contract["ats"], token)
+    # Nombre sugerido: el que reporte el board, o derivado del host de la URL.
+    name = company_name or (urlsplit(url).hostname or "").split(".")[0].title() or token
+    known = {norm_company(c.company) for c in load_companies()}
+    return {
+        "resolved": True,
+        "company": name,
+        "ats": contract["ats"],
+        "token": token,
+        "preview_jobs_count": count,
+        "already_configured": norm_company(name) in known,
+    }
+
+
+@app.post("/api/companies/add", dependencies=[Depends(require_trusted_origin)])
+def api_add_company(body: CompanyEntryBody):
+    """Añade la empresa confirmada a companies.yaml del perfil activo (append idempotente)."""
+    from engine.config import save_company
+
+    entry = {k: v for k, v in body.model_dump().items() if v not in (None, "", False)}
+    try:
+        added = save_company(entry)
+    except Exception as e:  # noqa: BLE001 — pydantic ValidationError de CompanyTarget → 400 limpio
+        raise HTTPException(400, f"empresa inválida: {e}") from None
+    return {"ok": True, "added": added}
+
+
+@app.post("/api/discovery/suggest", dependencies=[Depends(require_trusted_origin)])
+def api_suggest_companies(body: SuggestBody):
+    """Reverse ATS discovery: nombres (o las seeds del perfil) → empresas que matchean el perfil."""
+    from engine.config import load_criteria, load_discovery_seeds
+
+    names = [n.strip() for n in (body.names or []) if n and n.strip()] or load_discovery_seeds()
+    suggestions = reverse.suggest_companies(names, load_criteria())
+    return {"suggestions": suggestions}
+
+
+@app.post("/api/connections/import", dependencies=[Depends(require_trusted_origin)])
+async def api_import_connections(file: UploadFile, db: DB = Depends(get_db)):
+    """Upload de LinkedIn Connections.csv → import_connections_csv (referral detection).
+
+    Bare `UploadFile` (no `File(...)` default) mirrors /api/cv/import and keeps the endpoint
+    within the project's ruff B008 policy without whitelisting `fastapi.File`."""
+    import tempfile
+
+    from engine.referrals.connections import import_connections_csv
+
+    raw = await file.read()
+    with tempfile.NamedTemporaryFile("wb", suffix=".csv", delete=False) as tmp:
+        tmp.write(raw)
+        tmp_path = Path(tmp.name)
+    try:
+        imported = import_connections_csv(db, tmp_path)
+    except Exception as e:  # noqa: BLE001 — CSV ilegible → 400 limpio (como F2 cv/import)
+        raise HTTPException(400, f"CSV ilegible: {e}") from None
+    finally:
+        tmp_path.unlink(missing_ok=True)
+    return {"ok": True, "imported": imported}
+
+
+@app.get("/api/system/health")
+def api_system_health(db: DB = Depends(get_db)):
+    """Consolida `atlas status` (counts, source health, last run) + `atlas doctor` (safeguards $0)."""
+    counts = db.counts_by_state()
+    health = db.latest_source_health()
+    api_key = os.environ.get("ANTHROPIC_API_KEY")
+    base_url = os.environ.get("ANTHROPIC_BASE_URL")
+    default_base = base_url in (None, "", "https://api.anthropic.com", "https://api.anthropic.com/")
+    return {
+        "profile": paths.PROFILE_ID or "legacy",
+        "db": {
+            "path": str(paths.DB_PATH),
+            "ok": True,
+            "jobs": sum(counts.values()),
+        },
+        "counts": counts,
+        "last_run": db.meta_get("last_run"),
+        # canonical heartbeat key (engine writes/reads "last_success_ts"; see engine.heartbeat).
+        "last_success": db.meta_get("last_success_ts"),
+        "sources": [
+            {
+                "source": h["source"],
+                "ok": bool(h["ok"]),
+                "count": h["count"],
+                "run_at": h.get("run_at"),
+                "error": h.get("error"),
+            }
+            for h in health
+        ],
+        "safeguards": {
+            "api_key_unset": not api_key,
+            "base_url_default": bool(default_base),
+        },
+    }
 
 
 # ── Settings + CSV export (P1-B) ──────────────────────────────────────────────

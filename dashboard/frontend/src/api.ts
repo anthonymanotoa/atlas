@@ -194,6 +194,40 @@ export type JobDetail = {
   timeline: { stage: string; at: string }[];
 };
 
+// F3 §6.5 ops: system health + resolve/add company + reverse discovery.
+export type SystemHealth = {
+  profile: string;
+  db: { path: string; ok: boolean; jobs: number };
+  counts: Record<string, number>;
+  last_run: string | null;
+  last_success: string | null;
+  sources: {
+    source: string;
+    ok: boolean;
+    count: number;
+    run_at: string | null;
+    error: string | null;
+  }[];
+  safeguards: { api_key_unset: boolean; base_url_default: boolean };
+};
+
+export type ResolvedCompany = {
+  resolved: boolean;
+  company: string | null;
+  ats: string | null;
+  token: string | null;
+  preview_jobs_count: number;
+  already_configured: boolean;
+};
+
+export type CompanySuggestion = {
+  company: string;
+  ats: string;
+  token: string;
+  jobs_count: number;
+  matching_titles: string[];
+};
+
 async function get<T>(url: string): Promise<T> {
   const r = await fetch(url);
   if (!r.ok) throw new Error(`${url} → ${r.status}`);
@@ -317,6 +351,18 @@ export const api = {
     );
   },
   livenessSweep: () => post<{ started: boolean; running?: boolean }>("/api/liveness/sweep"),
+  // F3 §6.5: expose CLI-only ops (system health, resolve/add company, reverse discovery, import).
+  systemHealth: () => get<SystemHealth>("/api/system/health"),
+  resolveCompany: (url: string) => post<ResolvedCompany>("/api/companies/resolve", { url }),
+  addCompany: (entry: { company: string; ats: string; token?: string | null }) =>
+    post<{ ok: boolean; added: boolean }>("/api/companies/add", entry),
+  suggestCompanies: (names?: string[]) =>
+    post<{ suggestions: CompanySuggestion[] }>("/api/discovery/suggest", { names: names ?? [] }),
+  importConnections: (file: File) => {
+    const form = new FormData();
+    form.append("file", file);
+    return postForm<{ ok: boolean; imported: number }>("/api/connections/import", form);
+  },
   exportUrl: (columns?: string[], state?: string) => {
     const p = new URLSearchParams();
     if (columns?.length) p.set("columns", columns.join(","));

@@ -331,3 +331,133 @@ def test_stories_mutations_reject_foreign_origin(atlas_app):
         assert client.post("/api/stories", json={"title": "x"}, headers=hdr).status_code == 403
         assert client.put("/api/stories/1", json={"title": "x"}, headers=hdr).status_code == 403
         assert client.delete("/api/stories/1", headers=hdr).status_code == 403
+
+
+# ── §6.5 Ops: resolve/add company, import connections, system health ──────────
+def test_resolve_company_returns_ats_contract(atlas_app, monkeypatch):
+    import dashboard.backend.main as backend_main
+
+    monkeypatch.setattr(
+        backend_main,
+        "resolve_ats",
+        lambda url, client=None: {"ats": "greenhouse", "token": "acmerobotics", "eu": False},
+    )
+    monkeypatch.setattr(
+        backend_main, "_probe_company_jobs", lambda ats, token: (3, "Acme Robotics")
+    )
+    with TestClient(atlas_app) as client:
+        r = client.post(
+            "/api/companies/resolve", json={"url": "https://boards.greenhouse.io/acmerobotics"}
+        )
+    body = r.json()
+    assert r.status_code == 200 and body["resolved"] is True
+    assert body["ats"] == "greenhouse" and body["token"] == "acmerobotics"
+    assert body["preview_jobs_count"] == 3 and body["already_configured"] is False
+
+
+def test_resolve_company_unknown_ats_is_not_error(atlas_app, monkeypatch):
+    import dashboard.backend.main as backend_main
+
+    monkeypatch.setattr(backend_main, "resolve_ats", lambda url, client=None: None)
+    with TestClient(atlas_app) as client:
+        r = client.post("/api/companies/resolve", json={"url": "https://example.com/careers"})
+    assert r.status_code == 200 and r.json()["resolved"] is False
+
+
+def test_resolve_company_requires_url(atlas_app):
+    with TestClient(atlas_app) as client:
+        assert client.post("/api/companies/resolve", json={}).status_code == 422
+
+
+def test_add_company_appends_and_dedupes(atlas_app, tmp_path, monkeypatch):
+    import engine.paths as paths
+
+    monkeypatch.setattr(paths, "COMPANIES_PATH", tmp_path / "companies.yaml")
+    entry = {"company": "Acme Robotics", "ats": "greenhouse", "token": "acmerobotics"}
+    with TestClient(atlas_app) as client:
+        r1 = client.post("/api/companies/add", json=entry)
+        r2 = client.post("/api/companies/add", json=entry)
+    assert r1.status_code == 200 and r1.json() == {"ok": True, "added": True}
+    assert r2.status_code == 200 and r2.json() == {"ok": True, "added": False}
+    import yaml
+
+    data = yaml.safe_load((tmp_path / "companies.yaml").read_text())
+    assert len(data["companies"]) == 1 and data["companies"][0]["token"] == "acmerobotics"
+
+
+def test_add_company_rejects_invalid(atlas_app):
+    with TestClient(atlas_app) as client:
+        assert client.post("/api/companies/add", json={"token": "x"}).status_code == 400
+
+
+def test_suggest_companies_uses_reverse(atlas_app, monkeypatch):
+    import dashboard.backend.main as backend_main
+
+    monkeypatch.setattr(
+        backend_main.reverse,
+        "suggest_companies",
+        lambda names, criteria, client=None: [
+            {
+                "company": "Acme Corp",
+                "ats": "greenhouse",
+                "token": "acmecorp",
+                "jobs_count": 2,
+                "matching_titles": ["Staff Data Scientist"],
+            }
+        ],
+    )
+    with TestClient(atlas_app) as client:
+        r = client.post("/api/discovery/suggest", json={"names": ["Acme Corp"]})
+    body = r.json()
+    assert r.status_code == 200 and body["suggestions"][0]["company"] == "Acme Corp"
+
+
+def test_import_connections_multipart(atlas_app):
+    csv = (
+        "First Name,Last Name,Company,Position,URL,Email Address\n"
+        "Jane,Doe,Acme,Data Lead,https://x/jane,jane@x.com\n"
+        "John,Roe,Beta,ML Eng,https://x/john,john@x.com\n"
+    )
+    with TestClient(atlas_app) as client:
+        r = client.post(
+            "/api/connections/import",
+            files={"file": ("Connections.csv", csv, "text/csv")},
+        )
+    assert r.status_code == 200 and r.json() == {"ok": True, "imported": 2}
+
+
+def test_import_connections_rejects_empty(atlas_app):
+    with TestClient(atlas_app) as client:
+        r = client.post("/api/connections/import", files={"file": ("empty.csv", "", "text/csv")})
+    assert r.status_code == 200 and r.json()["imported"] == 0
+
+
+def test_system_health_consolidates_status_and_doctor(atlas_app, monkeypatch):
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("ANTHROPIC_BASE_URL", raising=False)
+    with TestClient(atlas_app) as client:
+        _seed_job("applied")
+        h = client.get("/api/system/health").json()
+    assert h["db"]["ok"] is True and h["db"]["jobs"] >= 1
+    assert "applied" in h["counts"]
+    assert isinstance(h["sources"], list)
+    assert h["safeguards"]["api_key_unset"] is True
+    assert set(h) >= {"profile", "db", "counts", "last_run", "sources", "safeguards"}
+
+
+def test_ops_posts_reject_foreign_origin(atlas_app):
+    with TestClient(atlas_app) as client:
+        hdr = {"origin": "https://evil.example.com"}
+        assert (
+            client.post("/api/companies/resolve", json={"url": "x"}, headers=hdr).status_code == 403
+        )
+        assert client.post("/api/companies/add", json={}, headers=hdr).status_code == 403
+        assert client.post("/api/discovery/suggest", json={}, headers=hdr).status_code == 403
+        assert (
+            client.post(
+                "/api/connections/import",
+                files={"file": ("c.csv", "", "text/csv")},
+                headers=hdr,
+            ).status_code
+            == 403
+        )

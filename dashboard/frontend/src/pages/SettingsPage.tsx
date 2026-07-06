@@ -11,6 +11,7 @@ import { ErrorState, LoadingState } from "../components/ui/states";
 import { useCsvColumns, useCvLibrary, useSetSetting, useSettings } from "../hooks/useSettings";
 import { useProfiles, useRenameProfile } from "../hooks/useProfiles";
 import { copy } from "../lib";
+import { SettingsOps } from "../components/SettingsOps";
 
 export function SettingsPage() {
   const settingsQ = useSettings();
@@ -189,6 +190,11 @@ export function SettingsPage() {
           </a>
         </div>
       </section>
+
+      <Separator className="my-4" />
+
+      {/* CLI-only ops expuestas en la web (F3 §6.5): salud, empresas, conexiones. */}
+      <SettingsOps />
     </div>
   );
 }
