@@ -33,7 +33,7 @@ Read `README.md` and `docs/ARCHITECTURE.md` for the full picture.
 ## Verify commands (use these exact forms)
 
 ```bash
-uv run pytest                                   # Python tests → expect "19 passed"
+uv run pytest                                   # Python tests → expect "183 passed" (count grows; all green is the bar)
 npm --prefix dashboard/frontend run typecheck   # tsc --noEmit
 npm --prefix dashboard/frontend run build       # production build
 ./scripts/check.sh                              # all of the above, one command

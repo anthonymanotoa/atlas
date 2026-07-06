@@ -301,7 +301,7 @@ uv run rtk pytest
 ```
 
 > Si las pruebas se quejan de paquetes faltantes (docx, rapidfuzz, pytest), corre
-> `uv sync --extra dev` antes. `uv sync` a secas poda pytest — es un detalle conocido.
+> `uv sync` antes: instala también el grupo `dev` (pytest, ruff) por defecto.
 
 ---
 
@@ -311,8 +311,9 @@ Atlas corre **enteramente en tu Mac**. Nada de lo personal sale de tu equipo ni 
 GitHub. El `.gitignore` protege explícitamente: tu CV maestro (`master_cv.yaml`), la base de
 datos (`*.db`), las carpetas `data/` y `profiles/` (donde vive cada perfil con su BD, su CV
 y sus criterios), los documentos generados (`*.docx`, `*.pdf`), tu `Connections.csv` y
-cualquier `.env`. Cada perfil queda **aislado** en su propia carpeta. El repositorio es
-**privado**.
+cualquier `.env`. Cada perfil queda **aislado** en su propia carpeta. El repositorio en
+GitHub es **público**, así que la protección de tus datos es exactamente esa lista del
+`.gitignore`: lo personal vive solo en tu Mac y **nunca** debe commitearse.
 
 **Seguridad de dependencias:** la auditoría de **producción** da **0 vulnerabilidades**
 (`npm --prefix dashboard/frontend run audit:prod`). Las alertas que pueda mostrar `npm audit`
