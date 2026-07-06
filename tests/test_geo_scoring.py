@@ -82,3 +82,48 @@ def test_onsite_job_ignores_geo_factor():
         {"title": "Data Engineer", "description": "x", "is_remote": 0, "geo_scope": ""}, crit
     )
     assert not any("remoto restringido" in k for k in r.knockouts)
+
+
+# --- Factor 2d: remote/on-site contradiction (flag-only) ---
+
+
+def test_remote_flag_contradicted_by_office_days_is_flagged_with_quote():
+    j = _job(description="Great python role. Note: 3 days in office per week required.")
+    r = score_job(j, _GEO)
+    hit = [k for k in r.knockouts if k.startswith("dice remoto pero")]
+    assert hit and "3 days in office" in hit[0]
+    assert r.disqualified is False
+
+
+def test_remote_flag_contradicted_by_hybrid_wording():
+    j = _job(description="We follow a hybrid model across our hubs.")
+    r = score_job(j, _GEO)
+    assert any(k.startswith("dice remoto pero") for k in r.knockouts)
+
+
+def test_clean_remote_body_not_flagged():
+    r = score_job(_job(description="fully remote, async-first python team"), _GEO)
+    assert not any(k.startswith("dice remoto pero") for k in r.knockouts)
+
+
+def test_2d_does_not_reduce_score_or_dq():
+    clean = score_job(_job(description="fully remote python team"), _GEO)
+    flagged = score_job(_job(description="fully remote python team, 3 days in office"), _GEO)
+    assert flagged.score == clean.score  # flag-only: no score movement
+    assert flagged.disqualified is False
+
+
+def test_2d_ignores_onsite_job_not_claiming_remote():
+    # An on-site posting isn't "selling itself as remote", so 2d must not add its flag even
+    # though the body mentions office/hybrid wording.
+    crit = Criteria(roles=["data engineer"], candidate_country="ec", remote_required=False)
+    r = score_job(
+        {
+            "title": "Data Engineer",
+            "description": "on-site role, 3 days in office",
+            "is_remote": 0,
+            "workplace_type": "onsite",
+        },
+        crit,
+    )
+    assert not any(k.startswith("dice remoto pero") for k in r.knockouts)

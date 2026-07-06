@@ -36,6 +36,17 @@ def _build_stretch_re(stretch_terms: list[str]) -> re.Pattern[str] | None:
 
 _YEARS = re.compile(r"(\d{1,2})\s*\+?\s*(?:years|yrs|años)", re.I)
 
+# F2 geo-mismatch: phrases that contradict a "remote" flag. The matched phrase is quoted in
+# the knockout so the user sees WHY ("3 days in office"). Flag-only — some postings mention
+# "hybrid" innocently ("not a hybrid role"), so this never moves the score.
+_OFFICE_DEMAND = re.compile(
+    r"(\d\s*\+?\s*days?\s+(?:per\s+week\s+)?(?:in|at)(?:\s+the)?\s+office"
+    r"|\d\s*d[ií]as\s+(?:por\s+semana\s+)?en\s+(?:la\s+)?oficina"
+    r"|on[- ]?site\s+\d"
+    r"|\bhybrid\b|\bh[ií]brido\b)",
+    re.I,
+)
+
 
 @dataclass
 class ScoreResult:
@@ -151,6 +162,13 @@ def score_job(job: dict, criteria: Criteria, learnings: list[dict] | None = None
             + (f' ("{raw}")' if raw else "")
             + " — outside your country/regions"
         )
+
+    # 2d. Geo-mismatch (F2 hygiene): the metadata says remote but the body demands office
+    #     presence. Flag with the exact quoted phrase; no score change (see regex comment).
+    if is_remote_job and desc and (office_m := _OFFICE_DEMAND.search(desc)):
+        quoted = office_m.group(0).strip()
+        knockouts.append(f'dice remoto pero: "{quoted}"')
+        reasons.append(f'flagged remote but body says "{quoted}"')
 
     # 3. Seniority fit — junior is under-qualified (DQ); exec is over-qualified (DQ when
     #    excluded); Staff/Principal is a "stretch" (over-qualified seniority) for a candidate
