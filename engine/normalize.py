@@ -9,6 +9,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from engine.geo import COUNTRY_TO_REGION, GEO_ALIASES
 from engine.lang import detect_language
 
 # Pipeline state machine. Order matters for analytics (index = stage rank).
@@ -113,6 +114,82 @@ def infer_remote(
     return None, "unknown"
 
 
+# ── Geo-restriction extraction (F2 geo-scoring) ───────────────────────────────
+# Aliases sorted longest-first so "latin america" wins over "america", "united states"
+# over "us", etc. Lookarounds instead of \b so dotted aliases ("u.s.") match cleanly.
+_GEO_ALT = "|".join(sorted((re.escape(a) for a in GEO_ALIASES), key=len, reverse=True))
+# Location fields are short, curated strings → a bare alias scan is safe there.
+_LOC_ALIAS_RE = re.compile(rf"(?<![A-Za-z])(?P<geo>{_GEO_ALT})(?![A-Za-z])", re.I)
+# Bare ISO-2 codes match UPPERCASE-only and only in the location field ("Remote - US",
+# "Quito, EC") — lowercased they'd collide with words ("in", "us", "it", "no").
+_LOC_CODE_RE = re.compile(
+    r"(?<![A-Za-z])(" + "|".join(c.upper() for c in COUNTRY_TO_REGION) + r")(?![A-Za-z])"
+)
+# Description bodies are long free text → only anchored phrases count, and the captured
+# geo must be a known alias (free text can never produce a scope).
+_DESC_PATTERNS = [
+    re.compile(rf"\b(?P<geo>{_GEO_ALT})[- ]?(?:candidates\s+|residents\s+)?only\b", re.I),
+    re.compile(
+        rf"\bmust\s+(?:reside|be\s+based|be\s+located|live)\s+in\s+(?:the\s+)?"
+        rf"(?P<geo>{_GEO_ALT})(?![A-Za-z])",
+        re.I,
+    ),
+    re.compile(rf"\bbased\s+in\s+(?:the\s+)?(?P<geo>{_GEO_ALT})(?![A-Za-z])", re.I),
+    re.compile(
+        rf"\b(?:eligible|authori[sz]ed)\s+to\s+work\s+in\s+(?:the\s+)?"
+        rf"(?P<geo>{_GEO_ALT})(?![A-Za-z])",
+        re.I,
+    ),
+    re.compile(rf"\bwithin\s+the\s+(?P<geo>{_GEO_ALT})(?![A-Za-z])", re.I),
+    re.compile(rf"\bremote\s*[(\-–—,:]\s*(?:the\s+)?(?P<geo>{_GEO_ALT})(?![A-Za-z])", re.I),
+    re.compile(
+        rf"\bonly\s+(?:open\s+to|hiring)\s+(?:in\s+)?(?:the\s+)?"
+        rf"(?P<geo>{_GEO_ALT})(?![A-Za-z])",
+        re.I,
+    ),
+]
+_WORLDWIDE_DESC_RE = re.compile(
+    r"\b(work\s+from\s+anywhere|remote\s+worldwide|fully\s+remote,?\s+worldwide)\b", re.I
+)
+
+
+def extract_geo_restriction(
+    location: str | None, description: str | None, is_remote: bool | int | None
+) -> tuple[str | None, str]:
+    """Detect a geographic restriction on a REMOTE posting.
+
+    Returns ``(raw_text_for_ui, normalized_scope)``. Scope vocabulary (engine/geo.py):
+    ISO-2 / region tokens (comma-joined when several), "worldwide", "unknown" (remote,
+    nothing detected) or "" (confirmed on-site — not applicable). Deterministic regexes
+    only; a match must name a known alias, so free text never yields a bogus scope.
+    """
+    if is_remote in (0, False):
+        return None, ""
+    loc = (location or "").strip()
+    if loc:
+        scopes: list[str] = []
+        for m in _LOC_ALIAS_RE.finditer(loc):
+            s = GEO_ALIASES[m.group("geo").lower()]
+            if s not in scopes:
+                scopes.append(s)
+        for m in _LOC_CODE_RE.finditer(loc):
+            s = m.group(1).lower()
+            if s not in scopes:
+                scopes.append(s)
+        if "worldwide" in scopes:
+            return loc, "worldwide"
+        if scopes:
+            return loc, ",".join(scopes)
+    desc = description or ""
+    for rx in _DESC_PATTERNS:
+        m = rx.search(desc)
+        if m:
+            return m.group(0).strip(), GEO_ALIASES[m.group("geo").lower()]
+    if _WORLDWIDE_DESC_RE.search(desc):
+        return None, "worldwide"
+    return None, "unknown"
+
+
 class Job(BaseModel):
     """Normalized job posting written to the `jobs` table."""
 
@@ -134,6 +211,8 @@ class Job(BaseModel):
     salary_interval: str | None = None  # yearly | monthly | hourly
     date_posted: str | None = None
     language: str | None = None  # detected posting language (en|es|de|fr|pt|None)
+    geo_restriction: str | None = None  # raw restriction text detected (shown in the UI)
+    geo_scope: str = ""  # normalized: iso2/region tokens | "worldwide" | "unknown" | "" (on-site)
     raw: dict[str, Any] = Field(default_factory=dict)
 
     def finalize(self) -> Job:
@@ -146,4 +225,8 @@ class Job(BaseModel):
             )
         if self.language is None:
             self.language = detect_language(self.description or self.title)
+        if not self.geo_scope:
+            self.geo_restriction, self.geo_scope = extract_geo_restriction(
+                self.location, self.description, self.is_remote
+            )
         return self
