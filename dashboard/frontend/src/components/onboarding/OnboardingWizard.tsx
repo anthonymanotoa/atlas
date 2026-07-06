@@ -96,16 +96,34 @@ export function OnboardingWizard({
     if (!criteria) return;
     setSaving(true);
     try {
-      await api.saveCriteria(
-        { ...criteria, roles: textToList(rolesText), onsite_locations: textToList(onsiteText) },
-        prose,
+      // Load-bearing: persist criteria + unlock the board. Both must succeed.
+      try {
+        await api.saveCriteria(
+          { ...criteria, roles: textToList(rolesText), onsite_locations: textToList(onsiteText) },
+          prose,
+        );
+        await api.completeOnboarding();
+      } catch {
+        toast.error("No se pudo guardar la configuración");
+        return;
+      }
+      // Cosmetic: the display label is settable later in Ajustes and self-heals from the CV
+      // name, so a rename failure — e.g. the owner profile isn't registered yet in legacy mode
+      // (POST /api/profiles/owner/label 404s) — must NOT strand the user after the board unlocks.
+      let labelSaved = true;
+      if (label.trim()) {
+        try {
+          await api.renameProfile(status.profile, label.trim());
+        } catch {
+          labelSaved = false;
+        }
+      }
+      toast.success(
+        labelSaved
+          ? "Perfil configurado — ¡a buscar!"
+          : "Perfil configurado. El nombre para mostrar lo puedes ajustar luego en Ajustes.",
       );
-      if (label.trim()) await api.renameProfile(status.profile, label.trim());
-      await api.completeOnboarding();
-      toast.success("Perfil configurado — ¡a buscar!");
       onDone();
-    } catch {
-      toast.error("No se pudo guardar la configuración");
     } finally {
       setSaving(false);
     }
