@@ -789,10 +789,16 @@ def _run_liveness_sweep(limit: int, profile_id: str | None) -> None:
     try:
         from engine.discovery.liveness import sweep_liveness
 
-        # Re-pin the profile captured at enqueue time so a concurrent dashboard
-        # switch can't make this run land in another profile's DB.
-        if profile_id is not None:
-            paths.set_profile(profile_id)
+        # The profile was pinned at enqueue time. A switch is refused while we run
+        # (api_switch_profile checks _liveness_running), so a mismatch here means the
+        # pin raced a switch — abort rather than flip process-global paths from a bg
+        # thread (see the identical guard on _run_discover_and_score, plan 021).
+        if profile_id != paths.PROFILE_ID:
+            with DB() as db:
+                db.log_event(
+                    None, "error", {"stage": "liveness_bg", "error": "aborted: profile switched"}
+                )
+            return
         with DB() as db:  # own connection — never holds the API lock on network
             sweep_liveness(db, limit=limit)
     except Exception as e:  # noqa: BLE001 — record the failure instead of dropping it silently
@@ -1497,8 +1503,11 @@ def api_switch_profile(body: ProfileBody):
     if not profiles.exists(body.id):
         raise HTTPException(404, "unknown profile")
     with _DISCOVER_LOCK:
-        if _discovering or _BUSY_JOBS:
-            raise HTTPException(409, "background work in progress — retry when it finishes")
+        busy = _discovering or _BUSY_JOBS
+    with _LIVENESS_LOCK:
+        busy = busy or _liveness_running
+    if busy:
+        raise HTTPException(409, "background work in progress — retry when it finishes")
     with _DB_LOCK:  # atomic vs. every get_db request: registry + paths + conn flip together
         profiles.set_active(body.id)  # persist registry.json "active"
         paths.set_profile(body.id)  # re-point the path globals

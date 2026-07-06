@@ -362,6 +362,64 @@ def test_switch_profile_unknown_id_404(atlas_app):
     assert resp.status_code == 404
 
 
+def test_switch_profile_refused_while_liveness_sweep_running(atlas_app, monkeypatch):
+    import importlib
+
+    backend_main = importlib.import_module("dashboard.backend.main")
+    monkeypatch.setattr(backend_main.profiles, "exists", lambda pid: True)
+    with TestClient(atlas_app) as client:
+        backend_main._liveness_running = True
+        try:
+            resp = client.post("/api/profile", json={"id": "owner"})
+        finally:
+            backend_main._liveness_running = False
+    assert resp.status_code == 409
+
+
+def test_liveness_sweep_bg_aborts_on_profile_mismatch(atlas_app, monkeypatch):
+    import importlib
+
+    import engine.discovery.liveness as liveness_mod
+    import engine.paths as paths_mod
+
+    backend_main = importlib.import_module("dashboard.backend.main")
+
+    # Same rationale as test_discover_bg_aborts_on_profile_mismatch: record calls
+    # rather than raise, since _run_liveness_sweep also wraps its body in a broad
+    # `except Exception` that would silently swallow a raising spy.
+    set_profile_calls = []
+    sweep_calls = []
+
+    def spy_set_profile(profile_id):
+        set_profile_calls.append(profile_id)
+
+    def spy_sweep(db, **kw):
+        sweep_calls.append(kw)
+
+    monkeypatch.setattr(paths_mod, "set_profile", spy_set_profile)
+    monkeypatch.setattr(liveness_mod, "sweep_liveness", spy_sweep)
+
+    with TestClient(atlas_app):
+        # atlas_app forces legacy mode, so paths.PROFILE_ID is None; a non-None
+        # enqueue-time profile_id is a mismatch → abort before touching paths/sweep.
+        backend_main._run_liveness_sweep(40, "some-other-profile")
+
+    assert set_profile_calls == [], "abort guard must not re-pin paths.PROFILE_ID"
+    assert sweep_calls == [], "abort guard must not run the liveness sweep"
+
+    import json
+
+    import engine.db.models as db_models
+
+    with db_models.DB() as db:
+        rows = db.conn.execute(
+            "SELECT detail FROM events WHERE type = 'error' ORDER BY id DESC LIMIT 1"
+        ).fetchall()
+    assert len(rows) == 1
+    detail = json.loads(rows[0]["detail"])
+    assert detail == {"stage": "liveness_bg", "error": "aborted: profile switched"}
+
+
 # ── SPA fallback (Atlas v2 F1): el router de frontend necesita deep links ────
 
 
