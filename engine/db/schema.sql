@@ -33,6 +33,8 @@ CREATE TABLE IF NOT EXISTS jobs (
     knockout_flags  TEXT,                      -- json array of strings
     match_score     INTEGER,                   -- CV↔JD keyword match 0–100 (distinct from fit_score)
     match_missing   TEXT,                      -- json array of JD keywords the CV doesn't evidence
+    knockout_warnings TEXT,                    -- json array of knock-out pre-scan warnings (F3, visa/years/degree/language/clearance)
+    score_breakdown TEXT,                      -- json: machine summary — per-factor score deltas (F3)
 
     discovered_at   TEXT NOT NULL,
     scored_at       TEXT,
@@ -116,6 +118,7 @@ CREATE TABLE IF NOT EXISTS followups (
     job_id        TEXT REFERENCES jobs(id) ON DELETE CASCADE,
     message_id    INTEGER REFERENCES messages(id) ON DELETE SET NULL,
     channel       TEXT,
+    kind          TEXT,                        -- F3 cadencia v2: pipeline state that seeded this touch (e.g. 'applied'); NULL = legacy per-message touch
     touch_number  INTEGER,                     -- 1..4 then breakup
     due_at        TEXT,
     state         TEXT DEFAULT 'pending',      -- pending | done | cancelled
