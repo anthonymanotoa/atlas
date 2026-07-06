@@ -113,6 +113,25 @@ def test_2d_does_not_reduce_score_or_dq():
     assert flagged.disqualified is False
 
 
+def test_2d_negated_hybrid_reassurance_not_flagged():
+    # A genuinely-remote posting reassuring the reader ("no hybrid, no office") must NOT trip
+    # the 2d flag — the bare `hybrid` token is negated here, not a real office demand.
+    r = score_job(_job(description="100% remote. no hybrid, no office — work from anywhere."), _GEO)
+    assert not any(k.startswith("dice remoto pero") for k in r.knockouts)
+
+
+def test_2d_not_a_hybrid_role_not_flagged():
+    r = score_job(_job(description="Fully remote. This is not a hybrid role."), _GEO)
+    assert not any(k.startswith("dice remoto pero") for k in r.knockouts)
+
+
+def test_2d_negated_hybrid_but_real_office_demand_still_flags():
+    # Negated hybrid AND a genuine office demand in the same body: the office demand must win.
+    r = score_job(_job(description="no hybrid nonsense — but 3 days in office required."), _GEO)
+    hit = [k for k in r.knockouts if k.startswith("dice remoto pero")]
+    assert hit and "3 days in office" in hit[0]
+
+
 def test_2d_ignores_onsite_job_not_claiming_remote():
     # An on-site posting isn't "selling itself as remote", so 2d must not add its flag even
     # though the body mentions office/hybrid wording.

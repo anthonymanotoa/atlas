@@ -47,6 +47,32 @@ _OFFICE_DEMAND = re.compile(
     re.I,
 )
 
+# The bare `hybrid`/`híbrido` tokens above are the only ones that fire spuriously on
+# genuinely-remote reassurance ("no hybrid", "not a hybrid role"): `office` always carries a
+# digit prefix and `on-site` a digit suffix, so a negator can't produce a false match there.
+# _BARE_HYBRID recognises a raw-token match; _NEGATED_HYBRID matches that token when a negator
+# (no / not / non / n't) immediately precedes it, allowing one short article filler ("not a
+# hybrid role"). _office_demand() skips such negated matches while still honouring a real
+# office demand later in the same body.
+_BARE_HYBRID = re.compile(r"\b(?:hybrid|h[ií]brido)\b", re.I)
+_NEGATED_HYBRID = re.compile(
+    r"\b(?:no|not|non|n.t)\b[- ]?(?:an?\s+|the\s+)?(?:hybrid|h[ií]brido)\b",
+    re.I,
+)
+
+
+def _office_demand(desc: str) -> re.Match[str] | None:
+    """First office-demand match in `desc`, skipping negated bare-hybrid mentions.
+
+    A `hybrid`/`híbrido` token preceded by a negator ("no hybrid", "not a hybrid role") is a
+    reassurance in a fully-remote post, not an office demand, so it never triggers factor 2d."""
+    negated_ends = {m.end() for m in _NEGATED_HYBRID.finditer(desc)}
+    for m in _OFFICE_DEMAND.finditer(desc):
+        if _BARE_HYBRID.fullmatch(m.group(0)) and m.end() in negated_ends:
+            continue
+        return m
+    return None
+
 
 @dataclass
 class ScoreResult:
@@ -165,7 +191,7 @@ def score_job(job: dict, criteria: Criteria, learnings: list[dict] | None = None
 
     # 2d. Geo-mismatch (F2 hygiene): the metadata says remote but the body demands office
     #     presence. Flag with the exact quoted phrase; no score change (see regex comment).
-    if is_remote_job and desc and (office_m := _OFFICE_DEMAND.search(desc)):
+    if is_remote_job and desc and (office_m := _office_demand(desc)):
         quoted = office_m.group(0).strip()
         knockouts.append(f'dice remoto pero: "{quoted}"')
         reasons.append(f'flagged remote but body says "{quoted}"')
