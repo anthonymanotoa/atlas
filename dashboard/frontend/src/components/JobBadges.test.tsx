@@ -84,7 +84,10 @@ describe("LegitimacyBadge", () => {
     );
     expect(medium).toBeEmptyDOMElement();
     render(
-      <LegitimacyBadge job={{ ...base, legitimacy_tier: "low", legitimacy_notes: "señal" }} compact />,
+      <LegitimacyBadge
+        job={{ ...base, legitimacy_tier: "low", legitimacy_notes: "señal" }}
+        compact
+      />,
     );
     expect(screen.getByText(/legitimidad baja/)).toBeInTheDocument();
     expect(screen.getByTitle("señal")).toBeInTheDocument();
