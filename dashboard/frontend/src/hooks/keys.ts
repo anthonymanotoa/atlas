@@ -15,4 +15,7 @@ export const qk = {
   cvReviews: (jobId: string) => ["cv-reviews", jobId] as const,
   upskill: ["upskill"] as const,
   profileExpansions: ["profile-expansions"] as const,
+  followups: ["followups"] as const,
+  analytics: ["analytics"] as const,
+  systemHealth: ["system-health"] as const,
 };

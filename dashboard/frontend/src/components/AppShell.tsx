@@ -1,4 +1,5 @@
 import {
+  AlarmClock,
   ChartNoAxesColumn,
   Command as CmdIcon,
   FileText,
@@ -40,6 +41,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 const NAV = [
   { to: "/pipeline", label: "Pipeline", icon: Kanban },
   { to: "/analytics", label: "Analítica", icon: ChartNoAxesColumn },
+  { to: "/followups", label: "Follow-ups", icon: AlarmClock },
   { to: "/upskill", label: "Upskilling", icon: UpskillIcon },
   { to: "/portfolio", label: "Portafolio", icon: Globe },
 ];

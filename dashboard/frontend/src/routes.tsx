@@ -1,6 +1,7 @@
 import { Navigate, type RouteObject } from "react-router";
 import { AppShell } from "./components/AppShell";
 import { AnalyticsPage } from "./pages/AnalyticsPage";
+import { FollowupsPage } from "./pages/FollowupsPage";
 import { JobDetailPage } from "./pages/JobDetailPage";
 import { OnboardingPage } from "./pages/OnboardingPage";
 import { PipelinePage } from "./pages/PipelinePage";
@@ -17,6 +18,7 @@ export const routes: RouteObject[] = [
       { path: "pipeline", element: <PipelinePage /> },
       { path: "jobs/:id", element: <JobDetailPage /> },
       { path: "analytics", element: <AnalyticsPage /> },
+      { path: "followups", element: <FollowupsPage /> },
       { path: "upskill", element: <UpskillPage /> },
       { path: "portfolio", element: <PortfolioPage /> },
       { path: "settings", element: <SettingsPage /> },

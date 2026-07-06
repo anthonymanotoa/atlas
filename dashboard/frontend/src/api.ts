@@ -307,6 +307,70 @@ export type CompanySuggestion = {
   matching_titles: string[];
 };
 
+// F3 §6.1 follow-ups: buckets deterministas (urgent/overdue/waiting + cold) con el borrador
+// pegable de cada toque. La web SOLO lee los toques que el engine sembró y confirma el envío
+// ($0, sin LLM). `cold` son jobs con la cadencia agotada — no llevan draft (nada que enviar).
+export type FollowupDraft = { subject: string; body: string };
+export type Followup = {
+  id: number;
+  job_id: string;
+  title?: string | null;
+  company?: string | null;
+  kind?: string | null;
+  touch_number?: number | null;
+  due_at?: string | null;
+  days_overdue?: number | null;
+  draft: FollowupDraft;
+};
+export type ColdJob = {
+  job_id: string;
+  title?: string | null;
+  company?: string | null;
+  applied_at?: string | null;
+  touches_done?: number | null;
+  touches_pending?: number | null;
+};
+export type FollowupBuckets = {
+  urgent: Followup[];
+  overdue: Followup[];
+  waiting: Followup[];
+  cold: ColdJob[];
+};
+
+// F3 §6.2 analytics: composición determinista (funnel con tasas, piso empírico de score,
+// conversión por dimensión, tiempos de respuesta, recomendaciones accionables). $0, sin LLM.
+export type FunnelStage = { stage: string; count: number; rate: number | null };
+export type ConversionRow = {
+  key: string;
+  applied: number;
+  responded: number;
+  interviews: number;
+  offers: number;
+  response_rate: number | null;
+};
+export type ResponseTimes = {
+  n: number;
+  avg_days: number | null;
+  median_days: number | null;
+  p90_days: number | null;
+};
+export type Recommendation = {
+  id: string;
+  text: string;
+  action_type: "set_criteria" | "block_company" | "none";
+  payload: Record<string, unknown>;
+};
+export type Analytics = {
+  funnel: FunnelStage[];
+  score_floor: number | null;
+  by_source: ConversionRow[];
+  by_ats: ConversionRow[];
+  by_remote_policy: ConversionRow[];
+  by_role_term: ConversionRow[];
+  response_times: ResponseTimes;
+  recommendations: Recommendation[];
+};
+
 async function get<T>(url: string): Promise<T> {
   const r = await fetch(url);
   if (!r.ok) throw new Error(`${url} → ${r.status}`);
@@ -440,6 +504,20 @@ export const api = {
     );
   },
   livenessSweep: () => post<{ started: boolean; running?: boolean }>("/api/liveness/sweep"),
+  // F3 §6.1 follow-ups: leer los buckets (urgent/overdue/waiting/cold) con drafts y confirmar
+  // el envío de un toque (requiere confirm explícito — el backend rechaza sin él). $0, sin LLM.
+  followups: () => get<{ buckets: FollowupBuckets }>("/api/followups"),
+  markFollowupSent: (id: number, confirm = true) =>
+    post<{ ok: boolean; next_id: number | null }>(`/api/followups/${id}/sent`, { confirm }),
+  // F3 §6.2 analytics: leer la composición determinista y aplicar UNA recomendación (edita
+  // criteria.md del perfil activo por el mutator validado). Ninguna llama a un LLM.
+  analytics: () => get<Analytics>("/api/analytics"),
+  applyRec: (rec: Recommendation) =>
+    post<{ ok: boolean; applied: string }>("/api/analytics/apply-rec", {
+      id: rec.id,
+      action_type: rec.action_type,
+      payload: rec.payload,
+    }),
   // F3 §6.5: expose CLI-only ops (system health, resolve/add company, reverse discovery, import).
   systemHealth: () => get<SystemHealth>("/api/system/health"),
   resolveCompany: (url: string) => post<ResolvedCompany>("/api/companies/resolve", { url }),

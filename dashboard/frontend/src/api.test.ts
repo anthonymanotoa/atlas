@@ -115,4 +115,47 @@ describe("api client", () => {
     expect(fetchMock.mock.calls[0][0]).toBe("/api/liveness/sweep");
     expect(fetchMock.mock.calls[0][1].method).toBe("POST");
   });
+
+  it("followups() GETs /api/followups", async () => {
+    fetchMock.mockResolvedValue(
+      okJson({ buckets: { urgent: [], overdue: [], waiting: [], cold: [] } }),
+    );
+    await api.followups();
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/followups");
+  });
+
+  it("markFollowupSent() POSTs the id with confirm:true", async () => {
+    fetchMock.mockResolvedValue(okJson({ ok: true, next_id: 2 }));
+    await api.markFollowupSent(7);
+    const [url, opts] = fetchMock.mock.calls[0];
+    expect(url).toBe("/api/followups/7/sent");
+    expect(opts.method).toBe("POST");
+    expect(opts.body).toBe(JSON.stringify({ confirm: true }));
+  });
+
+  it("analytics() GETs /api/analytics", async () => {
+    fetchMock.mockResolvedValue(okJson({ funnel: [], recommendations: [] }));
+    await api.analytics();
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/analytics");
+  });
+
+  it("applyRec() POSTs id/action_type/payload to /api/analytics/apply-rec", async () => {
+    fetchMock.mockResolvedValue(okJson({ ok: true, applied: "shortlist_threshold=62" }));
+    await api.applyRec({
+      id: "threshold-62",
+      text: "…",
+      action_type: "set_criteria",
+      payload: { field: "shortlist_threshold", value: 62 },
+    });
+    const [url, opts] = fetchMock.mock.calls[0];
+    expect(url).toBe("/api/analytics/apply-rec");
+    expect(opts.method).toBe("POST");
+    expect(opts.body).toBe(
+      JSON.stringify({
+        id: "threshold-62",
+        action_type: "set_criteria",
+        payload: { field: "shortlist_threshold", value: 62 },
+      }),
+    );
+  });
 });

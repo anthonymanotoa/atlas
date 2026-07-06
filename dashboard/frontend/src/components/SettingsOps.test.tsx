@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
@@ -42,7 +42,10 @@ const { toast, api } = vi.hoisted(() => ({
 vi.mock("sonner", () => ({ toast }));
 vi.mock("../api", () => ({ api }));
 
+import { renderWithQuery } from "../test/utils";
 import { SettingsOps } from "./SettingsOps";
+
+const render = renderWithQuery;
 
 describe("SettingsOps", () => {
   it("renders system health from /api/system/health", async () => {

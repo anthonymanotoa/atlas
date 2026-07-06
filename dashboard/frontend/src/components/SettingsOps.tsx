@@ -1,7 +1,8 @@
 import { Check, X } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
-import { api, type CompanySuggestion, type ResolvedCompany, type SystemHealth } from "../api";
+import { api, type CompanySuggestion, type ResolvedCompany } from "../api";
+import { useSystemHealth } from "../hooks/useSystemHealth";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
@@ -9,25 +10,14 @@ import { Separator } from "./ui/separator";
 
 /** Salud del sistema + añadir empresa por URL + importar conexiones + sugerir empresas (F3 §6.5). */
 export function SettingsOps() {
-  const [health, setHealth] = useState<SystemHealth | null>(null);
+  // La salud del sistema se lee por la capa de datos (TanStack Query); ante error degrada a
+  // "Cargando…" en vez de romper la página (isError → data undefined → null).
+  const healthQ = useSystemHealth();
+  const health = healthQ.data ?? null;
   const [url, setUrl] = useState("");
   const [resolved, setResolved] = useState<ResolvedCompany | null>(null);
   const [busy, setBusy] = useState(false);
   const [suggestions, setSuggestions] = useState<CompanySuggestion[]>([]);
-
-  function refreshHealth() {
-    // Guard the whole call (not just the promise) so it degrades to "Cargando…" rather than
-    // crashing the surrounding page if the endpoint is unavailable.
-    try {
-      api
-        .systemHealth()
-        .then(setHealth)
-        .catch(() => setHealth(null));
-    } catch {
-      setHealth(null);
-    }
-  }
-  useEffect(refreshHealth, []);
 
   async function resolveUrl() {
     if (!url.trim()) return;
@@ -135,7 +125,7 @@ export function SettingsOps() {
                 </li>
               ))}
             </ul>
-            <Button variant="ghost" size="sm" onClick={refreshHealth}>
+            <Button variant="ghost" size="sm" onClick={() => healthQ.refetch()}>
               Refrescar
             </Button>
           </div>
