@@ -43,7 +43,10 @@ ARCH_CV = {
             "name": "Rehabilitación patrimonial — Centro histórico",
             "description": "Proyecto de taller de rehabilitación patrimonial.",
         },
-        {"name": "Vivienda unifamiliar", "description": "Diseño residencial con render en tiempo real."},
+        {
+            "name": "Vivienda unifamiliar",
+            "description": "Diseño residencial con render en tiempo real.",
+        },
     ],
     "education": [{"degree": "Arquitecta", "area": "Arquitectura", "institution": "Universidad X"}],
 }

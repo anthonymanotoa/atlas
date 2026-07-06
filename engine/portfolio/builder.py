@@ -123,7 +123,9 @@ def _proof_section_html(cv: dict, proof_source: str) -> str:
         for p in projects:
             desc = p.get("description")
             tail = f" — {_e(desc)}" if desc else ""  # no dangling em-dash when no description
-            parts.append(f"<div class='repo'><span class='h'>{_e(p.get('name'))}</span>{tail}</div>")
+            parts.append(
+                f"<div class='repo'><span class='h'>{_e(p.get('name'))}</span>{tail}</div>"
+            )
         return "".join(parts)
     # default: github proof
     repos = _github_repos(_gh_handle(b.get("github")))

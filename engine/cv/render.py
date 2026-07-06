@@ -50,7 +50,11 @@ def _licensure_line(it: dict) -> str:
     """One Licensure/Registration entry → 'Title — Issuer — Status' (architecture, etc.)."""
     return " — ".join(
         p
-        for p in [it.get("title") or it.get("name"), it.get("issuer"), it.get("status") or it.get("date")]
+        for p in [
+            it.get("title") or it.get("name"),
+            it.get("issuer"),
+            it.get("status") or it.get("date"),
+        ]
         if p
     )
 
@@ -129,7 +133,10 @@ def render_docx(cv: dict, out_path: Path, language: str = "en", layout: dict | N
             hr.bold = True
             meta = "  |  ".join(
                 p
-                for p in [e.get("location"), f"{e.get('start', '')} – {e.get('end', '')}".strip(" –")]
+                for p in [
+                    e.get("location"),
+                    f"{e.get('start', '')} – {e.get('end', '')}".strip(" –"),
+                ]
                 if p
             )
             if meta:
@@ -193,8 +200,13 @@ def render_docx(cv: dict, out_path: Path, language: str = "en", layout: dict | N
                 doc.add_paragraph(" ".join(hl.split()), style="List Bullet")
 
     renderers = {
-        "summary": summary, "skills": skills, "experience": experience, "education": education,
-        "certs": certs, "licensure": licensure, "projects": projects,
+        "summary": summary,
+        "skills": skills,
+        "experience": experience,
+        "education": education,
+        "certs": certs,
+        "licensure": licensure,
+        "projects": projects,
     }
     for key in order:
         fn = renderers.get(key)
@@ -303,11 +315,15 @@ def render_pdf(
 
     def summary():
         if basics.get("summary"):
-            story.extend([hd("summary"), Paragraph(_esc(" ".join(basics["summary"].split())), body_s)])
+            story.extend(
+                [hd("summary"), Paragraph(_esc(" ".join(basics["summary"].split())), body_s)]
+            )
 
     def skills():
         if cv.get("skills"):
-            story.extend([hd("skills"), Paragraph("  ·  ".join(_esc(s) for s in cv["skills"]), body_s)])
+            story.extend(
+                [hd("skills"), Paragraph("  ·  ".join(_esc(s) for s in cv["skills"]), body_s)]
+            )
 
     def experience():
         if not cv.get("experience"):
@@ -358,7 +374,10 @@ def render_pdf(
         story.append(hd("certs"))
         story.append(
             bullets(
-                [" — ".join(p for p in [c.get("name"), c.get("issuer"), c.get("date")] if p) for c in rows]
+                [
+                    " — ".join(p for p in [c.get("name"), c.get("issuer"), c.get("date")] if p)
+                    for c in rows
+                ]
             )
         )
 
@@ -382,8 +401,13 @@ def render_pdf(
                 story.append(bullets(pr["highlights"]))
 
     renderers = {
-        "summary": summary, "skills": skills, "experience": experience, "education": education,
-        "certs": certs, "licensure": licensure, "projects": projects,
+        "summary": summary,
+        "skills": skills,
+        "experience": experience,
+        "education": education,
+        "certs": certs,
+        "licensure": licensure,
+        "projects": projects,
     }
     for key in order:
         fn = renderers.get(key)
