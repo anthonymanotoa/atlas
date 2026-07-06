@@ -315,11 +315,19 @@ def test_discover_bg_aborts_on_profile_mismatch(atlas_app, monkeypatch):
 
     backend_main = importlib.import_module("dashboard.backend.main")
 
+    # Use flag-lists, not raising spies: _run_discover_and_score wraps its body in a
+    # broad `except Exception`, so an AssertionError raised from inside would be
+    # silently swallowed and logged as an ordinary error — making the test pass
+    # even if the abort guard were deleted. Recording calls in a list survives that
+    # except clause because nothing raises past the function boundary.
+    set_profile_calls = []
+    discover_calls = []
+
     def spy_set_profile(profile_id):
-        raise AssertionError("must not be called")
+        set_profile_calls.append(profile_id)
 
     def spy_discover(db, **kw):
-        raise AssertionError("must not be called")
+        discover_calls.append(kw)
 
     monkeypatch.setattr(paths_mod, "set_profile", spy_set_profile)
     monkeypatch.setattr(runner_mod, "discover", spy_discover)
@@ -328,6 +336,23 @@ def test_discover_bg_aborts_on_profile_mismatch(atlas_app, monkeypatch):
         # atlas_app forces legacy mode, so paths.PROFILE_ID is None; a non-None
         # enqueue-time profile_id is a mismatch → abort before touching paths/discover.
         backend_main._run_discover_and_score(None, "some-other-profile")
+
+    assert set_profile_calls == [], "abort guard must not re-pin paths.PROFILE_ID"
+    assert discover_calls == [], "abort guard must not run discovery"
+
+    # Confirm the abort path logged the expected event. `events.type` is the log_event
+    # `type_` arg ("error" here); the stage/error fields live inside the JSON `detail`.
+    import json
+
+    import engine.db.models as db_models
+
+    with db_models.DB() as db:
+        rows = db.conn.execute(
+            "SELECT detail FROM events WHERE type = 'error' ORDER BY id DESC LIMIT 1"
+        ).fetchall()
+    assert len(rows) == 1
+    detail = json.loads(rows[0]["detail"])
+    assert detail == {"stage": "discover_bg", "error": "aborted: profile switched"}
 
 
 def test_switch_profile_unknown_id_404(atlas_app):
