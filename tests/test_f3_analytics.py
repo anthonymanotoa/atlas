@@ -127,6 +127,38 @@ def test_recommendations_threshold_and_block(db: DB):
     assert all({"id", "text", "action_type", "payload"} <= set(r) for r in recs)
 
 
+def test_recommendations_no_block_when_outcome_logged_positive(db: DB):
+    """Regresión: registrar un outcome positivo por formulario (record_outcome, SIN set_state)
+    NO estampa los timestamps del funnel de `jobs`, pero la empresa SÍ respondió — nunca debe
+    recomendarse bloquearla. La rec de block debe consultar application_outcomes, no sólo jobs."""
+    crit = Criteria(roles=["data scientist"])
+    # Ghost Corp: 3 aplicaciones; el usuario registra por formulario que respondieron/entrevistaron.
+    jids = []
+    for n in (1, 2, 3):
+        db.upsert_job(
+            Job(
+                source="lever",
+                source_job_id=str(n),
+                title=f"DS {n}",
+                company="Ghost Corp",
+                location="Remote",
+                url=f"https://g/{n}",
+            )
+        )
+    for j in db.list_jobs():
+        if j["company"] == "Ghost Corp":
+            db.set_state(j["id"], "applied")
+            jids.append(j["id"])
+    # Outcomes positivos vía record_outcome — NO se llama set_state, así que responded_at/etc siguen NULL.
+    db.record_outcome(jids[0], "Ghost Corp", final_state="responded")
+    db.record_outcome(jids[1], "Ghost Corp", final_state="interviewed")
+    db.record_outcome(jids[2], "Ghost Corp", final_state="responded")
+    blocks = [r for r in analytics.recommendations(db, crit) if r["action_type"] == "block_company"]
+    assert not blocks, (
+        "no debe recomendar bloquear una empresa que registró respuesta por formulario"
+    )
+
+
 def test_recommendations_skip_already_blocked(db: DB):
     crit = Criteria(roles=["data scientist"], company_blocklist=["Ghost Corp"])
     for n in (1, 2, 3):

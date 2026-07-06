@@ -163,6 +163,11 @@ def conversion_by(db: DB, dim: str, criteria: Criteria | None = None) -> list[di
         g = groups.setdefault(
             k, {"key": k, "applied": 0, "responded": 0, "interviews": 0, "offers": 0}
         )
+        # NOTA (provenance): el positivo aquí se mide SÓLO por los timestamps del funnel de `jobs`,
+        # deliberadamente — es la conversión por dimensión (source/ats/…) y sus tests fijan esa
+        # fuente. A diferencia de la rec de block-company (que ya consulta application_outcomes),
+        # un outcome positivo registrado por formulario sin set_state NO se cuenta aquí. Si en el
+        # futuro se quiere alinear, hay que enlazar por job_id contra application_outcomes.
         positive = bool(j.get("responded_at") or j.get("interview_at") or j.get("offer_at"))
         g["applied"] += 1
         g["responded"] += 1 if positive else 0
@@ -231,7 +236,20 @@ def recommendations(db: DB, criteria: Criteria) -> list[dict]:
             }
         )
     # 2. Empresas que nunca responden → blocklist (≥3 aplicaciones, 0 respuestas, no bloqueada aún).
+    # "Sin respuesta" consulta AMBAS fuentes: los timestamps del funnel de `jobs` Y los outcomes
+    # confirmados por el usuario (application_outcomes). Un outcome positivo registrado por
+    # formulario (record_outcome, sin set_state) deja los timestamps de jobs en NULL, pero la
+    # empresa SÍ respondió — nunca hay que recomendar bloquearla. Se enlaza por company normalizada
+    # (norm_company), que es como application_outcomes guarda la empresa.
     blocked = {norm_company(c) for c in criteria.company_blocklist}
+    _pos = ",".join("?" * len(POSITIVE_OUTCOME_STATES))
+    engaged = {
+        r["company"]
+        for r in db.conn.execute(
+            f"SELECT DISTINCT company FROM application_outcomes WHERE final_state IN ({_pos})",
+            POSITIVE_OUTCOME_STATES,
+        ).fetchall()
+    }
     rows = db.conn.execute(
         """SELECT company, COUNT(*) AS n FROM jobs
            WHERE applied_at IS NOT NULL AND responded_at IS NULL
@@ -239,7 +257,7 @@ def recommendations(db: DB, criteria: Criteria) -> list[dict]:
            GROUP BY company HAVING n >= 3"""
     ).fetchall()
     for r in rows:
-        if norm_company(r["company"]) in blocked:
+        if norm_company(r["company"]) in blocked or norm_company(r["company"]) in engaged:
             continue
         recs.append(
             {
