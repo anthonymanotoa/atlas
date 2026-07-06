@@ -301,3 +301,17 @@ CREATE TABLE IF NOT EXISTS intents (
 );
 CREATE INDEX IF NOT EXISTS idx_intents_status ON intents(status, created_at);
 CREATE INDEX IF NOT EXISTS idx_intents_job ON intents(job_id);
+
+-- CV reviews (F4 §7.2): salida del reviewer LLM (hiring-manager proxy). Los edits se
+-- aplican mecánicamente desde la web (apply-edit) y los flags se resuelven keep/soften/drop.
+CREATE TABLE IF NOT EXISTS cv_reviews (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    intent_id     TEXT REFERENCES intents(id) ON DELETE SET NULL,
+    job_id        TEXT NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
+    cv_version_id INTEGER REFERENCES cv_versions(id) ON DELETE SET NULL,
+    edits         TEXT NOT NULL DEFAULT '[]',   -- json [{file, old_string, new_string, reason, applied?, applied_ref?}]
+    critique      TEXT NOT NULL DEFAULT '{}',   -- json {missed_keywords, company_angles, reframing, tone_register}
+    flags         TEXT NOT NULL DEFAULT '[]',   -- json [{file, bullet, classification, reason, softened?, resolution?}]
+    created_at    TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_cv_reviews_job ON cv_reviews(job_id);

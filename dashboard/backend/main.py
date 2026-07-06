@@ -664,6 +664,52 @@ def api_get_intent(intent_id: str, db: DB = Depends(get_db)):
     return row
 
 
+# ── cv_reviews (F4 §7.2): read a job's reviews + apply edits / resolve flags ───
+# apply-edit and resolve-flag are DETERMINISTIC ($0): no LLM. They replay a structured
+# edit the brain already produced onto the tailored CV / message body and re-render.
+# A non-matching / out-of-range request FAILS gracefully as a 400, never a 500.
+class EditIndexBody(BaseModel):
+    index: int
+
+
+class FlagResolveBody(BaseModel):
+    index: int
+    action: Literal["keep", "soften", "drop"]
+
+
+@app.get("/api/jobs/{job_id}/cv-reviews")
+def api_cv_reviews(job_id: str, db: DB = Depends(get_db)):
+    if not db.get_job(job_id):
+        raise HTTPException(404, "job not found")
+    return {"reviews": db.cv_reviews_for(job_id)}
+
+
+@app.post(
+    "/api/cv-reviews/{review_id}/apply-edit",
+    dependencies=[Depends(require_trusted_origin)],
+)
+def api_apply_cv_edit(review_id: int, body: EditIndexBody, db: DB = Depends(get_db)):
+    from engine.cv.review import apply_edit
+
+    try:
+        return apply_edit(db, review_id, body.index)
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from None
+
+
+@app.post(
+    "/api/cv-reviews/{review_id}/resolve-flag",
+    dependencies=[Depends(require_trusted_origin)],
+)
+def api_resolve_cv_flag(review_id: int, body: FlagResolveBody, db: DB = Depends(get_db)):
+    from engine.cv.review import resolve_flag
+
+    try:
+        return resolve_flag(db, review_id, body.index, body.action)
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from None
+
+
 # ── Liveness sweep (F2 hygiene) — same fire-and-forget model as /api/discover ─
 # Expire dead postings (404/410/tombstone) on demand. Deterministic HTTP-only
 # checks (engine.discovery.liveness — no LLM, no key), so still $0. Like the

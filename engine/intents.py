@@ -184,3 +184,68 @@ def apply_result(db: DB, intent_id: str, result: dict) -> str:
     ref = writer(db, intent, result)
     mark_done(db, intent_id, ref)
     return ref
+
+
+# ── cv_review (F4 §7.2) ────────────────────────────────────────────────────────
+# The context builder feeds the brain a deterministic snapshot (the tailored CV, the
+# drafted messages, the JD keyword gaps, the master-CV path). The writer only VALIDATES
+# and PERSISTS what the brain produced — it NEVER calls an LLM ($0 invariant).
+_CRITIQUE_CATEGORIES = ("missed_keywords", "company_angles", "reframing", "tone_register")
+_FLAG_CLASSES = ("OK", "Flag", "Never")
+
+
+def _ctx_cv_review(db: DB, intent: dict) -> dict:
+    import engine.paths as paths
+    from engine.cv.review import EDIT_FILES, dump_tailored_cv
+
+    job_id = intent["job_id"]
+    path = dump_tailored_cv(db, job_id)
+    job = db.get_job(job_id) or {}
+    messages = [
+        {"id": m["id"], "kind": m["kind"], "subject": m.get("subject"), "body": m["body"]}
+        for m in db.messages_for(job_id)
+        if m["kind"] in EDIT_FILES
+    ]
+    return {
+        "cv_yaml_path": str(path),
+        "cv_yaml": path.read_text(),
+        "messages": messages,
+        "match_missing": json.loads(job.get("match_missing") or "[]"),
+        "master_cv_path": str(paths.MASTER_CV_PATH),
+    }
+
+
+def _write_cv_review(db: DB, intent: dict, result: dict) -> str:
+    from engine.cv.review import EDIT_FILES
+
+    critique = result.get("critique")
+    if not isinstance(critique, dict) or set(_CRITIQUE_CATEGORIES) - set(critique):
+        raise ValueError(f"critique must contain all of {_CRITIQUE_CATEGORIES}")
+    edits = result.get("edits", [])
+    for e in edits:
+        if not isinstance(e, dict) or e.get("file") not in EDIT_FILES:
+            raise ValueError(f"every edit needs file ∈ {EDIT_FILES}")
+        if not (e.get("old_string") and e.get("new_string") and e.get("reason")):
+            raise ValueError("every edit needs old_string, new_string and reason")
+    flags = result.get("flags", [])
+    for f in flags:
+        if not isinstance(f, dict) or f.get("classification") not in _FLAG_CLASSES:
+            raise ValueError(f"every flag needs classification ∈ {_FLAG_CLASSES}")
+        if not f.get("bullet") or not f.get("reason"):
+            raise ValueError("every flag needs bullet and reason")
+        if f["classification"] == "Flag" and not f.get("softened"):
+            raise ValueError("Flag entries need a softened alternative")
+    versions = db.cv_versions_for(intent["job_id"])
+    rid = db.add_cv_review(
+        intent["job_id"],
+        intent_id=intent["id"],
+        cv_version_id=versions[0]["id"] if versions else None,
+        edits=edits,
+        critique=critique,
+        flags=flags,
+    )
+    return f"cv_review:{rid}"
+
+
+_CONTEXT_BUILDERS["cv_review"] = _ctx_cv_review
+_RESULT_WRITERS["cv_review"] = _write_cv_review

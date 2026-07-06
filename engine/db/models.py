@@ -347,6 +347,63 @@ class DB:
         ).fetchall()
         return [dict(r) for r in rows]
 
+    # ── cv reviews (F4 §7.2) ───────────────────────────────────────────────────
+    def add_cv_review(
+        self,
+        job_id: str,
+        *,
+        intent_id: str | None,
+        cv_version_id: int | None,
+        edits: list,
+        critique: dict,
+        flags: list,
+    ) -> int:
+        cur = self.conn.execute(
+            """INSERT INTO cv_reviews
+               (intent_id, job_id, cv_version_id, edits, critique, flags, created_at)
+               VALUES (?,?,?,?,?,?,?)""",
+            (
+                intent_id,
+                job_id,
+                cv_version_id,
+                json.dumps(edits),
+                json.dumps(critique),
+                json.dumps(flags),
+                now_iso(),
+            ),
+        )
+        self.conn.commit()
+        return int(cur.lastrowid)
+
+    def _parse_review(self, row) -> dict:
+        d = dict(row)
+        d["edits"] = _loads(d.get("edits"), [])
+        d["critique"] = _loads(d.get("critique"), {})
+        d["flags"] = _loads(d.get("flags"), [])
+        return d
+
+    def get_cv_review(self, review_id: int) -> dict | None:
+        row = self.conn.execute("SELECT * FROM cv_reviews WHERE id=?", (review_id,)).fetchone()
+        return self._parse_review(row) if row else None
+
+    def cv_reviews_for(self, job_id: str) -> list[dict]:
+        rows = self.conn.execute(
+            "SELECT * FROM cv_reviews WHERE job_id=? ORDER BY created_at DESC", (job_id,)
+        ).fetchall()
+        return [self._parse_review(r) for r in rows]
+
+    def set_cv_review_edits(self, review_id: int, edits: list) -> None:
+        self.conn.execute(
+            "UPDATE cv_reviews SET edits=? WHERE id=?", (json.dumps(edits), review_id)
+        )
+        self.conn.commit()
+
+    def set_cv_review_flags(self, review_id: int, flags: list) -> None:
+        self.conn.execute(
+            "UPDATE cv_reviews SET flags=? WHERE id=?", (json.dumps(flags), review_id)
+        )
+        self.conn.commit()
+
     # ── messages ─────────────────────────────────────────────────────────────
     def add_message(
         self,

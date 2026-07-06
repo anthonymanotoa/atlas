@@ -11,6 +11,7 @@ import type * as React from "react";
 import { useNavigate, useParams } from "react-router";
 import { toast } from "sonner";
 import { api } from "../api";
+import { CvReviewPanel } from "../components/CvReviewPanel";
 import { CompanyInsights } from "../components/job-detail/CompanyInsights";
 import { JobOverview } from "../components/job-detail/JobOverview";
 import { Ledger } from "../components/job-detail/Ledger";
@@ -265,6 +266,7 @@ export function JobDetailPage() {
               Aún no hay CV adaptado para esta oferta — usa “Re-preparar” (abajo) para generarlo.
             </Card>
           )}
+          <CvReviewPanel jobId={jobId} />
         </TabsContent>
 
         <TabsContent value="mensajes" className="mt-4">

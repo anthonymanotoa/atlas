@@ -198,6 +198,35 @@ export type Intent = {
   completed_at?: string | null;
 };
 
+// F4 §7.2 cv_review — el reviewer LLM (hiring-manager proxy) devuelve edits mecánicos +
+// crítica en 4 categorías + flags del backtrack test. La web aplica edits uno a uno y resuelve
+// flags keep/soften/drop; TODO el trabajo LLM lo hizo el brain — estos endpoints son deterministas.
+export type CvReviewEdit = {
+  file: string;
+  old_string: string;
+  new_string: string;
+  reason: string;
+  applied?: boolean;
+  applied_ref?: string;
+};
+export type CvReviewFlag = {
+  file: string;
+  bullet: string;
+  classification: "OK" | "Flag" | "Never";
+  reason: string;
+  softened?: string;
+  resolution?: "keep" | "soften" | "drop";
+};
+export type CvReview = {
+  id: number;
+  job_id: string;
+  cv_version_id?: number | null;
+  edits: CvReviewEdit[];
+  critique: Record<string, string[]>;
+  flags: CvReviewFlag[];
+  created_at: string;
+};
+
 export type JobDetail = {
   job: Job;
   cv_versions: CvVersion[];
@@ -386,6 +415,16 @@ export const api = {
       type,
       job_id: jobId,
       payload: payload ?? {},
+    }),
+  // F4 §7.2 cv_review: leer las revisiones de una vacante, aplicar un edit mecánico (re-renderiza
+  // el CV) y resolver un flag (keep/soften/drop). Ninguna llama a un LLM.
+  cvReviews: (jobId: string) => get<{ reviews: CvReview[] }>(`/api/jobs/${jobId}/cv-reviews`),
+  applyCvReviewEdit: (id: number, index: number) =>
+    post<{ ok: boolean; applied_ref?: string }>(`/api/cv-reviews/${id}/apply-edit`, { index }),
+  resolveCvReviewFlag: (id: number, index: number, action: "keep" | "soften" | "drop") =>
+    post<{ ok: boolean; resolution: string }>(`/api/cv-reviews/${id}/resolve-flag`, {
+      index,
+      action,
     }),
   exportUrl: (columns?: string[], state?: string) => {
     const p = new URLSearchParams();

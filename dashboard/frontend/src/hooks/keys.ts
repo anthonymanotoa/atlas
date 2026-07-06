@@ -12,4 +12,5 @@ export const qk = {
   peers: ["peers"] as const,
   portfolioResearch: ["portfolio-research"] as const,
   intents: ["intents"] as const,
+  cvReviews: (jobId: string) => ["cv-reviews", jobId] as const,
 };
