@@ -66,8 +66,8 @@ The dashboard follows the **"Warm Editorial" design system** — spec in
 - Icons come from `src/components/ui/icons.ts` (lucide) — **no raw emoji**. Font is Geist; use
   `tabular-nums` on numbers.
 - `components.json` enables the shadcn CLI/skill; a repo skill `.claude/skills/atlas-design-system/`
-  auto-enforces this. FE lint is `--max-warnings 0`; run `npm --prefix dashboard/frontend run build`
-  (it is **not** part of `check.sh`).
+  auto-enforces this. FE lint is `--max-warnings 0`; the production build
+  (`npm --prefix dashboard/frontend run build`) runs as the last step of `check.sh`.
 
 ## Knowledge graph (graphify)
 
