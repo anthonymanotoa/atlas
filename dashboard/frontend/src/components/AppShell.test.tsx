@@ -8,6 +8,7 @@ const { api } = vi.hoisted(() => ({
     overview: vi.fn(),
     board: vi.fn(),
     criteria: vi.fn(),
+    intents: vi.fn(),
   },
 }));
 vi.mock("../api", () => ({ api }));
@@ -39,6 +40,7 @@ beforeEach(() => {
   api.profiles.mockResolvedValue({ profiles: [{ id: "owner", label: "Perfil" }], active: "owner" });
   api.onboarding.mockResolvedValue(onboardingDone);
   api.overview.mockResolvedValue(emptyOverview);
+  api.intents.mockResolvedValue({ intents: [], pending: 0 });
   api.board.mockResolvedValue({
     columns: ["shortlisted"],
     jobs: { shortlisted: [] },

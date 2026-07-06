@@ -23,6 +23,7 @@ import { useOverview } from "../hooks/useOverview";
 import { useProfiles, useSwitchProfile } from "../hooks/useProfiles";
 import { useTheme } from "../hooks/useTheme";
 import { cn } from "../lib";
+import { BrainTasksPanel } from "./BrainTasksPanel";
 import { CommandPalette } from "./CommandPalette";
 import { CvAuditDialog } from "./CvAuditDialog";
 import { HelpGuide } from "./HelpGuide";
@@ -227,6 +228,7 @@ export function AppShell() {
                 contra tu CV (discover + score). Es Python determinista (sin IA), tarda ~1–2 min.
               </TooltipContent>
             </Tooltip>
+            <BrainTasksPanel />
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button

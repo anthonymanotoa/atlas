@@ -184,6 +184,20 @@ export type Peer = {
   source_url?: string;
   notes?: string;
 };
+// F4 §7.1 intents queue — la web SOLO encola ($0); el brain drena la cola y ejecuta el LLM.
+// El status refleja el ciclo de vida server-side (pending → running → done|error).
+export type Intent = {
+  id: string;
+  type: string;
+  job_id?: string | null;
+  payload?: Record<string, unknown>;
+  status: "pending" | "running" | "done" | "error";
+  result_ref?: string | null;
+  error?: string | null;
+  created_at: string;
+  completed_at?: string | null;
+};
+
 export type JobDetail = {
   job: Job;
   cv_versions: CvVersion[];
@@ -363,6 +377,16 @@ export const api = {
     form.append("file", file);
     return postForm<{ ok: boolean; imported: number }>("/api/connections/import", form);
   },
+  // F4 §7.1: intents queue. `intents` lista la cola + conteo de pendientes; `enqueueIntent`
+  // escribe una fila `pending` (jamás llama a un LLM — eso lo hace el brain offline, $0).
+  intents: (status?: string) =>
+    get<{ intents: Intent[]; pending: number }>(`/api/intents${status ? `?status=${status}` : ""}`),
+  enqueueIntent: (type: string, payload?: Record<string, unknown>, jobId?: string) =>
+    post<{ ok: boolean; id: string }>("/api/intents", {
+      type,
+      job_id: jobId,
+      payload: payload ?? {},
+    }),
   exportUrl: (columns?: string[], state?: string) => {
     const p = new URLSearchParams();
     if (columns?.length) p.set("columns", columns.join(","));

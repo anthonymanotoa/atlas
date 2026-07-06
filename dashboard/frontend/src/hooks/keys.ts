@@ -11,4 +11,5 @@ export const qk = {
   portfolio: ["portfolio"] as const,
   peers: ["peers"] as const,
   portfolioResearch: ["portfolio-research"] as const,
+  intents: ["intents"] as const,
 };
