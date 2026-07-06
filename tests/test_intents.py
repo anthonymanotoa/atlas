@@ -3,6 +3,8 @@ en las tareas de cada tipo; aquí solo el ciclo de vida genérico."""
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 import engine.paths as paths
@@ -627,3 +629,18 @@ def _tmp_json(obj):
     with os.fdopen(fd, "w") as fh:
         fh.write(json.dumps(obj))
     return Path(name)
+
+
+def test_intent_registries_are_aligned():
+    """INTENT_TYPES, PROMPT_FILES, builders and writers must cover exactly the same types —
+    drift crashes context_for with a KeyError at runtime, so pin it here instead."""
+    types = set(intents.INTENT_TYPES)
+    assert set(intents.PROMPT_FILES) == types
+    assert set(intents._CONTEXT_BUILDERS) == types
+    assert set(intents._RESULT_WRITERS) == types
+
+
+def test_intent_prompt_files_exist():
+    root = Path(__file__).resolve().parents[1]
+    for fname in intents.PROMPT_FILES.values():
+        assert (root / "brain" / "prompts" / fname).is_file(), fname
