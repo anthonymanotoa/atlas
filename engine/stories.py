@@ -119,10 +119,16 @@ def match_stories(
     por ``id`` de historia (ascendente) para que el ranking sea reproducible.
     """
     amap = _alias_map(ontology)
-    # Los alias multi-palabra ("apache airflow") no sobreviven la tokenización por palabra:
-    # detectarlos como frase en la query cruda y añadir su canónico.
+    # Los alias que el tokenizador por palabra parte —multi-palabra ("apache airflow") o
+    # con guion ("scikit-learn")— no sobreviven como un solo token: _WORD no incluye ni
+    # espacio ni guion. Detectarlos como frase cruda en la query y añadir su canónico para
+    # que ganen el boost 3x de skill igual que los alias de una sola palabra.
     query_low = (query_text or "").lower()
-    phrase_hits = {can for alias, can in amap.items() if " " in alias and alias in query_low}
+    phrase_hits = {
+        can
+        for alias, can in amap.items()
+        if (" " in alias or "-" in alias) and alias in query_low
+    }
     q = _canonicalize(_tokens(query_text), amap) | phrase_hits
     if not q:
         return []

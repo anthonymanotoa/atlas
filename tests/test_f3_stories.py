@@ -29,6 +29,26 @@ def test_match_canonicalizes_aliases():
     assert ranked and ranked[0][0]["id"] == 1
 
 
+def test_match_hyphenated_canonical_gets_skill_boost():
+    """A hyphenated whole-skill query ("scikit-learn") must earn the 3x skill boost.
+
+    The word tokenizer splits "scikit-learn" into {scikit, learn}, so the whole-skill
+    canonical never appears as a single token — like space-separated multiword aliases,
+    the hyphen-joined form must be detected as a raw phrase hit in the query.
+    """
+    ontology = {"scikit-learn": ["sklearn"]}
+    hyphen_story = {"id": 1, "title": "ML model", "situation": "Built a churn model",
+                    "task": "", "action": "trained a classifier", "result": "",
+                    "reflection": "", "skills": ["scikit-learn"]}
+    ranked = match_stories([hyphen_story], "your scikit-learn experience", ontology)
+    assert ranked and ranked[0][0]["id"] == 1
+    # 3x skill weight for the whole-skill overlap (not merely a body-token score).
+    assert ranked[0][1] >= 3.0
+    # The alias "sklearn" must reach the same canonical and boost too.
+    ranked_alias = match_stories([hyphen_story], "your sklearn experience", ontology)
+    assert ranked_alias and ranked_alias[0][1] >= 3.0
+
+
 def test_match_empty_query_returns_empty():
     assert match_stories([S1, S2], "", ONTOLOGY) == []
 
