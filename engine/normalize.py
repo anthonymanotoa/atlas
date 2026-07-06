@@ -28,6 +28,8 @@ STATES = [
     "closed",
     "dismissed",  # user said "not interested" — hidden from the board, restorable. No timestamp
     # column (set_state handles col-less states); never reached automatically by the pipeline.
+    "expired",  # liveness gate: the posting 404s / is filled — out of the board, restorable via
+    # the "expirados" filter. Col-less like `dismissed`; set only by engine/discovery/liveness.py.
 ]
 STATE_RANK = {s: i for i, s in enumerate(STATES)}
 
