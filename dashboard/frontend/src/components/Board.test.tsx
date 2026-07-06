@@ -54,4 +54,17 @@ describe("Board cards", () => {
     );
     expect(screen.queryByRole("button", { name: "Descartar" })).not.toBeInTheDocument();
   });
+
+  it("renders the geo + repost chips on the card when the job is restricted", () => {
+    render(
+      <Board
+        columns={["shortlisted"]}
+        jobs={{ shortlisted: [{ ...job, geo_scope: "us", repost_count: 2 }] }}
+        onOpen={() => {}}
+        onMove={() => {}}
+      />,
+    );
+    expect(screen.getByText("us")).toBeInTheDocument();
+    expect(screen.getByText("repost")).toBeInTheDocument();
+  });
 });

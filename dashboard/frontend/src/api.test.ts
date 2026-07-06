@@ -78,4 +78,41 @@ describe("api client", () => {
     expect(url).toBe("/api/cv/abc/3/download?fmt=docx");
     expect(fetchMock).not.toHaveBeenCalled();
   });
+
+  it("criteria() GETs /api/criteria", async () => {
+    fetchMock.mockResolvedValue(okJson({ criteria: {}, prose: "" }));
+    await api.criteria();
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/criteria");
+  });
+
+  it("saveCriteria() PUTs JSON with the right method/headers/body", async () => {
+    fetchMock.mockResolvedValue(okJson({ ok: true, path: "criteria.md" }));
+    const criteria = { roles: ["DE"] } as unknown as Parameters<typeof api.saveCriteria>[0];
+    await api.saveCriteria(criteria, "prose text");
+    const [url, opts] = fetchMock.mock.calls[0];
+    expect(url).toBe("/api/criteria");
+    expect(opts.method).toBe("PUT");
+    expect(opts.headers["Content-Type"]).toBe("application/json");
+    expect(opts.body).toBe(JSON.stringify({ criteria, prose: "prose text" }));
+  });
+
+  it("importCv() POSTs multipart FormData WITHOUT a manual Content-Type", async () => {
+    fetchMock.mockResolvedValue(okJson({ ok: true, draft: "", path: "cv.md", chars: 0 }));
+    const file = new File(["cv bytes"], "cv.pdf", { type: "application/pdf" });
+    await api.importCv(file);
+    const [url, opts] = fetchMock.mock.calls[0];
+    expect(url).toBe("/api/cv/import");
+    expect(opts.method).toBe("POST");
+    // The browser must set the multipart boundary itself → we never set Content-Type.
+    expect(opts.headers).toBeUndefined();
+    expect(opts.body).toBeInstanceOf(FormData);
+    expect((opts.body as FormData).get("file")).toBe(file);
+  });
+
+  it("livenessSweep() POSTs /api/liveness/sweep", async () => {
+    fetchMock.mockResolvedValue(okJson({ started: true }));
+    await api.livenessSweep();
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/liveness/sweep");
+    expect(fetchMock.mock.calls[0][1].method).toBe("POST");
+  });
 });

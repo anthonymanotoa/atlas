@@ -32,6 +32,10 @@ export type Job = {
   match_score?: number | null;
   missing_keywords?: string[]; // importance-ranked JD keywords the CV doesn't evidence (detail only)
   jd_skills?: string[]; // skills the posting itself asks for, extracted from the description (detail only)
+  // F2 geo-scoring + hygiene (additive; backend may omit on older rows)
+  geo_restriction?: string | null; // raw restriction text ("Remote — US only")
+  geo_scope?: string | null; // normalized: iso2/region tokens | "worldwide" | "unknown" | ""
+  repost_count?: number | null; // ≥1 = same company re-posted this role in 90 days
 };
 
 export type Action = {
@@ -112,6 +116,24 @@ export type OnboardingStatus = {
   cv_present: boolean;
   audit: { findings: Finding[]; summary: { high: number; med: number; low: number } };
 };
+// Frontmatter of the active profile's criteria.md (GET/PUT /api/criteria). Only the fields
+// the wizard edits are typed; everything else round-trips untouched via the index signature.
+export type CriteriaConfig = {
+  roles: string[];
+  role_aliases: string[];
+  seniority: string[];
+  remote_required: boolean;
+  onsite_locations: string[];
+  languages: string[];
+  salary_floor_usd: number;
+  candidate_years: number;
+  candidate_country: string;
+  acceptable_regions: string[];
+  geo_penalty: number;
+  re_apply_window_days: number;
+  shortlist_threshold: number;
+  [key: string]: unknown;
+};
 export type Interviewer = {
   id: number;
   name: string;
@@ -183,6 +205,21 @@ async function post<T>(url: string, body?: unknown): Promise<T> {
     headers: { "Content-Type": "application/json" },
     body: body ? JSON.stringify(body) : undefined,
   });
+  if (!r.ok) throw new Error(`${url} → ${r.status}`);
+  return r.json();
+}
+async function put<T>(url: string, body?: unknown): Promise<T> {
+  const r = await fetch(url, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!r.ok) throw new Error(`${url} → ${r.status}`);
+  return r.json();
+}
+// Multipart upload: never set Content-Type — the browser adds it WITH the boundary.
+async function postForm<T>(url: string, form: FormData): Promise<T> {
+  const r = await fetch(url, { method: "POST", body: form });
   if (!r.ok) throw new Error(`${url} → ${r.status}`);
   return r.json();
 }
@@ -267,6 +304,19 @@ export const api = {
   portfolioResearch: () => get<PortfolioResearch>("/api/portfolio/research"),
   peers: () => get<{ peers: Peer[] }>("/api/peers"),
   addPeer: (body: Partial<Peer>) => post<{ ok: boolean; id: number }>("/api/peers", body),
+  // F2: onboarding wizard + hygiene
+  criteria: () => get<{ criteria: CriteriaConfig; prose: string }>("/api/criteria"),
+  saveCriteria: (criteria: CriteriaConfig, prose: string) =>
+    put<{ ok: boolean; path: string }>("/api/criteria", { criteria, prose }),
+  importCv: (file: File) => {
+    const form = new FormData();
+    form.append("file", file);
+    return postForm<{ ok: boolean; draft: string; path: string; chars: number }>(
+      "/api/cv/import",
+      form,
+    );
+  },
+  livenessSweep: () => post<{ started: boolean; running?: boolean }>("/api/liveness/sweep"),
   exportUrl: (columns?: string[], state?: string) => {
     const p = new URLSearchParams();
     if (columns?.length) p.set("columns", columns.join(","));

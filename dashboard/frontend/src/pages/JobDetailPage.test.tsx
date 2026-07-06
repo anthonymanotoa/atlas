@@ -51,6 +51,9 @@ function jobDetail() {
       jd_skills: ["python", "sql"],
       language: "en",
       posted_days: 1,
+      geo_scope: "us",
+      geo_restriction: "Remote — US only",
+      repost_count: 2,
     },
     cv_versions: [
       { id: 1, language: "en", path_pdf: "a", path_docx: "b", keyword_coverage: 0.6, parse_ok: 1 },
@@ -100,6 +103,13 @@ describe("JobDetailPage — página /jobs/:id con tabs", () => {
     }
     expect(screen.getByText(/Build models/)).toBeInTheDocument();
     expect(screen.getByText("python")).toBeInTheDocument();
+  });
+
+  it("muestra los chips de restricción geo y repost en la cabecera", async () => {
+    renderRoutes("/jobs/job-1");
+    await screen.findByText("Senior Data Scientist");
+    expect(screen.getByText("us")).toBeInTheDocument();
+    expect(screen.getByText("repost")).toBeInTheDocument();
   });
 
   it("muestra la transparencia de score (Por qué 90 + razones)", async () => {
