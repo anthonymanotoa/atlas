@@ -8,6 +8,7 @@ from datetime import UTC, datetime, timedelta
 from engine.config import Criteria, load_master_cv, load_ontology
 from engine.cv.match import match_score
 from engine.db.models import DB
+from engine.knockouts import prescan
 from engine.normalize import norm_company
 from engine.scoring.fit import score_job
 
@@ -77,7 +78,8 @@ def score_jobs(db: DB, criteria: Criteria, *, rescore: bool = False) -> tuple[in
                     f"re-apply window: own application {days}d ago "
                     f"(<{criteria.re_apply_window_days}d)"
                 )
-        db.set_fit(j["id"], res.score, res.reasons, res.knockouts)
+        warnings = prescan(j, criteria, master)
+        db.set_fit(j["id"], res.score, res.reasons, res.knockouts, warnings=warnings)
         if have_cv:
             m = match_score(j, master, ontology)
             db.set_match(j["id"], m.score, m.missing)

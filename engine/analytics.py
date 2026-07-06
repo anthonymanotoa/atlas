@@ -357,6 +357,7 @@ def job_detail(db: DB, job_id: str) -> dict | None:
         return None
     job["fit_reasons"] = json.loads(job.get("fit_reasons") or "[]")
     job["knockout_flags"] = json.loads(job.get("knockout_flags") or "[]")
+    job["knockout_warnings"] = json.loads(job.get("knockout_warnings") or "[]")  # F3 §6.4 pre-scan
     job["sources"] = json.loads(job.get("sources_json") or "[]")
     job["missing_keywords"] = json.loads(job.get("match_missing") or "[]")  # CV↔JD gaps
     job["jd_skills"] = _jd_skills(job)  # skills the posting itself asks for (detail view)
