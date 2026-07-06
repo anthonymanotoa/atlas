@@ -30,7 +30,7 @@ a dependency says otherwise; honor each plan's STOP conditions; update your row 
 
 | Plan | Title | Priority | Effort | Depends on | Status |
 |------|-------|----------|--------|------------|--------|
-| 026 | Make ARCHITECTURE.md/README describe the v2 dashboard (drawer → `/jobs/:id`, router/TanStack/Meridian) | P2 | S | — | TODO |
+| 026 | Make ARCHITECTURE.md/README describe the v2 dashboard (drawer → `/jobs/:id`, router/TanStack/Meridian) | P2 | S | — | DONE — Dashboard section rewritten (react-router v7/TanStack Query v5 hooks/routes from `routes.tsx`, Meridian v2, "Tareas del Brain" intents panel); removed all "drawer" mentions (incl. one in the CV↔JD match-score section); README frontend line + component list updated to match; `uv run pytest` green (506 passed) |
 | 027 | Untrusted-content rule in the 5 external-text brain prompts + SKILL.md | P3 | S | — | TODO |
 | 028 | Drop dead F3-compat shim in intents.py + registry-alignment tests | P3 | S | — | TODO |
 | 029 | Shared aware-UTC ISO parser in normalize; followups/analytics use it | P3 | S | — | TODO |

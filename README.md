@@ -201,10 +201,10 @@ atlas/
 │
 ├── dashboard/               ← El tablero web local
 │   ├── backend/main.py      ←   API en FastAPI que lee la BD y la sirve como JSON en localhost
-│   └── frontend/            ←   la interfaz (React + Vite + Tailwind), en español, claro/oscuro
-│       └── src/components/  ←   NeedsAction (qué hacer hoy), Board (kanban), DetailDrawer
-│                                (panel de cada vacante con CV y mensajes), AnalyticsStrip,
-│                                CommandPalette (Cmd+K)
+│   └── frontend/            ←   la interfaz (React + Vite + Tailwind, router multi-vista, diseño "Meridian"), en español, claro/oscuro
+│       └── src/components/  ←   NeedsAction (qué hacer hoy), Board (kanban), AppShell (layout +
+│                                rutas), AnalyticsStrip, CommandPalette (Cmd+K), BrainTasksPanel
+│                                (Tareas del Brain); detalle de vacante en src/pages/JobDetailPage
 │
 ├── config/                  ← Tu configuración
 │   ├── criteria.md          ←   tus criterios de búsqueda (qué buscas, qué descartas)

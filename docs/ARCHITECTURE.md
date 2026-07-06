@@ -40,8 +40,8 @@ coverage of a posting's JD keywords by the master CV, plus the importance-ranked
 keywords (honest gaps, never faked). Distinct from `fit_score` (job vs. your *criteria*): this
 is CV vs. the *job description*. Computed cheaply per job in `scoring/run.py` (no DOCX render),
 persisted on `jobs.match_score` / `jobs.match_missing`, and shown as a "match %" chip on the
-board + a gaps panel in the drawer. Reuses the same gazetteer + truthful coverage predicate as
-the tailor, so the two stay consistent.
+board + a gaps panel on the job detail page. Reuses the same gazetteer + truthful coverage
+predicate as the tailor, so the two stay consistent.
 
 **Importing an existing CV (`engine/cv/import_cv.py`, `atlas import-cv`).** Two-step and
 conservative: the engine **deterministically extracts text** from a PDF (`pdfplumber`) or DOCX
@@ -57,9 +57,22 @@ keywords your CV doesn't yet evidence — so it's specific, not a fixed taxonomy
 nothing when no keywords map. Interviewer research stays supervised (Claude-in-Chrome).
 
 ## Dashboard
-FastAPI serves JSON over `localhost` from `atlas.db`; React 19 + Tailwind v4 SPA: action-first
-Needs-Action rail, dnd-kit Kanban, Radix detail drawer (3-state ledger + ready-to-send), cmdk
-palette, funnel + response-rate analytics, aging indicators, downtime banner. UI in Spanish;
+FastAPI serves JSON over `localhost` from `atlas.db`. The SPA is React 19 + Vite + Tailwind v4,
+routed with **react-router v7** (library mode, `src/routes.tsx` + `AppShell.tsx`); server data
+flows only through **TanStack Query v5** hooks in `src/hooks/` (query keys centralized in
+`src/hooks/keys.ts`) — never ad hoc `api.*` calls or `useEffect`/`useState` for server state.
+Route map (from `src/routes.tsx`): `/pipeline` (board), `/jobs/:id` (full-page job detail with
+tabs — 3-state ledger + ready-to-send), `/analytics`, `/followups`, `/upskill`, `/portfolio`,
+`/settings`, `/onboarding`.
+
+The UI follows the **Meridian design system v2** (`dashboard/frontend/DESIGN_SYSTEM.md`): OKLCH
+semantic tokens, dark default with full light parity via `data-theme` on `<html>`, shadcn-style
+primitives (Radix + cva) in `src/components/ui/`.
+
+Feature notes: action-first Needs-Action rail, dnd-kit Kanban, cmdk (⌘K) command palette, funnel
++ response-rate analytics, aging indicators, downtime banner, and a **"Tareas del Brain" intents
+panel** (`BrainTasksPanel.tsx`) — the guided F4 handoff where the web only *enqueues* LLM work
+(`intents` table) and the brain executes it on the next run ($0-preserving). UI in Spanish;
 CV/outreach English by default (Spanish optional).
 
 ## Deferred: MCP server (design note, not built)
