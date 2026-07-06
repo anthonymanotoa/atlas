@@ -1300,7 +1300,7 @@ class DebriefBody(BaseModel):
     reanalyze: bool = False
 
 
-@app.post("/api/interviews/{interview_id}/debrief", dependencies=[Depends(require_trusted_origin)])
+@app.post("/api/interview/{interview_id}/debrief", dependencies=[Depends(require_trusted_origin)])
 def api_interview_debrief(interview_id: int, body: DebriefBody, db: DB = Depends(get_db)):
     """Save the candidate's post-interview debrief and, if `reanalyze`, re-enqueue an
     interview_prep_deep intent for a follow-up analysis. No LLM here ($0): the brain runs it

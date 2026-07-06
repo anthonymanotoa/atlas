@@ -393,7 +393,7 @@ export const api = {
   enqueueInterviewPrepDeep: (interviewId: number, jobId: string) =>
     api.enqueueIntent("interview_prep_deep", { interview_id: interviewId }, jobId),
   interviewDebrief: (interviewId: number, debriefMd: string, reanalyze: boolean) =>
-    post<{ ok: boolean; intent_id: string | null }>(`/api/interviews/${interviewId}/debrief`, {
+    post<{ ok: boolean; intent_id: string | null }>(`/api/interview/${interviewId}/debrief`, {
       debrief_md: debriefMd,
       reanalyze,
     }),

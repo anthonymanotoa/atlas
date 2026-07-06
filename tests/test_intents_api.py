@@ -237,7 +237,7 @@ def test_interview_debrief_saves_and_can_reanalyze(atlas_app):
         with DB() as db:
             ivid = db.add_interview(jid, round="technical")
         r = client.post(
-            f"/api/interviews/{ivid}/debrief",
+            f"/api/interview/{ivid}/debrief",
             json={"debrief_md": "Preguntaron mucho de SQL.", "reanalyze": True},
         )
         assert r.status_code == 200 and r.json()["ok"] is True
@@ -258,7 +258,7 @@ def test_interview_debrief_without_reanalyze_enqueues_nothing(atlas_app):
         with DB() as db:
             ivid = db.add_interview(jid, round="phone")
         r = client.post(
-            f"/api/interviews/{ivid}/debrief",
+            f"/api/interview/{ivid}/debrief",
             json={"debrief_md": "Fue una charla corta.", "reanalyze": False},
         )
         assert r.status_code == 200 and r.json()["intent_id"] is None
@@ -267,7 +267,7 @@ def test_interview_debrief_without_reanalyze_enqueues_nothing(atlas_app):
 
 def test_interview_debrief_unknown_interview_is_404(atlas_app):
     with TestClient(atlas_app) as client:
-        r = client.post("/api/interviews/9999/debrief", json={"debrief_md": "x"})
+        r = client.post("/api/interview/9999/debrief", json={"debrief_md": "x"})
     assert r.status_code == 404
 
 
@@ -278,14 +278,14 @@ def test_interview_debrief_rejects_empty(atlas_app):
         jid = _seed_job()
         with DB() as db:
             ivid = db.add_interview(jid, round="final")
-        r = client.post(f"/api/interviews/{ivid}/debrief", json={"debrief_md": "   "})
+        r = client.post(f"/api/interview/{ivid}/debrief", json={"debrief_md": "   "})
     assert r.status_code == 400
 
 
 def test_interview_debrief_rejects_foreign_origin(atlas_app):
     with TestClient(atlas_app) as client:
         r = client.post(
-            "/api/interviews/1/debrief",
+            "/api/interview/1/debrief",
             json={"debrief_md": "x"},
             headers={"Origin": "https://evil.example"},
         )
