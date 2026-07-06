@@ -19,6 +19,7 @@ from datetime import UTC, datetime
 
 import engine.paths as paths
 from engine import heartbeat
+from engine import intents as intent_queue
 from engine.config import load_criteria, load_master_cv
 from engine.cv.build import build_for_job
 from engine.db.models import DB
@@ -97,6 +98,13 @@ def run(db: DB, *, limit: int = 8, language: str = "en", do_discover: bool = Tru
     # never fabricates outcomes — it only rolls up what the user recorded via form/CLI.
     summary["learnings"] = auto_learn_all(db)
 
+    # F4 paso 0 (parte determinista): reportar la cola. El drenaje REAL lo hace la sesión
+    # de Claude que invoca esto (SKILL.md paso 0) — aquí solo se hace visible lo pendiente.
+    summary["intents_pending"] = [
+        {"id": i["id"], "type": i["type"], "job_id": i["job_id"]}
+        for i in intent_queue.list_pending(db)
+    ]
+
     summary["downtime_hours"] = heartbeat.downtime_hours(db)
     heartbeat.beat(db)
     db.log_event(
@@ -151,6 +159,13 @@ def write_morning_brief(db: DB, summary: dict, language: str = "en") -> None:
     if health:
         lines += ["", "## ⚠️ Fuentes con problemas"]
         lines += [f"- {h['source']}: {(h['error'] or '')[:80]}" for h in health]
+    pend = summary.get("intents_pending") or []
+    if pend:
+        lines += ["", "## 🤖 Tareas del Brain en cola (pídele a Claude: `corre atlas`)"]
+        lines += [
+            f"- `{p['id']}` · {p['type']}" + (f" · job {p['job_id']}" if p["job_id"] else "")
+            for p in pend
+        ]
     (paths.OUTBOX_DIR / "MORNING_BRIEF.md").write_text("\n".join(lines))
 
 
