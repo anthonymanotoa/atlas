@@ -1,0 +1,8 @@
+# Empresas candidatas para el reverse ATS discovery (F3). Atlas probará cada nombre
+# contra los boards públicos de Greenhouse/Lever/Ashby y te sugerirá las que tengan
+# posiciones que matcheen tus role_terms. Edita esta lista con empresas de tu industria.
+# (Los nombres de ejemplo son ficticios — reemplázalos.)
+candidates: []
+# candidates:
+#   - Acme Analytics
+#   - Umbrella Robotics
