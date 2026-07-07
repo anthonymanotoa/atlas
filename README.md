@@ -242,6 +242,14 @@ cd /path/to/atlas
 Construye el frontend la primera vez y abre la app en **http://127.0.0.1:8787**. Para
 detenerla: `Ctrl+C`.
 
+> **Git worktrees.** `profiles/` está gitignored (datos personales), así que un worktree
+> nuevo arranca **sin** tus perfiles y verías el asistente de onboarding en vez de tus
+> cuentas. `scripts/run.sh` lo detecta y apunta Atlas a los perfiles reales del checkout
+> principal vía `$ATLAS_PROFILES_DIR` (una sola fuente de verdad, en vivo), así cada sesión
+> ve las mismas cuentas y datos sin copiar nada. Para otros comandos (`uv run atlas …`) desde
+> un worktree, exporta esa variable tú mismo:
+> `export ATLAS_PROFILES_DIR="/ruta/al/checkout/principal/profiles"`.
+
 **Refrescar vacantes manualmente** (o espera la corrida automática diaria de las 08:10):
 
 ```

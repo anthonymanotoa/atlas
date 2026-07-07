@@ -22,7 +22,13 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
-PROFILES_DIR = REPO_ROOT / "profiles"
+# The profiles root defaults to the repo-local ``profiles/`` — but ``$ATLAS_PROFILES_DIR``
+# overrides it. ``profiles/`` is gitignored (personal data, public repo), so a fresh git
+# worktree starts with none; ``scripts/run.sh`` sets this var to the MAIN checkout's
+# ``profiles/`` so every parallel session shares the same real accounts + data instead of an
+# empty per-worktree tree. Unset (plain clone / main checkout) → identical behavior to before.
+_profiles_env = os.environ.get("ATLAS_PROFILES_DIR")
+PROFILES_DIR = (Path(_profiles_env) if _profiles_env else REPO_ROOT / "profiles").resolve()
 REGISTRY_PATH = PROFILES_DIR / "registry.json"
 
 # These are (re)assigned by `_apply()` below; declared here for clarity / tooling.

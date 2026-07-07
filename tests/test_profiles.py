@@ -47,6 +47,42 @@ def tmp_registry(tmp_path, monkeypatch):
     return tmp_path
 
 
+# ── profiles-dir override (share real profiles across git worktrees) ───────────
+def test_profiles_dir_honors_env_override(tmp_path, monkeypatch):
+    """`$ATLAS_PROFILES_DIR` redirects the profiles root.
+
+    `scripts/run.sh` sets it so every git worktree reads the MAIN checkout's real
+    (gitignored) profiles/ instead of an empty per-worktree one. Defaults to
+    ``REPO_ROOT/profiles`` when unset, so a plain clone behaves exactly as before.
+    """
+    import importlib
+
+    shared = tmp_path / "shared-profiles"
+    monkeypatch.setenv("ATLAS_PROFILES_DIR", str(shared))
+    monkeypatch.delenv("ATLAS_PROFILE", raising=False)
+    import engine.paths as p
+
+    importlib.reload(p)
+    try:
+        assert shared.resolve() == p.PROFILES_DIR
+        assert shared.resolve() / "registry.json" == p.REGISTRY_PATH
+    finally:
+        # Restore the module's real, ambient path state for the rest of the suite.
+        monkeypatch.delenv("ATLAS_PROFILES_DIR", raising=False)
+        importlib.reload(p)
+
+
+def test_profiles_dir_defaults_to_repo_root(monkeypatch):
+    """With no override, the profiles root is the repo-local profiles/ (unchanged behavior)."""
+    import importlib
+
+    monkeypatch.delenv("ATLAS_PROFILES_DIR", raising=False)
+    import engine.paths as p
+
+    importlib.reload(p)
+    assert (p.REPO_ROOT / "profiles").resolve() == p.PROFILES_DIR
+
+
 # ── path re-pointing ──────────────────────────────────────────────────────────
 def test_set_profile_repoints_every_path(restore_paths):
     paths.set_profile("alpha")
