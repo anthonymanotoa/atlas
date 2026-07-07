@@ -209,7 +209,10 @@ class CvReviewPayload(BaseModel):
 
 class LegitimacyBatchPayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    job_ids: list[str] = Field(min_length=1, max_length=100)
+    # A real shortlist routinely exceeds 100 vacancies (the "Verificar legitimidad" action
+    # sends the WHOLE shortlist at once). Cap high enough to never clip a real single-user
+    # shortlist, while still bounding a pathological payload.
+    job_ids: list[str] = Field(min_length=1, max_length=1000)
 
 
 class UpskillPayload(BaseModel):

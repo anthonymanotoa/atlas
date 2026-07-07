@@ -22,6 +22,25 @@ def _seed_job() -> str:
         return db.list_jobs()[0]["id"]
 
 
+def _seed_jobs(n: int) -> list[str]:
+    """Seed n distinct jobs and return their ids (for batch-size tests)."""
+    from engine.db.models import DB
+    from engine.normalize import Job
+
+    with DB() as db:
+        for i in range(n):
+            db.upsert_job(
+                Job(
+                    source="greenhouse",
+                    source_job_id=str(i),
+                    title="Data Scientist",
+                    company=f"Acme {i}",
+                    url=f"https://x/{i}",
+                )
+            )
+        return [j["id"] for j in db.list_jobs()]
+
+
 def test_enqueue_unknown_type_is_400(atlas_app):
     with TestClient(atlas_app) as client:
         r = client.post("/api/intents", json={"type": "world_peace", "payload": {}})
@@ -65,6 +84,40 @@ def test_enqueue_legitimacy_batch_validates_job_ids(atlas_app):
             json={"type": "legitimacy_batch", "payload": {"job_ids": [jid]}},
         )
         assert ok.status_code == 200
+
+
+def test_enqueue_legitimacy_batch_accepts_full_shortlist(atlas_app):
+    """A real shortlist can exceed 100 vacancies — enqueuing the whole batch must not 400.
+
+    Regression: the payload cap was 100 while a live shortlist held 127, so the whole
+    'Verificar legitimidad' action failed with `List should have at most 100 items`.
+    """
+    with TestClient(atlas_app) as client:
+        ids = _seed_jobs(150)
+        assert len(ids) == 150
+        r = client.post(
+            "/api/intents",
+            json={"type": "legitimacy_batch", "payload": {"job_ids": ids}},
+        )
+        assert r.status_code == 200, r.text
+        assert r.json()["ok"] is True
+
+
+def test_enqueue_legitimacy_batch_still_bounds_absurd_batch(atlas_app):
+    """The batch stays bounded: a pathologically large payload is rejected at validation.
+
+    Job existence is checked only AFTER payload validation, so fake ids exercise the cap
+    without seeding thousands of rows."""
+    with TestClient(atlas_app) as client:
+        r = client.post(
+            "/api/intents",
+            json={
+                "type": "legitimacy_batch",
+                "payload": {"job_ids": [f"x{i}" for i in range(1001)]},
+            },
+        )
+        assert r.status_code == 400
+        assert "at most" in r.json()["detail"]
 
 
 def test_enqueue_rejects_extra_payload_keys(atlas_app):
