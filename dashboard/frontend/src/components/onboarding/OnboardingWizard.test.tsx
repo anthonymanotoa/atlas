@@ -109,4 +109,21 @@ describe("OnboardingWizard", () => {
     expect(api.renameProfile).toHaveBeenCalledWith("owner", "Jane Ejemplo");
     expect(api.completeOnboarding).toHaveBeenCalled();
   });
+
+  it("still completes onboarding when the cosmetic profile rename fails", async () => {
+    // In legacy mode (no profiles registry yet), POST /api/profiles/owner/label 404s because
+    // the virtual owner isn't registered. The display label is cosmetic (settable later in
+    // Ajustes, and it self-heals from the CV name), so a rename failure must NOT strand the
+    // user on the wizard after criteria + completion have succeeded — the board must unlock.
+    vi.mocked(api.renameProfile).mockRejectedValueOnce(new Error("404 unknown profile"));
+    const onDone = await renderWizard();
+    for (let i = 0; i < 5; i++) {
+      await userEvent.click(screen.getByRole("button", { name: /Siguiente/ }));
+    }
+    await userEvent.click(screen.getByRole("button", { name: /Finalizar/ }));
+    await waitFor(() => expect(onDone).toHaveBeenCalled());
+    expect(api.saveCriteria).toHaveBeenCalled();
+    expect(api.completeOnboarding).toHaveBeenCalled();
+    expect(api.renameProfile).toHaveBeenCalled();
+  });
 });

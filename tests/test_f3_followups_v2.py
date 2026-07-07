@@ -109,3 +109,20 @@ def test_draft_second_touch_differs_from_first():
     d1 = fu.draft_followup(job, "Jane", "applied", 1)
     d2 = fu.draft_followup(job, "Jane", "applied", 2)
     assert d1.body != d2.body and d2.variant == "applied-touch2"
+
+
+def test_schedule_stores_aware_due_at_for_naive_base(db: DB):
+    jid = _seed_job(db)
+    fu.schedule(db, jid, channel="email", base_iso="2026-01-15T10:00:00")  # naive base_iso
+    rows = db.followups_for_job(jid, "email")
+    assert len(rows) == len(fu.CADENCE)
+    for f in rows:
+        assert datetime.fromisoformat(f["due_at"]).tzinfo is not None
+
+
+def test_bucket_followups_naive_due_at_still_buckets():
+    now = datetime(2026, 7, 10, 12, 0, tzinfo=UTC)
+    pending = {"id": 1, "state": "pending", "due_at": "2026-01-01"}  # bare date, naive
+    b = fu.bucket_followups([pending], now)
+    assert len(b["overdue"]) == 1
+    assert b["overdue"][0]["days_overdue"] > 0
