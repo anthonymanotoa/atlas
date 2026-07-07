@@ -402,14 +402,12 @@ _RESULT_WRITERS["upskill_report"] = _write_upskill
 # baseline prep as the floor + the F3 story bank's ranked matches (via match_stories, also $0).
 # The writer only VALIDATES the brain's JSON (non-empty prep_md) and PERSISTS deep_prep_md — no
 # LLM here. Malformed → raises, leaving the intent `running` for a corrected retry.
-def _match_stories_safe(db: DB, query_text: str) -> list[dict]:
-    """F3 story bank matcher, guarded so F4 lands even if F3 hasn't merged yet."""
-    try:
-        from engine.config import load_ontology
-        from engine.stories import format_story, match_stories
-    except ImportError:
-        return []
-    stories = db.list_stories() if hasattr(db, "list_stories") else []
+def _matched_stories(db: DB, query_text: str) -> list[dict]:
+    """Top-5 F3 story-bank matches, formatted for the brain's context."""
+    from engine.config import load_ontology
+    from engine.stories import format_story, match_stories
+
+    stories = db.list_stories()
     if not stories:
         return []
     ranked = match_stories(stories, query_text, load_ontology())
@@ -438,7 +436,7 @@ def _ctx_interview_prep_deep(db: DB, intent: dict) -> dict:
         "interviewers": db.interviewers_for(ivid),
         "job": _job_brief(job),
         "deterministic_prep": prep_path.read_text(),
-        "matched_stories": _match_stories_safe(db, query),
+        "matched_stories": _matched_stories(db, query),
         "debrief_md": iv.get("debrief_md"),
         "master_cv_path": str(paths.MASTER_CV_PATH),
     }
