@@ -255,12 +255,14 @@ def tailor(
     from engine.config import load_ontology
     from engine.cv.build import build_for_job
     from engine.cv.match import match_score
+    from engine.cv.review_report import build_review
 
     _warn_if_template_cv(console)
     with _db() as db:
         res = build_for_job(db, job_id, language=language, make_pdf=pdf)
         job = db.get_job(job_id) or {}
-    m = match_score(job, load_master_cv(), load_ontology())
+    master = load_master_cv()
+    m = match_score(job, master, load_ontology())
     console.print(f"[bold]CV built[/] for {job_id}  (ATS: {res.ats_target})")
     console.print(f"  DOCX: {res.docx_path}")
     console.print(f"  PDF:  {res.pdf_path or '[yellow]not generated[/]'}")
@@ -275,6 +277,12 @@ def tailor(
         console.print(
             f"  [yellow]Missing JD keywords[/] (add only if true): {', '.join(res.missing[:10])}"
         )
+    coverage = {"coverage": res.coverage, "matched": res.matched, "missing": res.missing}
+    review = build_review(res.docx_path, res.pdf_path, master, job, coverage)
+    (res.docx_path.parent / "review.md").write_text(review.markdown)
+    console.print("  Revisión determinista:")
+    for c in review.checks:
+        console.print(f"    {'✅' if c.ok else '⚠️ '} {c.name}: {c.detail}")
 
 
 @app.command(name="import-cv")
@@ -350,16 +358,25 @@ def prep(
 ) -> None:
     """Full prep for one job: tailor CV → draft outreach → write the send-ready package."""
     from engine.cv.build import build_for_job
+    from engine.cv.review_report import build_review
     from engine.outreach.build import build_outreach, write_package
 
     _warn_if_template_cv(console)
+    master = load_master_cv()
     with _db() as db:
         cv = build_for_job(db, job_id, language=language)
         build_outreach(db, job_id, language=language)
         pkg = write_package(db, job_id, language=language)
+        job = db.get_job(job_id) or {}
     console.print(f"[bold green]Ready[/]: {job_id}")
     console.print(f"  Coverage {cv.coverage:.0%} · parse {'✓' if cv.parse_ok else '✗'}")
     console.print(f"  Package: {pkg}")
+    coverage = {"coverage": cv.coverage, "matched": cv.matched, "missing": cv.missing}
+    review = build_review(cv.docx_path, cv.pdf_path, master, job, coverage)
+    (cv.docx_path.parent / "review.md").write_text(review.markdown)
+    console.print("  Revisión determinista:")
+    for c in review.checks:
+        console.print(f"    {'✅' if c.ok else '⚠️ '} {c.name}: {c.detail}")
 
 
 @app.command(name="import-connections")
