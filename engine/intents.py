@@ -622,13 +622,12 @@ def _write_contact_discovery(db: DB, intent: dict, result: dict) -> str:
         notes = f"[brain_research] confidence={confidence}"
         if reasoning:
             notes += f"; {reasoning}"
-        db.add_contact(
+        db.upsert_research_contact(
             name=c["name"].strip(),
             company=company,
             title=c.get("role"),
             linkedin_url=c.get("profile_url"),
             role="referral",
-            source="brain_research",
             notes=notes,
         )
         created += 1

@@ -509,6 +509,41 @@ class DB:
         self.conn.commit()
         return int(cur.lastrowid)
 
+    def upsert_research_contact(
+        self,
+        *,
+        name: str,
+        company: str | None,
+        title: str | None = None,
+        linkedin_url: str | None = None,
+        role: str | None = None,
+        notes: str,
+    ) -> int:
+        """Insert or update a contact discovered/corroborated by brain research
+        (contact_discovery intent). Unlike `add_contact`, this ALWAYS marks
+        source='brain_research' on conflict too — so a re-discovery of a contact that
+        already exists (e.g. from a prior connections_csv import) still surfaces in
+        write_package's "Contactos sugeridos" list — and it APPENDS `notes` to any
+        pre-existing (human-written) notes instead of clobbering them, since notes/role/
+        source were never part of add_contact's ON CONFLICT UPDATE SET."""
+        cur = self.conn.execute(
+            """INSERT INTO contacts
+               (name, company, title, linkedin_url, role, source, notes, created_at)
+               VALUES (?,?,?,?,?,'brain_research',?,?)
+               ON CONFLICT(name, company) DO UPDATE SET
+                 title=COALESCE(contacts.title, excluded.title),
+                 linkedin_url=COALESCE(contacts.linkedin_url, excluded.linkedin_url),
+                 role=COALESCE(contacts.role, excluded.role),
+                 source='brain_research',
+                 notes=CASE
+                   WHEN contacts.notes IS NULL OR contacts.notes = '' THEN excluded.notes
+                   ELSE contacts.notes || char(10) || excluded.notes
+                 END""",
+            (name, company, title, linkedin_url, role, notes, now_iso()),
+        )
+        self.conn.commit()
+        return int(cur.lastrowid)
+
     def all_contacts(self) -> list[dict]:
         """Every contact. Callers that match many jobs load this ONCE and reuse it,
         instead of re-scanning the table per job (fuzzy matching happens in the referrals layer)."""

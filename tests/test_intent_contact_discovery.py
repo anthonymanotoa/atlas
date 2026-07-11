@@ -102,6 +102,73 @@ def test_apply_result_creates_contacts_with_confidence_and_draft_message(db):
     assert intents.get_intent(db, iid)["status"] == "done"
 
 
+def test_apply_result_persists_confidence_on_existing_contact_name_collision(db):
+    """Regression: a brain re-discovery of a contact already in the DB (e.g. a prior
+    connections_csv import) must still persist confidence/reasoning and be surfaced as
+    brain-corroborated — add_contact's ON CONFLICT never touched notes/role/source, so this
+    used to be silently dropped while apply_result still reported success."""
+    jid = _job(db, source_job_id="9", company="Kappa Systems")
+    db.add_contact(
+        name="Jane Doe",
+        company="Kappa Systems",
+        source="connections_csv",
+        role="connection",
+        notes=None,
+    )
+    iid = intents.enqueue(db, "contact_discovery", {}, job_id=jid)
+    intents.mark_running(db, iid)
+    intents.apply_result(
+        db,
+        iid,
+        {
+            "contacts": [
+                {
+                    "name": "Jane Doe",
+                    "confidence": "high",
+                    "reasoning": "Found on team page",
+                }
+            ]
+        },
+    )
+    contacts = db.contacts_for_company(norm_company("Kappa Systems"))
+    jane = next(c for c in contacts if c["name"] == "Jane Doe")
+    assert "high" in (jane["notes"] or "")
+    assert jane["source"] == "brain_research"
+    assert intents.get_intent(db, iid)["status"] == "done"
+
+
+def test_apply_result_preserves_preexisting_human_note_on_collision(db):
+    """A pre-existing human-written note must be preserved (appended to, not clobbered)
+    when the brain re-discovers the same contact."""
+    jid = _job(db, source_job_id="10", company="Lambda Corp")
+    db.add_contact(
+        name="John Roe",
+        company="Lambda Corp",
+        source="manual",
+        role="hiring_manager",
+        notes="Met at conference, very responsive.",
+    )
+    iid = intents.enqueue(db, "contact_discovery", {}, job_id=jid)
+    intents.mark_running(db, iid)
+    intents.apply_result(
+        db,
+        iid,
+        {
+            "contacts": [
+                {
+                    "name": "John Roe",
+                    "confidence": "medium",
+                    "reasoning": "Listed as hiring manager on job post",
+                }
+            ]
+        },
+    )
+    contacts = db.contacts_for_company(norm_company("Lambda Corp"))
+    john = next(c for c in contacts if c["name"] == "John Roe")
+    assert "Met at conference, very responsive." in john["notes"]
+    assert "confidence=medium" in john["notes"]
+
+
 def test_apply_result_without_draft_message_creates_no_message(db):
     jid = _job(db, source_job_id="2", company="Beta Co")
     iid = intents.enqueue(db, "contact_discovery", {}, job_id=jid)
