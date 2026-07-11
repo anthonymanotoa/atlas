@@ -77,7 +77,7 @@ def test_list_pending_only_returns_pending(db):
     assert {r["id"] for r in intents.list_pending(db)} == {pend}
 
 
-def test_all_eight_intent_types_enqueue(db):
+def test_all_nine_intent_types_enqueue(db):
     assert set(intents.INTENT_TYPES) == {
         "cv_review",
         "legitimacy_batch",
@@ -87,6 +87,7 @@ def test_all_eight_intent_types_enqueue(db):
         "cover_letter",
         "company_research",
         "contact_discovery",
+        "portfolio_research",
     }
     for t in intents.INTENT_TYPES:
         iid = intents.enqueue(db, t)

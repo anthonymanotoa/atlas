@@ -974,6 +974,68 @@ class DB:
             out.append(d)
         return out
 
+    def upsert_peer_portfolio(
+        self,
+        *,
+        peer_name: str,
+        peer_portfolio_url: str,
+        role_match: str | None = None,
+        peer_profile_url: str | None = None,
+        key_strengths: list[str] | None = None,
+        how_to_emulate: list[str] | None = None,
+        source_url: str | None = None,
+        notes: str | None = None,
+    ) -> int:
+        """Upsert a peer reference keyed by ``peer_portfolio_url`` (Task 16 Part B).
+
+        `peer_portfolios` has no UNIQUE constraint on the URL today, so this does a
+        SELECT-then-UPDATE-or-INSERT instead of `ON CONFLICT`. Re-researching the same URL
+        (the brain refreshing `portfolio_research`) UPDATES the existing row — including
+        `reviewed_at` — instead of piling up duplicates. `peer_profile_url`/`notes` are only
+        overwritten when explicitly provided, so a manual note survives a brain refresh.
+        """
+        existing = self.conn.execute(
+            "SELECT id FROM peer_portfolios WHERE peer_portfolio_url=?", (peer_portfolio_url,)
+        ).fetchone()
+        if existing:
+            pid = int(existing["id"])
+            self.conn.execute(
+                """UPDATE peer_portfolios
+                   SET peer_name=?, role_match=?,
+                       peer_profile_url=COALESCE(?, peer_profile_url),
+                       key_strengths_json=?, how_to_emulate_json=?, source_url=?,
+                       notes=COALESCE(?, notes), reviewed_at=?
+                   WHERE id=?""",
+                (
+                    peer_name,
+                    role_match,
+                    peer_profile_url,
+                    json.dumps(key_strengths or []),
+                    json.dumps(how_to_emulate or []),
+                    source_url,
+                    notes,
+                    now_iso(),
+                    pid,
+                ),
+            )
+            self.conn.commit()
+            return pid
+        return self.add_peer_portfolio(
+            peer_name=peer_name,
+            role_match=role_match,
+            peer_profile_url=peer_profile_url,
+            peer_portfolio_url=peer_portfolio_url,
+            key_strengths=key_strengths,
+            how_to_emulate=how_to_emulate,
+            source_url=source_url,
+            notes=notes,
+        )
+
+    def last_peer_review(self) -> str | None:
+        """Most recent `reviewed_at` across all peer_portfolios, or `None` if empty."""
+        row = self.conn.execute("SELECT MAX(reviewed_at) AS m FROM peer_portfolios").fetchone()
+        return row["m"] if row and row["m"] else None
+
     def record_learning_feedback(
         self,
         learning_id: int,

@@ -183,6 +183,30 @@ def test_portfolio_generate_and_peers(atlas_app):
         assert peers and peers[0]["peer_name"] == "Grace"
 
 
+# ── Task 16/17: portfolio_research intent — living peer refs + freshness ─────────
+def test_portfolio_research_endpoint_includes_peers_and_last_reviewed_at(atlas_app):
+    with TestClient(atlas_app) as client:
+        research = client.get("/api/portfolio/research").json()
+        assert research["peers"] == []
+        assert research["last_reviewed_at"] is None
+
+        client.post(
+            "/api/peers", json={"peer_name": "Grace", "peer_portfolio_url": "https://grace.example"}
+        )
+        research = client.get("/api/portfolio/research").json()
+        assert any(p["peer_name"] == "Grace" for p in research["peers"])
+        assert research["last_reviewed_at"]
+
+
+def test_enqueue_portfolio_research_intent(atlas_app):
+    with TestClient(atlas_app) as client:
+        resp = client.post("/api/intents", json={"type": "portfolio_research"})
+        assert resp.status_code == 200, resp.text
+        iid = resp.json()["id"]
+        intents = client.get("/api/intents").json()["intents"]
+        assert any(i["id"] == iid and i["type"] == "portfolio_research" for i in intents)
+
+
 # ── P3-E: interview prep ─────────────────────────────────────────────────────────
 def test_interview_flow(atlas_app):
     with TestClient(atlas_app) as client:

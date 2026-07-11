@@ -29,6 +29,7 @@ INTENT_TYPES = (
     "cover_letter",
     "company_research",
     "contact_discovery",
+    "portfolio_research",
 )
 INTENT_STATUSES = ("pending", "running", "done", "error")
 
@@ -42,6 +43,7 @@ PROMPT_FILES = {
     "cover_letter": "cover_letter.md",
     "company_research": "company_research.md",
     "contact_discovery": "contact_discovery.md",
+    "portfolio_research": "portfolio_research.md",
 }
 
 _CONTEXT_BUILDERS: dict[str, Callable[[DB, dict], dict]] = {}
@@ -647,3 +649,64 @@ def _write_contact_discovery(db: DB, intent: dict, result: dict) -> str:
 
 _CONTEXT_BUILDERS["contact_discovery"] = _ctx_contact_discovery
 _RESULT_WRITERS["contact_discovery"] = _write_contact_discovery
+
+
+# ── portfolio_research (Task 16) ──────────────────────────────────────────────
+# The one-time curated seed pack (config/seeds/<domain>/portfolio_references.yaml) goes
+# stale — peers redesign their sites, new standouts appear. This intent asks the brain to
+# research CURRENT peer reference portfolios for the profile's domain/target role, keyed by
+# `peer_portfolio_url` so re-running it REFRESHES existing rows instead of duplicating them
+# (see DB.upsert_peer_portfolio, Task 16 Part B). The context builder hands the brain the
+# curated seed examples + whatever the brain (or the human, via the manual "add peer" form)
+# already discovered, so it extends/refreshes rather than re-proposing duplicates. The writer
+# only VALIDATES the brain's JSON (every portfolio needs peer_name + peer_portfolio_url) and
+# PERSISTS it — no LLM here ($0 invariant). Malformed → raises, leaving the intent `running`.
+def _ctx_portfolio_research(db: DB, intent: dict) -> dict:
+    import engine.paths as paths
+    from engine.config import load_criteria, load_master_cv
+    from engine.portfolio.peer_examples import load_references
+    from engine.profiles import domain_of
+
+    domain = domain_of(paths.PROFILE_ID)
+    cv = load_master_cv()
+    target_role = (cv.get("basics") or {}).get("label")
+    if not target_role:
+        criteria = load_criteria()
+        if criteria and criteria.roles:
+            target_role = " / ".join(r.strip().title() for r in criteria.roles[:3])
+    references = load_references(domain)
+    return {
+        "domain": domain,
+        "target_role": target_role,
+        "curated_references": references["examples"],
+        "existing_peers": db.list_peer_portfolios(),
+        "patterns": references["patterns"],
+    }
+
+
+def _write_portfolio_research(db: DB, intent: dict, result: dict) -> str:
+    portfolios = result.get("portfolios")
+    if not isinstance(portfolios, list) or not portfolios:
+        raise ValueError("result.portfolios must be a non-empty list")
+    for p in portfolios:
+        if not isinstance(p, dict) or not (p.get("peer_name") or "").strip():
+            raise ValueError("every portfolio needs a non-empty peer_name")
+        if not (p.get("peer_portfolio_url") or "").strip():
+            raise ValueError("every portfolio needs a non-empty peer_portfolio_url")
+        for key in ("key_strengths", "how_to_emulate"):
+            if p.get(key) is not None and not isinstance(p[key], list):
+                raise ValueError(f"{key} must be a list when present")
+    for p in portfolios:
+        db.upsert_peer_portfolio(
+            peer_name=p["peer_name"].strip(),
+            peer_portfolio_url=p["peer_portfolio_url"].strip(),
+            role_match=p.get("role_match"),
+            key_strengths=p.get("key_strengths") or [],
+            how_to_emulate=p.get("how_to_emulate") or [],
+            source_url=p.get("source_url"),
+        )
+    return f"peer_portfolios:{len(portfolios)}"
+
+
+_CONTEXT_BUILDERS["portfolio_research"] = _ctx_portfolio_research
+_RESULT_WRITERS["portfolio_research"] = _write_portfolio_research

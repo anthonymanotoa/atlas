@@ -182,6 +182,10 @@ export type PortfolioResearch = {
   examples: PeerExample[];
   patterns: Record<string, string[]>;
   prompt: string;
+  // Task 16/17: the LIVING peer set the `portfolio_research` intent keeps fresh, plus when it
+  // was last reviewed — so the UI can show a freshness date next to the curated (one-time) set.
+  peers: Peer[];
+  last_reviewed_at: string | null;
 };
 export type Peer = {
   id: number;
@@ -193,6 +197,7 @@ export type Peer = {
   how_to_emulate?: string[];
   source_url?: string;
   notes?: string;
+  reviewed_at?: string | null;
 };
 // F4 §7.1 intents queue — la web SOLO encola ($0); el brain drena la cola y ejecuta el LLM.
 // El status refleja el ciclo de vida server-side (pending → running → done|error).

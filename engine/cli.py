@@ -783,6 +783,52 @@ def portfolio_open() -> None:
     console.print(f"Abriendo {p['path_html']}")
 
 
+@portfolio_app.command("research")
+def portfolio_research(
+    enqueue: bool = typer.Option(
+        False, "--enqueue", help="Encola el intent portfolio_research (el brain investiga peers vivos)."
+    ),
+) -> None:
+    """Muestra las referencias curadas + los peers descubiertos (con fecha de research)."""
+    from engine import intents as eng_intents
+    from engine.portfolio.peer_examples import load_references
+    from engine.profiles import domain_of
+
+    if enqueue:
+        with _db() as db:
+            iid = eng_intents.enqueue(db, "portfolio_research", {})
+        console.print(
+            f"[green]✓[/] Intent {iid} encolado. El brain lo drena en el próximo `corre atlas`."
+        )
+        return
+
+    with _db() as db:
+        domain = domain_of(paths.PROFILE_ID)
+        references = load_references(domain)
+        peers = db.list_peer_portfolios()
+
+    console.print(f"[bold]Referencias curadas[/] ({domain})")
+    if not references["examples"]:
+        console.print("  (sin referencias curadas para este dominio)")
+    for ex in references["examples"]:
+        console.print(f"  • {ex.get('peer_name', '—')} — {ex.get('url', '—')}")
+
+    console.print("\n[bold]Peers descubiertos (research vivo)[/]")
+    if not peers:
+        console.print("  Ninguno todavía. Corre `atlas portfolio research --enqueue`.")
+        return
+    table = Table()
+    for col in ("peer_name", "role_match", "reviewed_at"):
+        table.add_column(col)
+    for p in peers:
+        table.add_row(
+            p.get("peer_name") or "—",
+            (p.get("role_match") or "—")[:40],
+            (p.get("reviewed_at") or "—")[:16],
+        )
+    console.print(table)
+
+
 # ── intents (F4) — la cola que el brain drena como paso 0 de "corre atlas" ─────
 intents_app = typer.Typer(help="Cola de intents (handoff web → brain). El brain la drena.")
 app.add_typer(intents_app, name="intents")

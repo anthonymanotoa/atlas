@@ -249,6 +249,10 @@ class ContactDiscoveryPayload(BaseModel):
     role_title: str | None = None
 
 
+class PortfolioResearchPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+
 PAYLOAD_MODELS: dict[str, type[BaseModel]] = {
     "cv_review": CvReviewPayload,
     "legitimacy_batch": LegitimacyBatchPayload,
@@ -258,6 +262,7 @@ PAYLOAD_MODELS: dict[str, type[BaseModel]] = {
     "cover_letter": CoverLetterPayload,
     "company_research": CompanyResearchPayload,
     "contact_discovery": ContactDiscoveryPayload,
+    "portfolio_research": PortfolioResearchPayload,
 }
 _JOB_SCOPED_INTENTS = frozenset(
     {"cv_review", "cover_letter", "company_research", "contact_discovery"}
@@ -1331,12 +1336,12 @@ def api_portfolio_preview(portfolio_id: int, db: DB = Depends(get_db)):
 
 
 @app.get("/api/portfolio/research")
-def api_portfolio_research(
-    _: DB = Depends(get_db),
-):  # unused DB; holds _DB_LOCK so a profile switch can't flip paths mid-read
+def api_portfolio_research(db: DB = Depends(get_db)):
     """Curated, verified reference portfolios + the patterns behind them + a detailed,
-    personalized LLM prompt (built from the user's CV) to commission their own portfolio.
-    Everything the user needs to review the examples and brief an LLM, in one place."""
+    personalized LLM prompt (built from the user's CV) to commission their own portfolio —
+    plus the LIVING peer set the `portfolio_research` intent keeps fresh (Task 16/17): every
+    peer discovered so far and when it was last reviewed, so the UI can show a freshness date
+    and a "refresh" CTA instead of the curated set going stale silently."""
     from engine.config import load_criteria, load_cv_layout, load_master_cv, load_ontology
     from engine.portfolio.peer_examples import load_references
     from engine.portfolio.prompt import build_portfolio_prompt
@@ -1352,6 +1357,8 @@ def api_portfolio_research(
             criteria=load_criteria(),
             ontology=load_ontology(),
         ),
+        "peers": db.list_peer_portfolios(),
+        "last_reviewed_at": db.last_peer_review(),
     }
 
 
