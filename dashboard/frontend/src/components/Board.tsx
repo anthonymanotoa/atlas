@@ -10,7 +10,7 @@ import {
 import { MapPin, Users, X } from "lucide-react";
 import type { Job } from "../api";
 import { COLUMN_ES, ageLabel, cn, fitTone, freshLabel, langLabel, salaryLabel } from "../lib";
-import { GeoBadge, LegitimacyBadge, RepostBadge } from "./JobBadges";
+import { GeoBadge, LegitimacyBadge, RepostBadge, VariantBadge } from "./JobBadges";
 import { Badge } from "./ui/badge";
 import { KnockoutIcon, MatchIcon, SalaryIcon } from "./ui/icons";
 import { ScoreRing } from "./ui/score-ring";
@@ -71,8 +71,9 @@ function JobCard({
       )}
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <div className="line-clamp-2 pr-6 text-[0.9rem] leading-snug font-medium">
-            {job.title}
+          <div className="flex items-start gap-1.5 pr-6">
+            <div className="line-clamp-2 text-[0.9rem] leading-snug font-medium">{job.title}</div>
+            <VariantBadge job={job} />
           </div>
           <div className="mt-1 flex items-center gap-1.5 text-[0.8rem] text-muted-foreground">
             <span className="grid size-4 shrink-0 place-items-center rounded bg-secondary text-[0.6rem] font-semibold text-foreground">

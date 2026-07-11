@@ -298,7 +298,15 @@ def api_jobs(
 
 @app.get("/api/board")
 def api_board(db: DB = Depends(get_db)):
-    """Jobs grouped by the columns shown on the kanban board, plus the dismissed bin."""
+    """Jobs grouped by the columns shown on the kanban board, plus the dismissed bin.
+
+    The "shortlisted" column collapses near-identical reposts of the same role (Task 9 —
+    5 near-duplicate "CVS Health" postings reaching the top of the shortlist) via
+    `collapse_variants`; every OTHER column is left untouched because each row there is a
+    distinct application the user actually took action on.
+    """
+    from engine.scoring.dedupe import collapse_variants
+
     columns = ["shortlisted", "tailored", "ready", "applied", "responded", "interview", "offer"]
     # one query; preserves fit_score/discovered_at ordering. "dismissed" is fetched too but
     # kept out of `jobs` so it never shows on the board / in the command palette.
@@ -311,6 +319,7 @@ def api_board(db: DB = Depends(get_db)):
             dismissed.append(annotated)
         else:
             grouped[j["state"]].append(annotated)
+    grouped["shortlisted"] = collapse_variants(grouped["shortlisted"])
     return {"columns": columns, "jobs": grouped, "dismissed": dismissed}
 
 

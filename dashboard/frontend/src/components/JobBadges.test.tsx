@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import type { Job } from "../api";
-import { GeoBadge, LegitimacyBadge, RepostBadge } from "./JobBadges";
+import { GeoBadge, LegitimacyBadge, RepostBadge, VariantBadge } from "./JobBadges";
 
 const base: Job = { id: "j1", title: "DE", company: "Acme", state: "shortlisted" };
 
@@ -43,6 +43,24 @@ describe("RepostBadge", () => {
       <>
         <RepostBadge job={{ ...base, repost_count: 0 }} />
         <RepostBadge job={base} />
+      </>,
+    );
+    expect(container).toBeEmptyDOMElement();
+  });
+});
+
+describe("VariantBadge", () => {
+  it("shows the ×N pill when variant_count > 1", () => {
+    render(<VariantBadge job={{ ...base, variant_count: 5 }} />);
+    expect(screen.getByText("×5")).toBeInTheDocument();
+    expect(screen.getByTitle(/5 publicaciones/)).toBeInTheDocument();
+  });
+
+  it("renders nothing at variant_count 1 or undefined", () => {
+    const { container } = render(
+      <>
+        <VariantBadge job={{ ...base, variant_count: 1 }} />
+        <VariantBadge job={base} />
       </>,
     );
     expect(container).toBeEmptyDOMElement();

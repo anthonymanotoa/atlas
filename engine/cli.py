@@ -188,20 +188,43 @@ def score(
 def top(
     n: int = typer.Option(15, help="How many to show."),
     state: str = typer.Option("shortlisted", help="Pipeline state to list."),
+    show_all: bool = typer.Option(
+        False,
+        "--all",
+        "-a",
+        help="Show every posting, including near-identical reposts (skip variant collapsing).",
+    ),
 ) -> None:
-    """List the highest-fit jobs in a given state."""
+    """List the highest-fit jobs in a given state.
+
+    By default, near-identical reposts of the same role (same company + core title — the
+    5-CVS-Health-postings problem) collapse into a single row tagged '×N'; pass --all to see
+    every variant.
+    """
     with _db() as db:
-        jobs = db.list_jobs(state=state, limit=n)
-    table = Table(title=f"Top {state}")
+        if show_all:
+            jobs = db.list_jobs(state=state, limit=n)
+        else:
+            from engine.scoring.dedupe import collapse_variants
+
+            # Collapse needs the full pool BEFORE truncating to n, else a repost cluster could
+            # eat all n slots and hide other jobs that would otherwise make the cut.
+            pool = db.list_jobs(state=state)
+            jobs = collapse_variants(pool)[:n]
+    table = Table(title=f"Top {state}" + ("" if show_all else "  (variantes colapsadas)"))
     for col in ("fit", "match", "title", "company", "remote", "id"):
         table.add_column(col)
     for j in jobs:
         rem = {1: "✓", 0: "✗"}.get(j["is_remote"], "?")
         match = j.get("match_score")
+        title = (j["title"] or "")[:42]
+        variant_count = j.get("variant_count") or 1
+        if variant_count > 1:
+            title = f"{title} [dim]×{variant_count}[/]"
         table.add_row(
             str(j.get("fit_score")),
             f"{match}%" if match is not None else "—",
-            (j["title"] or "")[:42],
+            title,
             (j["company"] or "")[:22],
             rem,
             j["id"],

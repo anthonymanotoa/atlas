@@ -540,3 +540,50 @@ def test_system_health_reports_unconfigured_adzuna(atlas_app):
     (adzuna,) = [s for s in sources if s["source"] == "adzuna"]
     assert adzuna["state"] == "unconfigured"
     assert "ADZUNA_APP_ID" in adzuna["hint"]
+
+
+# ── Task 9: /api/board collapses near-identical shortlist reposts ─────────────
+def test_board_collapses_same_company_core_title_shortlisted_jobs(atlas_app):
+    """3 near-identical postings (same company + core title, different seniority/modality
+    wording) shortlisted separately collapse to ONE board row with variant_count == 3."""
+    from engine.db.models import DB
+    from engine.normalize import Job
+
+    with DB() as db:
+        for title, fit in [
+            ("Data Analyst", 88),
+            ("Data Analyst II", 90),
+            ("Senior Data Analyst", 92),
+        ]:
+            job = Job(
+                source="greenhouse", title=title, company="CVS Health", location="Remote"
+            ).finalize()
+            db.upsert_job(job)
+            db.set_fit(job.id, fit, [], [])
+            db.set_state(job.id, "shortlisted", {"via": "test"})
+    with TestClient(atlas_app) as client:
+        board = client.get("/api/board").json()
+    shortlisted = board["jobs"]["shortlisted"]
+    assert len(shortlisted) == 1
+    assert shortlisted[0]["variant_count"] == 3
+    assert shortlisted[0]["fit_score"] == 92  # canonical = highest fit
+    assert len(shortlisted[0]["variant_ids"]) == 3
+
+
+def test_board_does_not_collapse_applied_column(atlas_app):
+    """Applied/etc. are distinct real applications — never collapsed, unlike shortlisted."""
+    from engine.db.models import DB
+    from engine.normalize import Job
+
+    with DB() as db:
+        for title in ("Data Analyst", "Data Analyst II"):
+            job = Job(
+                source="greenhouse", title=title, company="CVS Health", location="Remote"
+            ).finalize()
+            db.upsert_job(job)
+            db.set_state(job.id, "applied", {"via": "test"})
+    with TestClient(atlas_app) as client:
+        board = client.get("/api/board").json()
+    assert len(board["jobs"]["applied"]) == 2
+    for j in board["jobs"]["applied"]:
+        assert "variant_count" not in j

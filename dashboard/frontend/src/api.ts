@@ -39,6 +39,10 @@ export type Job = {
   // F4 Block G posting-legitimacy (ghost-job triage; orthogonal to fit/match). NULL = sin evaluar.
   legitimacy_tier?: "high" | "medium" | "low" | null;
   legitimacy_notes?: string | null; // señales observadas, nunca acusaciones
+  // Task 9: shortlist variant collapse (near-identical reposts of the same role). Only present
+  // on the "shortlisted" board column — other columns are distinct applications, never collapsed.
+  variant_count?: number; // >=1; >1 means N postings collapsed into this canonical row
+  variant_ids?: string[]; // all job ids in the group, canonical first
 };
 
 export type Action = {
