@@ -13,11 +13,12 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable
+from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
 
 from engine.db.models import DB
-from engine.normalize import now_iso
+from engine.normalize import now_iso, parse_dt_utc
 
 INTENT_TYPES = (
     "cv_review",
@@ -62,6 +63,10 @@ def _row_to_dict(row) -> dict:
         d["payload"] = json.loads(d.get("payload") or "{}")
     except (json.JSONDecodeError, TypeError):
         d["payload"] = {}
+    created = parse_dt_utc(d.get("created_at"))
+    age_hours = round((datetime.now(UTC) - created).total_seconds() / 3600, 1) if created else None
+    d["age_hours"] = age_hours
+    d["is_stale"] = d.get("status") == "pending" and age_hours is not None and age_hours > 48.0
     return d
 
 
@@ -123,6 +128,23 @@ def mark_error(db: DB, intent_id: str, error: str) -> None:
         (str(error)[:500], now_iso(), intent_id),
     )
     db.conn.commit()
+
+
+def stale_intents(db: DB, max_age_hours: float = 48.0) -> list[dict]:
+    """Pending intents older than `max_age_hours` — atascados en la cola."""
+    return [
+        i
+        for i in list_intents(db, status="pending", limit=10000)
+        if i["age_hours"] is not None and i["age_hours"] > max_age_hours
+    ]
+
+
+def requeue(db: DB, intent_id: str) -> dict:
+    """Re-enqueue a stuck `error`/`running` intent as `pending`, clearing its error."""
+    _require(db, intent_id, ("error", "running"))
+    db.conn.execute("UPDATE intents SET status='pending', error=NULL WHERE id=?", (intent_id,))
+    db.conn.commit()
+    return get_intent(db, intent_id)
 
 
 # ── contexto determinista por intent (lo consume el brain vía `atlas intents context`) ──

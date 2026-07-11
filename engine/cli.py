@@ -444,10 +444,13 @@ def advise(json_out: bool = typer.Option(False, "--json", help="Emit findings as
 @app.command()
 def status() -> None:
     """Show pipeline counts and the latest health of each source."""
+    from engine import intents as eng_intents
+
     with _db() as db:
         counts = db.counts_by_state()
         health = db.latest_source_health()
         last_run = db.meta_get("last_run")
+        stale = eng_intents.stale_intents(db)
     console.print(f"[bold]Pipeline[/] (last run: {last_run or 'never'})")
     for state, n in counts.items():
         console.print(f"  {state:<12} {n}")
@@ -464,6 +467,8 @@ def status() -> None:
                 (h["error"] or "")[:40],
             )
         console.print(table)
+    if stale:
+        console.print(f"[yellow]⚠ {len(stale)} intent(s) atascados >48h[/]")
 
 
 @app.command(name="export")
@@ -727,14 +732,19 @@ def intents_list(
         print(_json.dumps(rows, indent=2, ensure_ascii=False))
         return
     table = Table(title=f"Intents ({status})")
-    for col in ("id", "type", "job", "status", "created", "result/error"):
+    for col in ("id", "type", "job", "status", "edad", "created", "result/error"):
         table.add_column(col)
     for r in rows:
+        age = r.get("age_hours")
+        edad = f"{age}h" if age is not None else "—"
+        if r.get("is_stale"):
+            edad = f"[red]{edad}[/]"
         table.add_row(
             r["id"],
             r["type"],
             (r.get("job_id") or "—")[:18],
             r["status"],
+            edad,
             (r.get("created_at") or "")[:16],
             (r.get("result_ref") or r.get("error") or "")[:30],
         )
@@ -822,6 +832,20 @@ def intents_fail(
             console.print(f"[red]✗[/] {e}")
             raise typer.Exit(2) from None
     console.print(f"[yellow]![/] {intent_id} → error registrado")
+
+
+@intents_app.command("requeue")
+def intents_requeue(intent_id: str) -> None:
+    """Re-enqueue a stuck (error/running) intent as pending — desatasca la cola."""
+    from engine import intents as eng_intents
+
+    with _db() as db:
+        try:
+            eng_intents.requeue(db, intent_id)
+        except ValueError as e:
+            console.print(f"[red]✗[/] {e}")
+            raise typer.Exit(1) from None
+    console.print(f"[green]✓[/] {intent_id} → pending (requeued)")
 
 
 # ── cv — utilidades de CV para el brain ────────────────────────────────────────
