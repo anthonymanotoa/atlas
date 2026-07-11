@@ -16,29 +16,37 @@
 # The starter rows below are real public boards used to validate the pipeline.
 # Replace them with your own targets — `atlas discover` logs per-source health so
 # any stale token surfaces immediately.
+#
+# demo: true — these rows are pipeline-validation boards, not real targets. `discover`
+# excludes them from every real profile run unless sources.yaml sets `include_demo: true`.
 
 companies:
   - company: Lever (demo board)
     ats: lever
     token: leverdemo
     careers_url: https://jobs.lever.co/leverdemo
+    demo: true
 
   - company: Ashby
     ats: ashby
     token: Ashby
     careers_url: https://jobs.ashbyhq.com/Ashby
+    demo: true
 
   - company: Ramp
     ats: ashby
     token: Ramp
     careers_url: https://jobs.ashbyhq.com/Ramp
+    demo: true
 
   - company: Airbnb
     ats: greenhouse
     token: airbnb
     careers_url: https://boards.greenhouse.io/airbnb
+    demo: true
 
   - company: GitLab
     ats: greenhouse
     token: gitlab
     careers_url: https://boards.greenhouse.io/gitlab
+    demo: true

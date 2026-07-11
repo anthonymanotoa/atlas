@@ -27,6 +27,17 @@ ATS_DISPATCH: dict[str, Callable] = {
 }
 
 
+def partition_demo(
+    companies: list[CompanyTarget], include_demo: bool
+) -> tuple[list[CompanyTarget], list[str]]:
+    """Split into (active, skipped_names). Demo companies are dropped unless include_demo."""
+    if include_demo:
+        return list(companies), []
+    active = [c for c in companies if not getattr(c, "demo", False)]
+    skipped = [c.company for c in companies if getattr(c, "demo", False)]
+    return active, skipped
+
+
 def discover(
     db: DB,
     *,
@@ -37,12 +48,21 @@ def discover(
 ) -> dict:
     cfg = sources_cfg or load_sources()
     companies = companies if companies is not None else load_companies()
+    include_demo = bool(cfg.get("include_demo"))
+    companies, skipped_demo = partition_demo(companies, include_demo)
     terms = terms or cfg.get("search_terms", [])
     limits = cfg.get("limits", {})
     cap = int(limits.get("max_jobs_per_run", 400))
     client = make_client(timeout=float(limits.get("per_source_timeout_s", 45)))
 
-    summary: dict = {"sources": {}, "new": 0, "seen": 0, "fetched": 0, "errors": []}
+    summary: dict = {
+        "sources": {},
+        "new": 0,
+        "seen": 0,
+        "fetched": 0,
+        "errors": [],
+        "skipped_demo": skipped_demo,
+    }
     stored_total = 0
 
     def store(label: str, fetch_fn: Callable[[], list[Job]]) -> None:

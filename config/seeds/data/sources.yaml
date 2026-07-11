@@ -13,6 +13,10 @@ search_terms:
 ats:
   enabled: true
 
+# Rows tagged `demo: true` in companies.example.yaml (pipeline-validation boards, not real
+# targets) are skipped by default. Set to true only to sanity-check the ATS plumbing itself.
+include_demo: false
+
 # JobSpy aggregator. Indeed is rock-solid (no rate limit); LinkedIn is guest/no-login
 # (account-safe, IP-throttle only) and hard-capped. Google/ZipRecruiter omitted (broken).
 jobspy:
