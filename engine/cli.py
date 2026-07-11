@@ -367,6 +367,9 @@ def brain(
     json_out: bool = typer.Option(
         False, "--json", help="Emit the run summary as JSON (for the orchestrator)."
     ),
+    dry_run: bool = typer.Option(
+        False, "--dry-run", help="Preview the pipeline without any writes."
+    ),
 ) -> None:
     """Run the full daily pipeline: discover → score → prepare → brief. Sends nothing."""
     import sys
@@ -386,11 +389,21 @@ def brain(
     from brain.run_brain import run
 
     with _db() as db:
-        s = run(db, limit=limit, language=language, do_discover=discover)
+        s = run(db, limit=limit, language=language, do_discover=discover, dry_run=dry_run)
     if json_out:
         import json as _json
 
         print(_json.dumps(s, indent=2, ensure_ascii=False))
+        return
+    if dry_run:
+        console.print(
+            f"[bold cyan]DRY RUN[/] — would discover: {s['would_discover']}, "
+            f"would score: {s['would_score']}, would prep: {len(s['would_prep'])} job(s), "
+            f"pending intents: {s['pending_intents']}"
+        )
+        for j in s["would_prep"]:
+            tag = "already prepared" if j["already_prepared"] else "pending"
+            console.print(f"  - {j['title']} @ {j['company']} ({tag})")
         return
     console.print(
         f"[bold green]Brain done[/] — new {s['discover'].get('new', 0)}, "

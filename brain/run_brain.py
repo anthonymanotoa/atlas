@@ -33,7 +33,42 @@ from engine.referrals.connections import match_referrals
 from engine.scoring.run import score_jobs
 
 
-def run(db: DB, *, limit: int = 8, language: str = "en", do_discover: bool = True) -> dict:
+def _dry_run_summary(db: DB, *, limit: int, do_discover: bool) -> dict:
+    """Read-only preview of what a real `run()` would do — zero writes.
+
+    Reuses the same selectors the real run does (counts_by_state for what discovery
+    would hand to the scorer, list_jobs(state="shortlisted") for what prepare would
+    pick up), so this never drifts from reality without both being updated together.
+    """
+    would_prep = [
+        {
+            "id": j["id"],
+            "title": j["title"],
+            "company": j["company"],
+            "already_prepared": bool(db.cv_versions_for(j["id"])),
+        }
+        for j in db.list_jobs(state="shortlisted", limit=limit)
+    ]
+    return {
+        "dry_run": True,
+        "would_discover": do_discover,
+        "would_score": db.counts_by_state().get("discovered", 0),
+        "would_prep": would_prep,
+        "pending_intents": len(intent_queue.list_pending(db)),
+    }
+
+
+def run(
+    db: DB,
+    *,
+    limit: int = 8,
+    language: str = "en",
+    do_discover: bool = True,
+    dry_run: bool = False,
+) -> dict:
+    if dry_run:
+        return _dry_run_summary(db, limit=limit, do_discover=do_discover)
+
     summary: dict = {
         "discover": {},
         "scored": 0,
@@ -195,11 +230,28 @@ def main() -> None:
         "--no-discover", action="store_true", help="Skip discovery (score/prepare only)."
     )
     ap.add_argument("--json", action="store_true", help="Print the summary as JSON.")
+    ap.add_argument(
+        "--dry-run", action="store_true", help="Preview the pipeline without any writes."
+    )
     args = ap.parse_args()
     with DB() as db:
         summary = run(
-            db, limit=args.limit, language=args.language, do_discover=not args.no_discover
+            db,
+            limit=args.limit,
+            language=args.language,
+            do_discover=not args.no_discover,
+            dry_run=args.dry_run,
         )
+    if args.dry_run:
+        print(
+            json.dumps(summary, indent=2)
+            if args.json
+            else f"DRY RUN — would discover: {summary['would_discover']}, "
+            f"would score: {summary['would_score']}, "
+            f"would prep: {len(summary['would_prep'])} job(s), "
+            f"pending intents: {summary['pending_intents']}"
+        )
+        return
     print(
         json.dumps(summary, indent=2)
         if args.json
