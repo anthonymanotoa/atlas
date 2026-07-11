@@ -40,6 +40,11 @@ def promote_draft(profile_root: Path) -> Path:
         raise PromoteError("El draft no tiene experiencia (experience) — mapéala primero.")
     ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     if master_path.exists():
-        master_path.rename(prof / f"master_cv.backup-{ts}.yaml")
+        backup_path = prof / f"master_cv.backup-{ts}.yaml"
+        suffix = 2
+        while backup_path.exists():
+            backup_path = prof / f"master_cv.backup-{ts}-{suffix}.yaml"
+            suffix += 1
+        master_path.rename(backup_path)
     master_path.write_text(yaml.safe_dump(draft, sort_keys=False, allow_unicode=True))
     return master_path

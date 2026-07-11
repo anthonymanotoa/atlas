@@ -48,3 +48,41 @@ def test_promote_requires_draft(tmp_path):
     root = _profile(tmp_path, None)
     with pytest.raises(PromoteError, match="draft"):
         promote_draft(root)
+
+
+def test_promote_twice_keeps_both_backups(tmp_path, monkeypatch):
+    """Two promotions in the same UTC second must not clobber the first backup."""
+    root = _profile(tmp_path, REAL)
+
+    # Freeze "now" so both promote_draft calls compute the same timestamp,
+    # simulating two promotions within the same UTC second.
+    import engine.cv.promote as promote_mod
+
+    frozen = promote_mod.datetime(2026, 1, 1, 12, 0, 0, tzinfo=promote_mod.timezone.utc)
+
+    class _FrozenDatetime(promote_mod.datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return frozen
+
+    monkeypatch.setattr(promote_mod, "datetime", _FrozenDatetime)
+
+    # First promotion: backs up the seeded master_cv.yaml.
+    promote_draft(root)
+
+    # Restore a draft for the second promotion (promote_draft consumes nothing,
+    # but master_cv.yaml now holds the first draft's content — write a fresh draft
+    # so the second promotion has something new to promote).
+    draft2 = dict(REAL) | {"basics": dict(REAL["basics"]) | {"name": "John Doe"}}
+    (root / "profile" / "master_cv.draft.yaml").write_text(yaml.safe_dump(draft2))
+
+    promote_draft(root)
+
+    backups = sorted((root / "profile").glob("master_cv.backup-*.yaml"))
+    assert len(backups) == 2, f"expected 2 distinct backups, found {len(backups)}: {backups}"
+
+    names = sorted(yaml.safe_load(b.read_text())["basics"]["name"] for b in backups)
+    assert names == ["Ada Lovelace", "Jane Roe"], (
+        "one of the two backups was clobbered by the other promotion; "
+        f"got {names}"
+    )

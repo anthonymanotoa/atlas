@@ -838,9 +838,9 @@ def cv_promote() -> None:
     try:
         out = promote_draft(paths.PROFILE_ROOT)
     except PromoteError as e:
-        console.print(f"[red]✗ {e}[/red]")
+        console.print(f"[red]✗[/] {e}")
         raise typer.Exit(1) from None
-    console.print(f"[green]✓ Master CV promovido:[/green] {out}")
+    console.print(f"[green]✓[/] Master CV promovido: {out}")
 
 
 if __name__ == "__main__":
