@@ -136,9 +136,15 @@ def discover(
     if want("himalayas") and cfg.get("himalayas", {}).get("enabled", True):
         store("himalayas", lambda: himalayas.fetch(cfg["himalayas"], terms, client))
 
-    # 4. Adzuna (free, optional keys; skips silently if unconfigured).
+    # 4. Adzuna (free, optional keys; reports "unconfigured" instead of a silent
+    # empty fetch when ADZUNA_APP_ID/ADZUNA_APP_KEY are missing — see health.py).
     if want("adzuna") and cfg.get("adzuna", {}).get("enabled", True):
-        store("adzuna", lambda: adzuna.fetch(cfg["adzuna"], terms, client))
+        if not adzuna.configured():
+            db.log_source_health(
+                "adzuna", False, 0, "unconfigured: missing ADZUNA_APP_ID/ADZUNA_APP_KEY", 0
+            )
+        else:
+            store("adzuna", lambda: adzuna.fetch(cfg["adzuna"], terms, client))
 
     # F2 hygiene (opt-in via sources.yaml): expire dead postings at the end of a discover.
     # Off by default — it adds N paced HTTP calls per run; always available on demand from

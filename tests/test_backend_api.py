@@ -525,3 +525,18 @@ def test_overview_cv_template_findings_nonempty_for_template_cv(atlas_app):
     findings = overview["cv_template_findings"]
     assert findings, "expected non-empty findings for the template master CV"
     assert any("Ada Lovelace" in f for f in findings)
+
+
+# ── Task 8: honest source-health states surfaced via /api/system/health ───────
+def test_system_health_reports_unconfigured_adzuna(atlas_app):
+    from engine.db.models import DB
+
+    with DB() as db:
+        db.log_source_health(
+            "adzuna", False, 0, "unconfigured: missing ADZUNA_APP_ID/ADZUNA_APP_KEY", 0
+        )
+    with TestClient(atlas_app) as client:
+        sources = client.get("/api/system/health").json()["sources"]
+    (adzuna,) = [s for s in sources if s["source"] == "adzuna"]
+    assert adzuna["state"] == "unconfigured"
+    assert "ADZUNA_APP_ID" in adzuna["hint"]

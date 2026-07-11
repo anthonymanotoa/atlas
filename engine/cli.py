@@ -441,14 +441,24 @@ def advise(json_out: bool = typer.Option(False, "--json", help="Emit findings as
     )
 
 
+_STATE_STYLE = {
+    "ok": "[green]{}[/]",
+    "ok_empty": "[yellow]{}[/]",
+    "unconfigured": "[dim]{}[/]",
+    "error": "[red]{}[/]",
+}
+
+
 @app.command()
 def status() -> None:
     """Show pipeline counts and the latest health of each source."""
     from engine import intents as eng_intents
+    from engine.discovery.health import classify_sources
 
     with _db() as db:
         counts = db.counts_by_state()
         health = db.latest_source_health()
+        classified = {c["source"]: c for c in classify_sources(db)}
         last_run = db.meta_get("last_run")
         stale = eng_intents.stale_intents(db)
     console.print(f"[bold]Pipeline[/] (last run: {last_run or 'never'})")
@@ -456,15 +466,19 @@ def status() -> None:
         console.print(f"  {state:<12} {n}")
     if health:
         table = Table(title="Source health")
-        for col in ("source", "ok", "count", "when", "error"):
+        for col in ("source", "ok", "count", "when", "state", "hint/error"):
             table.add_column(col)
         for h in health:
+            c = classified.get(h["source"], {})
+            state_label = _STATE_STYLE.get(c.get("state"), "{}").format(c.get("state", ""))
+            hint = c.get("hint") or (h["error"] or "")[:40]
             table.add_row(
                 h["source"],
                 "✓" if h["ok"] else "[red]✗[/]",
                 str(h["count"]),
                 (h["run_at"] or "")[:19],
-                (h["error"] or "")[:40],
+                state_label,
+                hint[:60],
             )
         console.print(table)
     if stale:

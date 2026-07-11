@@ -1109,8 +1109,11 @@ async def api_import_connections(file: UploadFile, db: DB = Depends(get_db)):
 @app.get("/api/system/health")
 def api_system_health(db: DB = Depends(get_db)):
     """Consolida `atlas status` (counts, source health, last run) + `atlas doctor` (safeguards $0)."""
+    from engine.discovery.health import classify_sources
+
     counts = db.counts_by_state()
     health = db.latest_source_health()
+    classified = {c["source"]: c for c in classify_sources(db)}
     api_key = os.environ.get("ANTHROPIC_API_KEY")
     base_url = os.environ.get("ANTHROPIC_BASE_URL")
     default_base = base_url in (None, "", "https://api.anthropic.com", "https://api.anthropic.com/")
@@ -1132,6 +1135,8 @@ def api_system_health(db: DB = Depends(get_db)):
                 "count": h["count"],
                 "run_at": h.get("run_at"),
                 "error": h.get("error"),
+                "state": classified.get(h["source"], {}).get("state", "ok" if h["ok"] else "error"),
+                "hint": classified.get(h["source"], {}).get("hint", ""),
             }
             for h in health
         ],
