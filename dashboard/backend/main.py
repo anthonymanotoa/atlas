@@ -21,6 +21,8 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 import engine.paths as paths
 from engine import analytics, intents, profiles
+from engine.config import load_master_cv
+from engine.cv.placeholder import find_placeholders
 from engine.db.models import DB
 from engine.discovery import reverse
 from engine.discovery.registry import resolve_ats
@@ -249,10 +251,22 @@ PAYLOAD_MODELS: dict[str, type[BaseModel]] = {
 _JOB_SCOPED_INTENTS = frozenset({"cv_review", "cover_letter"})
 
 
+def _cv_template_findings() -> list[str]:
+    """Placeholder findings on the master CV (empty once it's the user's real CV)."""
+    try:
+        return find_placeholders(load_master_cv())
+    except Exception:
+        return []
+
+
 # ── API ──────────────────────────────────────────────────────────────────────
 @app.get("/api/overview")
 def api_overview(db: DB = Depends(get_db)):
-    return {"overview": analytics.overview(db), "needs_action": analytics.needs_action(db)}
+    overview = analytics.overview(db)
+    # cv_template_findings lands inside `overview` (not as a sibling key) — the frontend's
+    # `Overview` type / `ov` binding reads fields off this nested object, same as downtime_hours.
+    overview["cv_template_findings"] = _cv_template_findings()
+    return {"overview": overview, "needs_action": analytics.needs_action(db)}
 
 
 @app.get("/api/jobs")

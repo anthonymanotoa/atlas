@@ -507,3 +507,21 @@ def test_upskill_latest_returns_persisted_report(atlas_app):
 def test_upskill_report_unknown_id_is_404(atlas_app):
     with TestClient(atlas_app) as client:
         assert client.get("/api/upskill/999999").status_code == 404
+
+
+# ── Task 3: cv_template_findings banner field ─────────────────────────────────
+def test_overview_includes_cv_template_findings_list(atlas_app):
+    """/api/overview always exposes cv_template_findings as a list (never missing/None)."""
+    with TestClient(atlas_app) as client:
+        overview = client.get("/api/overview").json()["overview"]
+    assert isinstance(overview["cv_template_findings"], list)
+
+
+def test_overview_cv_template_findings_nonempty_for_template_cv(atlas_app):
+    """The atlas_app fixture's master CV falls back to the committed Ada Lovelace
+    template (profile/master_cv.example.yaml), so find_placeholders should flag it."""
+    with TestClient(atlas_app) as client:
+        overview = client.get("/api/overview").json()["overview"]
+    findings = overview["cv_template_findings"]
+    assert findings, "expected non-empty findings for the template master CV"
+    assert any("Ada Lovelace" in f for f in findings)

@@ -64,6 +64,7 @@ export type Overview = {
   last_success?: string;
   downtime_hours?: number | null;
   source_health: { source: string; ok: number; count: number; error?: string }[];
+  cv_template_findings?: string[];
 };
 
 export type Message = {

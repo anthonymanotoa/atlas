@@ -9,7 +9,7 @@ import { IntentConfirmDialog } from "../components/IntentConfirmDialog";
 import { NeedsAction } from "../components/NeedsAction";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
-import { DowntimeIcon } from "../components/ui/icons";
+import { CvTemplateIcon, DowntimeIcon } from "../components/ui/icons";
 import { ErrorState, LoadingState } from "../components/ui/states";
 import { useBoard, useSetJobState } from "../hooks/useBoard";
 import { useOverview } from "../hooks/useOverview";
@@ -83,6 +83,14 @@ export function PipelinePage() {
 
   return (
     <>
+      {ov?.cv_template_findings && ov.cv_template_findings.length > 0 ? (
+        <Card className="mb-4 flex items-center gap-2 border-destructive/50 bg-destructive/10 p-3 text-sm">
+          <CvTemplateIcon className="size-4 shrink-0 text-destructive" />
+          Tu CV master es la plantilla — nada de lo generado es enviable. Completa tu CV real y
+          corre <code className="font-mono">atlas cv promote</code>.
+        </Card>
+      ) : null}
+
       {ov?.downtime_hours ? (
         <Card className="mb-4 flex items-center gap-2 border-warning/50 p-3 text-sm">
           <DowntimeIcon className="size-4 shrink-0 text-warning" />
