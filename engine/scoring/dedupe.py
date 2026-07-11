@@ -34,16 +34,25 @@ def collapse_variants(jobs: list[dict]) -> list[dict]:
     Each returned job gets variant_count: int (>=1) and variant_ids: list[str] (all ids in
     the group incl. canonical, canonical first). Order of groups preserves the input order
     of their canonical job."""
-    groups: dict[tuple[str, str], list[dict]] = {}
-    order: list[tuple[str, str]] = []
+    index_of: dict[int, int] = {id(job): i for i, job in enumerate(jobs)}
+
+    groups: dict[tuple[str, str] | int, list[dict]] = {}
+    order: list[tuple[str, str] | int] = []
     for job in jobs:
-        key = (norm_company(job.get("company")), core_title(job.get("title") or ""))
+        core = core_title(job.get("title") or "")
+        if core:
+            key: tuple[str, str] | int = (norm_company(job.get("company")), core)
+        else:
+            # A title made only of stripped tokens (e.g. "Senior", "Remote") has no role
+            # identity — mirrors the `if key[1]:` guard in sweep_reposts (engine/reposts.py).
+            # Force it into its own singleton group instead of merging on the empty core.
+            key = id(job)
         if key not in groups:
             groups[key] = []
             order.append(key)
         groups[key].append(job)
 
-    out: list[dict] = []
+    built: list[tuple[int, dict]] = []
     for key in order:
         members = groups[key]
         # Highest fit wins; ties broken by most recent discovered_at.
@@ -54,5 +63,9 @@ def collapse_variants(jobs: list[dict]) -> list[dict]:
         result = dict(canonical)
         result["variant_count"] = len(members)
         result["variant_ids"] = variant_ids
-        out.append(result)
-    return out
+        built.append((index_of[id(canonical)], result))
+
+    # Group order preserves the input order of their canonical job, not the group's
+    # first-encountered member (those can differ when the canonical isn't first-appearing).
+    built.sort(key=lambda pair: pair[0])
+    return [result for _, result in built]

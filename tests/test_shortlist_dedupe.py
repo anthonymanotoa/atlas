@@ -88,15 +88,19 @@ def test_does_not_mutate_input():
 
 
 def test_group_order_follows_input_order_of_canonical():
-    # "Acme" group's canonical (b, fit 99) appears AFTER "Zed" in input order, but "Zed"'s
-    # canonical comes first in the input overall, so Zed's group stays first in the output.
+    # A group's FIRST-APPEARING member is not always its canonical. "Acme" is first-seen at
+    # index 0 (a1) but its canonical is a2 (index 2, higher fit). "Beta" (b1, index 1) is a
+    # singleton group whose canonical is itself. Group order must follow the input index of
+    # each group's CANONICAL job, not the group's first-encountered member: Beta's canonical
+    # (index 1) precedes Acme's canonical (index 2), so Beta's group comes first in the output
+    # even though Acme was first encountered.
     jobs = [
-        _job("zed1", "Backend Engineer", "Zed Corp", 60),
-        _job("a1", "Data Analyst", "Acme", 50),
+        _job("a1", "Data Analyst", "Acme", 10),
+        _job("b1", "Data Analyst", "Beta", 50),
         _job("a2", "Data Analyst II", "Acme", 99),
     ]
     out = collapse_variants(jobs)
-    assert [j["id"] for j in out] == ["zed1", "a2"]
+    assert [j["id"] for j in out] == ["b1", "a2"]
 
 
 def test_single_job_has_variant_count_one():
@@ -104,3 +108,19 @@ def test_single_job_has_variant_count_one():
     out = collapse_variants(jobs)
     assert out[0]["variant_count"] == 1
     assert out[0]["variant_ids"] == ["solo"]
+
+
+def test_empty_core_title_jobs_stay_singleton():
+    # Titles that strip down to nothing ("Senior", "Remote" are pure seniority/modality
+    # tokens) have no role identity — sweep_reposts skips grouping them (engine/reposts.py,
+    # `if key[1]:` guard). collapse_variants must replicate that: same-company jobs with an
+    # empty core_title must NOT be merged into one group just because their key matches.
+    jobs = [
+        _job("s1", "Senior", "Acme", 80),
+        _job("s2", "Remote", "Acme", 90),
+    ]
+    out = collapse_variants(jobs)
+    assert len(out) == 2
+    for j in out:
+        assert j["variant_count"] == 1
+        assert j["variant_ids"] == [j["id"]]
