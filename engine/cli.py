@@ -14,6 +14,7 @@ from rich.table import Table
 
 import engine.paths as paths
 from engine import __version__
+from engine.config import load_master_cv
 from engine.paths import REPO_ROOT
 
 # Load .env (Adzuna keys etc.) without overriding a real shell env.
@@ -60,6 +61,30 @@ def _db():
     return DB()
 
 
+def _warn_if_template_cv(console: Console) -> bool:
+    """Print a prominent warning if the active master CV is still the seed template.
+
+    Never blocks: only warns. Returns True iff a warning was printed (useful for
+    `doctor`, which folds this into its report)."""
+    from engine.cv.placeholder import find_placeholders
+
+    try:
+        cv = load_master_cv()
+    except Exception:  # noqa: BLE001 — a broken/missing CV is not this helper's job
+        return False
+    findings = find_placeholders(cv)
+    if findings:
+        console.print(
+            "[bold red]⚠ Tu master CV sigue siendo la PLANTILLA[/bold red] — "
+            "nada de lo generado es enviable. Completa profile/master_cv.yaml con tus "
+            "datos reales."
+        )
+        for f in findings:
+            console.print(f"  [red]•[/red] {f}")
+        return True
+    return False
+
+
 @app.command()
 def version() -> None:
     """Print the Atlas version."""
@@ -93,6 +118,7 @@ def doctor() -> None:
 
     console.print(f"[green]✓[/] Active profile: {paths.PROFILE_ID or 'legacy'}")
     console.print(f"[green]✓[/] DB path: {paths.DB_PATH}")
+    _warn_if_template_cv(console)
     console.print("\n[bold]Manual checklist for a true $0 guarantee:[/]")
     console.print(
         "  1. Run the brain as a Claude [bold]Cowork/Desktop scheduled task[/] (never `claude -p`)."
@@ -190,10 +216,11 @@ def tailor(
     pdf: bool = typer.Option(True, help="Also render a PDF (native, via reportlab)."),
 ) -> None:
     """Generate a parse-safe, JD-tailored CV for a job (DOCX + optional PDF)."""
-    from engine.config import load_master_cv, load_ontology
+    from engine.config import load_ontology
     from engine.cv.build import build_for_job
     from engine.cv.match import match_score
 
+    _warn_if_template_cv(console)
     with _db() as db:
         res = build_for_job(db, job_id, language=language, make_pdf=pdf)
         job = db.get_job(job_id) or {}
@@ -289,6 +316,7 @@ def prep(
     from engine.cv.build import build_for_job
     from engine.outreach.build import build_outreach, write_package
 
+    _warn_if_template_cv(console)
     with _db() as db:
         cv = build_for_job(db, job_id, language=language)
         build_outreach(db, job_id, language=language)
@@ -628,9 +656,9 @@ def portfolio_generate(
     """Render your master_cv.yaml into a standalone local portfolio (never published)."""
     from datetime import UTC, datetime
 
-    from engine.config import load_master_cv
     from engine.portfolio.builder import generate_portfolio
 
+    _warn_if_template_cv(console)
     version = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
     with _db() as db:
         path = generate_portfolio(load_master_cv(), version=version, include_github=github)
