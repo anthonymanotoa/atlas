@@ -287,6 +287,87 @@ def test_match_score_surfaces_in_job_detail(atlas_app):
     assert detail["job"]["missing_keywords"] == ["kubernetes", "terraform"]
 
 
+# ── Task 13: research + review data surfaces in the job-detail payload ─────────
+def test_job_detail_surfaces_cv_reviews_research_and_contacts(atlas_app, tmp_path):
+    from engine.db.models import DB
+    from engine.normalize import norm_company
+
+    with TestClient(atlas_app) as client:
+        jid = _seed_job()
+
+        # Deterministic review.md lives next to the tailored CV's docx (engine/cli.py writes
+        # it at `docx_path.parent / "review.md"`); job_detail must resolve it via the latest
+        # cv_version's path_docx, never a hardcoded profile path.
+        cv_dir = tmp_path / "cvs" / "acme"
+        cv_dir.mkdir(parents=True)
+        docx_path = cv_dir / "cv.docx"
+        docx_path.write_bytes(b"fake docx")
+        review_md = "# Revision\n\n✅ ATS check: ok\n⚠️ Missing keyword: kubernetes\n"
+        (cv_dir / "review.md").write_text(review_md)
+
+        with DB() as db:
+            db.add_cv_version(
+                jid,
+                language="en",
+                ats_target="greenhouse",
+                path_docx=str(docx_path),
+                path_pdf=None,
+                keyword_coverage=0.8,
+                matched=["python"],
+                missing=["kubernetes"],
+                parse_ok=True,
+            )
+            db.add_cv_review(
+                jid,
+                intent_id=None,
+                cv_version_id=None,
+                edits=[],
+                critique={"missed_keywords": ["kubernetes"]},
+                flags=[],
+            )
+            db.add_company_research(
+                norm_company("Acme"),
+                job_id=jid,
+                summary="Acme is scaling its data platform team.",
+                signals=["hiring surge"],
+                sources=["https://acme.example/blog"],
+            )
+            db.upsert_research_contact(
+                name="Jamie Rivera",
+                company="Acme",
+                title="Engineering Manager",
+                linkedin_url="https://linkedin.com/in/jamierivera",
+                role="referral",
+                notes="[brain_research] confidence=high; posted about the open role",
+            )
+
+        detail = client.get(f"/api/jobs/{jid}").json()
+
+    assert len(detail["cv_reviews"]) == 1
+    assert detail["cv_reviews"][0]["critique"]["missed_keywords"] == ["kubernetes"]
+
+    assert detail["review_report"] == review_md
+
+    assert detail["company_research"]["summary"] == "Acme is scaling its data platform team."
+    assert detail["company_research"]["signals"] == ["hiring surge"]
+
+    names = [c["name"] for c in detail["suggested_contacts"]]
+    assert "Jamie Rivera" in names
+    suggested = detail["suggested_contacts"][0]
+    assert suggested["source"] == "brain_research"
+
+
+def test_job_detail_review_report_is_null_when_missing(atlas_app):
+    """No cv_version yet (never prepped) → review_report is null, never a 500."""
+    with TestClient(atlas_app) as client:
+        jid = _seed_job()
+        detail = client.get(f"/api/jobs/{jid}").json()
+    assert detail["review_report"] is None
+    assert detail["cv_reviews"] == []
+    assert detail["company_research"] is None
+    assert detail["suggested_contacts"] == []
+
+
 # ── Plan 019: dashboard-triggered discover→score (deterministic, keyless) ──────
 def test_discover_endpoint_runs_deterministic_pipeline(atlas_app, monkeypatch):
     import engine.discovery.runner as runner_mod

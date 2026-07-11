@@ -380,15 +380,43 @@ def job_detail(db: DB, job_id: str) -> dict | None:
     job["jd_skills"] = _jd_skills(job)  # skills the posting itself asks for (detail view)
     annotate(job)  # age_days, posted_days, salary_visible
     job["applied_days"] = _days_since(job.get("applied_at"))
+    cv_versions = db.cv_versions_for(job_id)
+    referrals = match_referrals(db, job.get("company", ""))
     return {
         "job": job,
-        "cv_versions": db.cv_versions_for(job_id),
+        "cv_versions": cv_versions,
         "messages": db.messages_for(job_id),
-        "referrals": match_referrals(db, job.get("company", "")),
+        "referrals": referrals,
         "social_mentions": db.social_mentions_for(job_id),
         "learnings": db.learnings_for_company(job.get("company", "")),
         "timeline": _timeline(job),
+        # Task 13: surface research + review data collected by earlier tasks that wasn't
+        # reaching the job detail view yet.
+        "cv_reviews": db.cv_reviews_for(job_id),
+        "review_report": _review_report(cv_versions),
+        "company_research": db.company_research_for(norm_company(job.get("company", ""))),
+        # Same fuzzy company match `referrals` already uses (Task 15's write_package applies
+        # the identical filter) — never contacts_for_company's raw "every contact" stub.
+        "suggested_contacts": [c for c in referrals if c.get("source") == "brain_research"],
     }
+
+
+def _review_report(cv_versions: list[dict]) -> str | None:
+    """Contents of the deterministic `review.md` (Task 12) for the latest tailored CV, if
+    it exists. review.md is written next to the CV's docx (`docx_path.parent / "review.md"`,
+    see engine/cli.py); never 500 the job detail over a missing/unreadable report file."""
+    if not cv_versions:
+        return None
+    path_docx = cv_versions[0].get("path_docx")
+    if not path_docx:
+        return None
+    try:
+        from pathlib import Path
+
+        review_path = Path(path_docx).parent / "review.md"
+        return review_path.read_text()
+    except OSError:
+        return None
 
 
 def _jd_skills(job: dict, *, limit: int = 16) -> list[str]:
