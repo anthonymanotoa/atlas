@@ -24,13 +24,20 @@ from engine.config import load_criteria, load_cv_layout, load_master_cv
 from engine.cv.build import build_for_job
 from engine.cv.pdf_check import check_page_count
 from engine.db.models import DB
+from engine.discovery.health import classify_sources
 from engine.discovery.runner import discover
 from engine.learning.runner import auto_learn_all
-from engine.normalize import now_iso
+from engine.normalize import norm_company, now_iso, parse_dt_utc
 from engine.outreach.build import build_outreach, write_package
 from engine.outreach.followups import followup_text
 from engine.referrals.connections import match_referrals
 from engine.scoring.run import score_jobs
+
+# Task 18 — planner caps. Independent of `run()`'s own `--limit` (which bounds how many
+# shortlisted jobs get a full CV/outreach prep pass this run); this bounds how many NEW
+# research intents the planner enqueues per run so a big backlog doesn't flood the queue.
+PLANNER_CAP = 5
+PORTFOLIO_REVIEW_MAX_AGE_DAYS = 7
 
 
 def _dry_run_summary(db: DB, *, limit: int, do_discover: bool) -> dict:
@@ -56,6 +63,77 @@ def _dry_run_summary(db: DB, *, limit: int, do_discover: bool) -> dict:
         "would_prep": would_prep,
         "pending_intents": len(intent_queue.list_pending(db)),
     }
+
+
+def plan_and_enqueue(db: DB, limit: int = PLANNER_CAP) -> dict:
+    """Deterministic planner (F4/Task 18): decides what NEW research the brain should do
+    and ENQUEUES it — the intent queue used to be purely reactive (web → brain), this makes
+    the brain proactive about its own backlog. Idempotent: never enqueues a second pending
+    intent of the same type+job/company when one is already pending, and skips work that's
+    already on file. Returns ``{"company_research": n, "contact_discovery": m,
+    "portfolio_research": k}`` — how many of each got enqueued THIS call.
+
+    1. company_research — top `limit` shortlisted jobs (already ordered by fit_score DESC),
+       one per distinct company, skipping companies with research on file or a pending intent.
+    2. contact_discovery — up to `limit` `ready` jobs whose company has no brain-discovered
+       contact yet (source == 'brain_research'), skipping jobs with a pending intent.
+    3. portfolio_research — at most once a week: only if the last review is missing or older
+       than PORTFOLIO_REVIEW_MAX_AGE_DAYS, and only if none is already pending.
+    """
+    enqueued = {"company_research": 0, "contact_discovery": 0, "portfolio_research": 0}
+    pending = intent_queue.list_pending(db)
+    pending_job_ids = {
+        t: {p["job_id"] for p in pending if p["type"] == t}
+        for t in ("company_research", "contact_discovery")
+    }
+
+    # 1. company_research — one per distinct company among the top shortlisted jobs.
+    seen_companies: set[str] = set()
+    for job in db.list_jobs(state="shortlisted", limit=limit):
+        norm = norm_company(job.get("company") or "")
+        if not norm or norm in seen_companies:
+            continue
+        seen_companies.add(norm)
+        if job["id"] in pending_job_ids["company_research"]:
+            continue
+        if db.company_research_for(norm):
+            continue
+        intent_queue.enqueue(db, "company_research", job_id=job["id"])
+        enqueued["company_research"] += 1
+
+    # 2. contact_discovery — ready jobs with no brain-discovered contact yet.
+    brain_contact_companies = {
+        norm_company(c.get("company") or "")
+        for c in db.all_contacts()
+        if c.get("source") == "brain_research"
+    }
+    count = 0
+    for job in db.list_jobs(state="ready", limit=limit):
+        if count >= limit:
+            break
+        norm = norm_company(job.get("company") or "")
+        if not norm:
+            continue
+        if job["id"] in pending_job_ids["contact_discovery"]:
+            continue
+        if norm in brain_contact_companies:
+            continue
+        intent_queue.enqueue(db, "contact_discovery", job_id=job["id"])
+        enqueued["contact_discovery"] += 1
+        count += 1
+
+    # 3. portfolio_research — weekly cadence, never job-scoped (job_id is always None).
+    already_pending = any(p["type"] == "portfolio_research" for p in pending)
+    if not already_pending:
+        last_review = parse_dt_utc(db.last_peer_review())
+        stale = last_review is None or (
+            datetime.now(UTC) - last_review
+        ).days >= PORTFOLIO_REVIEW_MAX_AGE_DAYS
+        if stale:
+            intent_queue.enqueue(db, "portfolio_research")
+            enqueued["portfolio_research"] += 1
+
+    return enqueued
 
 
 def run(
@@ -147,6 +225,11 @@ def run(
     # never fabricates outcomes — it only rolls up what the user recorded via form/CLI.
     summary["learnings"] = auto_learn_all(db)
 
+    # Task 18 — planner: enqueue new research intents (idempotent) so the brain drives its
+    # own backlog instead of only reacting to web-queued work. NOT run in dry_run (early
+    # return above skips this whole function body).
+    summary["enqueued_intents"] = plan_and_enqueue(db)
+
     # F4 paso 0 (parte determinista): reportar la cola. El drenaje REAL lo hace la sesión
     # de Claude que invoca esto (SKILL.md paso 0) — aquí solo se hace visible lo pendiente.
     summary["intents_pending"] = [
@@ -219,6 +302,22 @@ def write_morning_brief(db: DB, summary: dict, language: str = "en") -> None:
             f"- `{p['id']}` · {p['type']}" + (f" · job {p['job_id']}" if p["job_id"] else "")
             for p in pend
         ]
+    stale = intent_queue.stale_intents(db)
+    if stale:
+        lines += ["", "## 🧟 Intents atascados (>48h sin drenar)"]
+        lines += [
+            f"- `{i['id']}` · {i['type']} · {i['age_hours']:.0f}h" for i in stale
+        ]
+    flaky_sources = [
+        s for s in classify_sources(db) if s["state"] in ("ok_empty", "unconfigured")
+    ]
+    if flaky_sources:
+        lines += ["", "## 🔎 Fuentes sospechosas (revisa credenciales/filtros)"]
+        lines += [f"- {s['source']} ({s['state']}): {s['hint']}" for s in flaky_sources]
+    enq = summary.get("enqueued_intents") or {}
+    if any(enq.values()):
+        parts = ", ".join(f"{v} {k}" for k, v in enq.items() if v)
+        lines += ["", "## 🔬 Research nuevo", f"Encolado hoy para el brain: {parts}."]
     (paths.OUTBOX_DIR / "MORNING_BRIEF.md").write_text("\n".join(lines))
 
 
