@@ -295,6 +295,7 @@ CREATE TABLE IF NOT EXISTS intents (
     id           TEXT PRIMARY KEY,              -- in_<hex12>
     type         TEXT NOT NULL,                 -- cv_review | legitimacy_batch | upskill_report
                                                 --  | interview_prep_deep | profile_expand | cover_letter
+                                                --  | company_research | contact_discovery
     job_id       TEXT REFERENCES jobs(id) ON DELETE SET NULL,
     payload      TEXT NOT NULL DEFAULT '{}',    -- json, validated per-type at the API
     status       TEXT NOT NULL DEFAULT 'pending', -- pending | running | done | error
@@ -341,4 +342,21 @@ CREATE TABLE IF NOT EXISTS profile_expansions (
     items      TEXT NOT NULL DEFAULT '[]',    -- json [{target, value, source, applied?}]
     created_at TEXT NOT NULL
 );
+
+-- Company research (Task 14): the brain researches the company behind a job posting on the
+-- web and the writer validates + persists {summary, signals, sources} — no LLM call happens
+-- in this repo ($0 invariant). Keyed by normalized company name (not job_id) so research done
+-- for one job at a company is reused across every other job at the same company; `job_id`
+-- records which posting triggered the research, but is not the lookup key.
+CREATE TABLE IF NOT EXISTS company_research (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    company_norm  TEXT NOT NULL,
+    job_id        TEXT REFERENCES jobs(id) ON DELETE SET NULL,
+    summary       TEXT,
+    signals_json  TEXT NOT NULL DEFAULT '[]',   -- json list of short, sourced observations
+    sources_json  TEXT NOT NULL DEFAULT '[]',   -- json list of URLs the brain verified against
+    researched_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_company_research_norm
+    ON company_research(company_norm, researched_at);
 CREATE INDEX IF NOT EXISTS idx_profile_exp_created ON profile_expansions(created_at);

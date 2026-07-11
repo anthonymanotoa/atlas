@@ -13,6 +13,7 @@ import engine.paths as paths
 from engine.config import default_language, load_master_cv
 from engine.cv.tailor import detect_ats
 from engine.db.models import DB
+from engine.normalize import norm_company
 from engine.outreach.templates import Draft, build_package
 from engine.referrals.connections import match_referrals
 
@@ -110,6 +111,19 @@ def write_package(db: DB, job_id: str, language: str = "en") -> Path:
             f"{', '.join(json.loads(job['knockout_flags']))}"
         )
         lines.append("")
+    research = db.company_research_for(norm_company(job.get("company", "")))
+    if research and research.get("summary"):
+        lines.append("## 🏢 Sobre la empresa")
+        lines.append(research["summary"])
+        if research.get("signals"):
+            lines.append("")
+            lines.append("**Señales:**")
+            for s in research["signals"]:
+                lines.append(f"- {s}")
+        if research.get("sources"):
+            lines.append("")
+            lines.append("**Fuentes:** " + ", ".join(research["sources"]))
+        lines.append("")
     if refs:
         c = refs[0]
         lines += [
@@ -118,6 +132,16 @@ def write_package(db: DB, job_id: str, language: str = "en") -> Path:
             f"  {c.get('linkedin_url') or ''}",
             "",
         ]
+    suggested = [c for c in refs if c.get("source") == "brain_research"]
+    if suggested:
+        lines.append("## 🔍 Contactos sugeridos (candidatos — revisa antes de contactar)")
+        for c in suggested:
+            lines.append(f"- **{c['name']}** — {c.get('title') or ''} @ {c.get('company')}")
+            if c.get("linkedin_url"):
+                lines.append(f"  {c['linkedin_url']}")
+            if c.get("notes"):
+                lines.append(f"  _{c['notes']}_")
+        lines.append("")
     insights = db.learnings_for_company(job.get("company", ""))
     if insights:
         lines.append("## 🧠 Lo aprendido de esta empresa")

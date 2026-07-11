@@ -18,7 +18,7 @@ from typing import Any
 from uuid import uuid4
 
 from engine.db.models import DB
-from engine.normalize import now_iso, parse_dt_utc
+from engine.normalize import norm_company, now_iso, parse_dt_utc
 
 INTENT_TYPES = (
     "cv_review",
@@ -27,6 +27,8 @@ INTENT_TYPES = (
     "interview_prep_deep",
     "profile_expand",
     "cover_letter",
+    "company_research",
+    "contact_discovery",
 )
 INTENT_STATUSES = ("pending", "running", "done", "error")
 
@@ -38,6 +40,8 @@ PROMPT_FILES = {
     "interview_prep_deep": "interview_prep_deep.md",
     "profile_expand": "profile_expand.md",
     "cover_letter": "cover_letter.md",
+    "company_research": "company_research.md",
+    "contact_discovery": "contact_discovery.md",
 }
 
 _CONTEXT_BUILDERS: dict[str, Callable[[DB, dict], dict]] = {}
@@ -521,3 +525,126 @@ def _write_profile_expand(db: DB, intent: dict, result: dict) -> str:
 
 _CONTEXT_BUILDERS["profile_expand"] = _ctx_profile_expand
 _RESULT_WRITERS["profile_expand"] = _write_profile_expand
+
+
+# ── company_research (Task 14) ────────────────────────────────────────────────
+# The brain researches the company behind a job posting on the web (funding, size, recent
+# news, hiring signals) so the outreach package can ground drafts in something real instead of
+# generic flattery. Keyed by normalized company name (not job_id): research done once is
+# reused across every other job at the same company. The context builder hands the brain the
+# job brief + whatever research already exists (so it refreshes/extends instead of repeating
+# a web search). The writer only VALIDATES the brain's JSON (non-empty str summary; list
+# signals/sources) and PERSISTS it — no LLM here ($0 invariant). Malformed → raises, leaving
+# the intent `running` for a corrected retry.
+def _ctx_company_research(db: DB, intent: dict) -> dict:
+    job = db.get_job(intent["job_id"]) or {}
+    company = job.get("company", "")
+    return {
+        "company": company,
+        "job_brief": _job_brief(job),
+        "existing_research": db.company_research_for(norm_company(company)),
+    }
+
+
+def _write_company_research(db: DB, intent: dict, result: dict) -> str:
+    summary = result.get("summary")
+    if not isinstance(summary, str) or not summary.strip():
+        raise ValueError("company_research result needs a non-empty summary (str)")
+    signals = result.get("signals", [])
+    if not isinstance(signals, list):
+        raise ValueError("signals must be a list")
+    sources = result.get("sources", [])
+    if not isinstance(sources, list):
+        raise ValueError("sources must be a list")
+    job_id = intent["job_id"]
+    job = db.get_job(job_id) if job_id else None
+    company = (job or {}).get("company", "")
+    rid = db.add_company_research(
+        norm_company(company),
+        job_id=job_id,
+        summary=summary.strip(),
+        signals=signals,
+        sources=sources,
+    )
+    return f"company_research:{rid}"
+
+
+_CONTEXT_BUILDERS["company_research"] = _ctx_company_research
+_RESULT_WRITERS["company_research"] = _write_company_research
+
+
+# ── contact_discovery (Task 15) ───────────────────────────────────────────────
+# The brain MINES public sources (company site, LinkedIn search results, press) for people who
+# might plausibly work at the company in a relevant role, and drafts an optional intro/referral
+# message. These are CANDIDATES, not verified facts: every contact carries a `confidence` so
+# the human — not the brain — decides who is worth reaching out to. The context builder hands
+# the brain the company/role + contacts already known (so it doesn't re-propose duplicates).
+# The writer only VALIDATES the brain's JSON (every contact needs name + confidence ∈
+# high|medium|low) and PERSISTS contacts (source="brain_research") + an optional draft message
+# (kind="referral_or_intro", state="draft") — no LLM here, and NOTHING is ever sent; sending is
+# a human action outside this repo. Malformed → raises, leaving the intent `running`.
+_CONTACT_CONFIDENCES = ("high", "medium", "low")
+
+
+def _ctx_contact_discovery(db: DB, intent: dict) -> dict:
+    job = db.get_job(intent["job_id"]) or {}
+    company = job.get("company", "")
+    role_title = intent["payload"].get("role_title") or job.get("title")
+    return {
+        "company": company,
+        "role_title": role_title,
+        "job_brief": _job_brief(job),
+        "existing_contacts": db.contacts_for_company(norm_company(company)),
+    }
+
+
+def _write_contact_discovery(db: DB, intent: dict, result: dict) -> str:
+    contacts = result.get("contacts")
+    if not isinstance(contacts, list) or not contacts:
+        raise ValueError("result.contacts must be a non-empty list")
+    for c in contacts:
+        if not isinstance(c, dict) or not (c.get("name") or "").strip():
+            raise ValueError("every contact needs a non-empty name")
+        if c.get("confidence") not in _CONTACT_CONFIDENCES:
+            raise ValueError(f"every contact needs confidence ∈ {_CONTACT_CONFIDENCES}")
+    draft_message = result.get("draft_message")
+    if draft_message is not None and not (
+        isinstance(draft_message, str) and draft_message.strip()
+    ):
+        raise ValueError("draft_message must be a non-empty string when present")
+
+    job = db.get_job(intent["job_id"]) or {}
+    company = job.get("company", "")
+    created = 0
+    for c in contacts:
+        confidence = c["confidence"]
+        reasoning = (c.get("reasoning") or "").strip()
+        notes = f"[brain_research] confidence={confidence}"
+        if reasoning:
+            notes += f"; {reasoning}"
+        db.add_contact(
+            name=c["name"].strip(),
+            company=company,
+            title=c.get("role"),
+            linkedin_url=c.get("profile_url"),
+            role="referral",
+            source="brain_research",
+            notes=notes,
+        )
+        created += 1
+
+    if draft_message:
+        db.add_message(
+            intent["job_id"],
+            channel="referral",
+            kind="referral_or_intro",
+            body=draft_message.strip(),
+            variant="brain",
+            state="draft",
+        )
+
+    return f"contacts:{created}"
+
+
+_CONTEXT_BUILDERS["contact_discovery"] = _ctx_contact_discovery
+_RESULT_WRITERS["contact_discovery"] = _write_contact_discovery

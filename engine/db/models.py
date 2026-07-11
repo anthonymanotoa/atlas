@@ -518,6 +518,46 @@ class DB:
     def contacts_for_company(self, company_norm: str) -> list[dict]:
         return self.all_contacts()  # fuzzy matching happens in referrals layer
 
+    # ── company research (F4 Task 14) ───────────────────────────────────────
+    def add_company_research(
+        self,
+        company_norm: str,
+        *,
+        job_id: str | None,
+        summary: str,
+        signals: list | None = None,
+        sources: list | None = None,
+    ) -> int:
+        cur = self.conn.execute(
+            """INSERT INTO company_research
+               (company_norm, job_id, summary, signals_json, sources_json, researched_at)
+               VALUES (?,?,?,?,?,?)""",
+            (
+                company_norm,
+                job_id,
+                summary,
+                json.dumps(signals or []),
+                json.dumps(sources or []),
+                now_iso(),
+            ),
+        )
+        self.conn.commit()
+        return int(cur.lastrowid)
+
+    def company_research_for(self, company_norm: str) -> dict | None:
+        """Most recent research for this normalized company name, or None."""
+        row = self.conn.execute(
+            """SELECT * FROM company_research WHERE company_norm=?
+               ORDER BY researched_at DESC, id DESC LIMIT 1""",
+            (company_norm,),
+        ).fetchone()
+        if not row:
+            return None
+        d = dict(row)
+        d["signals"] = _loads(d.get("signals_json"), [])
+        d["sources"] = _loads(d.get("sources_json"), [])
+        return d
+
     # ── applications ─────────────────────────────────────────────────────────
     def add_application(
         self,

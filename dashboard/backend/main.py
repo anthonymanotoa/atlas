@@ -240,6 +240,15 @@ class CoverLetterPayload(BaseModel):
     language: Literal["en", "es"] | None = None
 
 
+class CompanyResearchPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+
+class ContactDiscoveryPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    role_title: str | None = None
+
+
 PAYLOAD_MODELS: dict[str, type[BaseModel]] = {
     "cv_review": CvReviewPayload,
     "legitimacy_batch": LegitimacyBatchPayload,
@@ -247,8 +256,12 @@ PAYLOAD_MODELS: dict[str, type[BaseModel]] = {
     "interview_prep_deep": InterviewPrepDeepPayload,
     "profile_expand": ProfileExpandPayload,
     "cover_letter": CoverLetterPayload,
+    "company_research": CompanyResearchPayload,
+    "contact_discovery": ContactDiscoveryPayload,
 }
-_JOB_SCOPED_INTENTS = frozenset({"cv_review", "cover_letter"})
+_JOB_SCOPED_INTENTS = frozenset(
+    {"cv_review", "cover_letter", "company_research", "contact_discovery"}
+)
 
 
 def _cv_template_findings() -> list[str]:
