@@ -280,6 +280,11 @@ class DB:
         rows = self.conn.execute("SELECT state, COUNT(*) n FROM jobs GROUP BY state").fetchall()
         return {r["state"]: r["n"] for r in rows}
 
+    def last_liveness_sweep(self) -> str | None:
+        """Timestamp of the most recent liveness check across all jobs, or None if never run."""
+        row = self.conn.execute("SELECT MAX(liveness_checked_at) m FROM jobs").fetchone()
+        return row["m"] if row else None
+
     # ── posting snapshots (F2) ────────────────────────────────────────────────
     _SNAPSHOT_FIELDS = (
         "title",

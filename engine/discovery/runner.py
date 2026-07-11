@@ -146,9 +146,9 @@ def discover(
         else:
             store("adzuna", lambda: adzuna.fetch(cfg["adzuna"], terms, client))
 
-    # F2 hygiene (opt-in via sources.yaml): expire dead postings at the end of a discover.
-    # Off by default — it adds N paced HTTP calls per run; always available on demand from
-    # the web UI via POST /api/liveness/sweep. Reuses the run's shared client.
+    # F2 hygiene (configured via sources.yaml, on by default): expire dead postings at the
+    # end of a discover. Adds up to `limit` paced HTTP calls per run; also available on
+    # demand from the web UI via POST /api/liveness/sweep. Reuses the run's shared client.
     lv = cfg.get("liveness", {})
     if want("liveness") and lv.get("enabled", False):
         from engine.discovery.liveness import sweep_liveness

@@ -497,9 +497,14 @@ def status() -> None:
         classified = {c["source"]: c for c in classify_sources(db)}
         last_run = db.meta_get("last_run")
         stale = eng_intents.stale_intents(db)
+        last_sweep = db.last_liveness_sweep()
     console.print(f"[bold]Pipeline[/] (last run: {last_run or 'never'})")
     for state, n in counts.items():
         console.print(f"  {state:<12} {n}")
+    console.print(
+        f"[bold]Liveness:[/] último sweep {(last_sweep or 'nunca')[:19]} · "
+        f"{counts.get('expired', 0)} expirados"
+    )
     if health:
         table = Table(title="Source health")
         for col in ("source", "ok", "count", "when", "state", "hint/error"):
