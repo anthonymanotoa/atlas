@@ -12,6 +12,7 @@ from engine.config import Criteria
 from engine.db.models import DB
 from engine.normalize import norm_company, parse_dt_utc
 from engine.referrals.connections import match_referrals
+from engine.scoring.priority import priority
 
 FUNNEL = [
     ("discovered", "discovered_at"),
@@ -39,12 +40,14 @@ def annotate(job: dict) -> dict:
 
     `posted_days` is from the posting's own date_posted (how long the vacancy has been
     open); `age_days` is since we discovered it. `salary_visible` drives the
-    'solo con salario' filter + the salary chip.
+    'solo con salario' filter + the salary chip. `priority` (Task 10) is the blended
+    fit/CV-match ranking score — lets the UI sort/label without recomputing it.
     """
     job["age_days"] = _days_since(job.get("discovered_at"))
     posted = _days_since(job.get("date_posted"))
     job["posted_days"] = posted if posted is not None else job["age_days"]
     job["salary_visible"] = bool(job.get("salary_min") or job.get("salary_max"))
+    job["priority"] = priority(job.get("fit_score"), job.get("match_score"))
     return job
 
 

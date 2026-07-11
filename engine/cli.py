@@ -201,18 +201,26 @@ def top(
     5-CVS-Health-postings problem) collapse into a single row tagged '×N'; pass --all to see
     every variant.
     """
+    from engine.scoring.priority import priority as blended_priority
+
     with _db() as db:
         if show_all:
-            jobs = db.list_jobs(state=state, limit=n)
+            pool = db.list_jobs(state=state)
         else:
             from engine.scoring.dedupe import collapse_variants
 
             # Collapse needs the full pool BEFORE truncating to n, else a repost cluster could
             # eat all n slots and hide other jobs that would otherwise make the cut.
-            pool = db.list_jobs(state=state)
-            jobs = collapse_variants(pool)[:n]
+            pool = collapse_variants(db.list_jobs(state=state))
+        # Collapse (or not) first, THEN sort by blended priority, THEN take the top n — sorting
+        # before truncating so a high-match/lower-fit job doesn't get cut by a raw-fit ordering.
+        jobs = sorted(
+            pool,
+            key=lambda j: blended_priority(j.get("fit_score"), j.get("match_score")),
+            reverse=True,
+        )[:n]
     table = Table(title=f"Top {state}" + ("" if show_all else "  (variantes colapsadas)"))
-    for col in ("fit", "match", "title", "company", "remote", "id"):
+    for col in ("PRIORIDAD", "FIT (criterios)", "CV MATCH (keywords)", "title", "company", "remote", "id"):
         table.add_column(col)
     for j in jobs:
         rem = {1: "✓", 0: "✗"}.get(j["is_remote"], "?")
@@ -222,6 +230,7 @@ def top(
         if variant_count > 1:
             title = f"{title} [dim]×{variant_count}[/]"
         table.add_row(
+            str(blended_priority(j.get("fit_score"), j.get("match_score"))),
             str(j.get("fit_score")),
             f"{match}%" if match is not None else "—",
             title,
@@ -230,6 +239,10 @@ def top(
             j["id"],
         )
     console.print(table)
+    console.print(
+        "[dim]fit = encaje con tus criterios · CV match = cobertura de keywords de la "
+        "vacante en tu CV · prioridad = 0.7·fit + 0.3·match[/]"
+    )
 
 
 @app.command()
