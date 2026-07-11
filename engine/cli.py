@@ -76,8 +76,8 @@ def _warn_if_template_cv(console: Console) -> bool:
     if findings:
         console.print(
             "[bold red]⚠ Tu master CV sigue siendo la PLANTILLA[/bold red] — "
-            "nada de lo generado es enviable. Completa profile/master_cv.yaml con tus "
-            "datos reales."
+            "nada de lo generado es enviable. Mapea profile/master_cv.draft.yaml y corre "
+            "[bold]atlas cv promote[/bold]."
         )
         for f in findings:
             console.print(f"  [red]•[/red] {f}")
@@ -828,6 +828,19 @@ def cv_dump(job_id: str) -> None:
             console.print(f"[red]✗[/] {e}")
             raise typer.Exit(2) from None
     console.print(f"[green]✓[/] {path}")
+
+
+@cv_app.command("promote")
+def cv_promote() -> None:
+    """Valida el draft y lo promueve a master (con backup)."""
+    from engine.cv.promote import PromoteError, promote_draft
+
+    try:
+        out = promote_draft(paths.PROFILE_ROOT)
+    except PromoteError as e:
+        console.print(f"[red]✗ {e}[/red]")
+        raise typer.Exit(1) from None
+    console.print(f"[green]✓ Master CV promovido:[/green] {out}")
 
 
 if __name__ == "__main__":
