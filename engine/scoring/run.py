@@ -9,7 +9,7 @@ from engine.config import Criteria, load_master_cv, load_ontology
 from engine.cv.match import match_score
 from engine.db.models import DB
 from engine.knockouts import prescan
-from engine.normalize import norm_company
+from engine.normalize import extract_geo_restriction, norm_company
 from engine.scoring.fit import score_job
 
 
@@ -65,8 +65,20 @@ def score_jobs(db: DB, criteria: Criteria, *, rescore: bool = False) -> tuple[in
     master = load_master_cv()
     ontology = load_ontology()
     have_cv = bool(master and ontology)
+    def _refresh_geo(j: dict) -> None:
+        """Re-extract geo from the stored location/description and persist any correction.
+
+        Repairs rows scored under an older extractor (e.g. the US-state ↔ ISO-2 collision that
+        read "CO, US" as Colombia). Mutates `j` in place so the subsequent score sees the fix."""
+        raw, scope = extract_geo_restriction(j.get("location"), j.get("description"), j.get("is_remote"))
+        if scope != (j.get("geo_scope") or ""):
+            db.set_geo(j["id"], raw, scope)
+            j["geo_restriction"], j["geo_scope"] = raw, scope
+
     scored = shortlisted = 0
     for j in jobs:
+        if rescore:
+            _refresh_geo(j)
         res = score_job(j, criteria, learn_map.get(norm_company(j.get("company", ""))))
         # F2 re-apply window (informative only — no score change, no DQ): flag a fresh job at a
         # company you applied to <window days ago. Skip the applied job itself (has applied_at).
@@ -95,4 +107,18 @@ def score_jobs(db: DB, criteria: Criteria, *, rescore: bool = False) -> tuple[in
         if res.score >= criteria.shortlist_threshold and not res.disqualified:
             db.set_state(j["id"], "shortlisted")
             shortlisted += 1
+
+    # Pre-send cleanup (rescore only): a job already tailored/drafted/ready that comes out NEWLY
+    # disqualified (typically geo-ineligible) doesn't belong in the send lane — you can't apply to
+    # it. Refresh its fit so the knockout shows, then pull it back to `scored`. Non-disqualified
+    # pre-send jobs are deliberately left alone (never regress prepared work on a score wobble).
+    if rescore:
+        for j in db.list_jobs(states=["tailored", "drafted", "ready"]):
+            _refresh_geo(j)
+            res = score_job(j, criteria, learn_map.get(norm_company(j.get("company", ""))))
+            if res.disqualified:
+                db.set_fit(
+                    j["id"], res.score, res.reasons, res.knockouts, breakdown=res.breakdown()
+                )
+                db.set_state(j["id"], "scored", {"reason": "geo-ineligible on rescore"})
     return scored, shortlisted

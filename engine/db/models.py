@@ -252,6 +252,14 @@ class DB:
         )
         self.conn.commit()
 
+    def set_geo(self, job_id: str, geo_restriction: str | None, geo_scope: str) -> None:
+        """Overwrite the extracted geo fields — used by --rescore to repair stale scopes."""
+        self.conn.execute(
+            "UPDATE jobs SET geo_restriction=?, geo_scope=? WHERE id=?",
+            (geo_restriction, geo_scope, job_id),
+        )
+        self.conn.commit()
+
     def set_legitimacy(self, job_id: str, tier: str, notes: str) -> None:
         """Persist the posting-legitimacy tier (high|medium|low) + signal notes (F4 Block G).
 
