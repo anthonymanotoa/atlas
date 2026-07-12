@@ -2,7 +2,7 @@
 
 Atlas is a personal, **local, single-user** job-search cockpit. It discovers remote roles,
 scores fit, tailors a parse-safe CV per job, drafts outreach, detects referrals, and surfaces
-everything in a local dashboard. It runs on the user's Mac at **$0** (subscription-funded).
+everything in a local dashboard. It runs locally — macOS, or Windows via WSL2 — at **$0** (subscription-funded).
 Read `README.md` and `docs/ARCHITECTURE.md` for the full picture.
 
 ## Two HARD RULES — never violate

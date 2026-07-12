@@ -275,7 +275,7 @@ def write_morning_brief(db: DB, summary: dict, language: str = "en") -> None:
     dt = summary.get("downtime_hours")
     if dt:
         lines += [
-            f"> ⚠️ **Estuve sin correr ~{dt:.0f}h.** Revisa que el Mac esté despierto y "
+            f"> ⚠️ **Estuve sin correr ~{dt:.0f}h.** Revisa que tu equipo esté despierto y "
             "Claude Desktop abierto.",
             "",
         ]

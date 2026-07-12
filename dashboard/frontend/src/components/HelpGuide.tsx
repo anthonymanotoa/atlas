@@ -65,7 +65,7 @@ const FEATURES: Feature[] = [
     title: "Portafolio",
     what: "Genera un sitio web local con tu perfil. Nunca se publica.",
     behind:
-      "Renderiza tu master_cv.yaml en un index.html independiente, en tu Mac. Podés guardar 'peers' (portafolios de referencia que investigás vos) para inspirarte.",
+      "Renderiza tu master_cv.yaml en un index.html independiente, en tu equipo. Podés guardar 'peers' (portafolios de referencia que investigás vos) para inspirarte.",
     how: "Pestaña Portafolio → Generar / Abrir · CLI: atlas portfolio generate",
   },
   {
@@ -166,8 +166,8 @@ export function HelpGuide({
                 </div>
                 <p className="mt-3 text-[0.8rem] text-muted-foreground">
                   Todo el procesamiento (buscar, puntuar, adaptar CV, redactar, prep, portafolio)
-                  corre como <b className="text-foreground">Python determinista en tu Mac</b>: las
-                  mismas entradas dan siempre el mismo resultado, sin costo y sin que tus datos
+                  corre como <b className="text-foreground">Python determinista en tu equipo</b>:
+                  las mismas entradas dan siempre el mismo resultado, sin costo y sin que tus datos
                   salgan de tu equipo.
                 </p>
               </Card>

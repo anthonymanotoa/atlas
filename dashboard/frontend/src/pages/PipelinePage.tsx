@@ -94,7 +94,7 @@ export function PipelinePage() {
       {ov?.downtime_hours ? (
         <Card className="mb-4 flex items-center gap-2 border-warning/50 p-3 text-sm">
           <DowntimeIcon className="size-4 shrink-0 text-warning" />
-          Estuve sin correr ~{Math.round(ov.downtime_hours)}h. Revisa que el Mac esté despierto y
+          Estuve sin correr ~{Math.round(ov.downtime_hours)}h. Revisa que tu equipo esté despierto y
           Claude Desktop abierto.
         </Card>
       ) : null}

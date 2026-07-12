@@ -115,6 +115,11 @@ scope (see Scope).
 - `tests/test_cli_open.py` (new)
 - `.github/workflows/ci.yml` (new — **optional Step 6 only**)
 - `plans/README.md` (status row)
+- **[added at execution — Step 8]** user-facing "Mac" strings the initial audit missed:
+  `brain/run_brain.py` + `dashboard/frontend/src/pages/PipelinePage.tsx` (the downtime
+  keep-awake banner), `dashboard/frontend/src/components/HelpGuide.tsx` +
+  `PortfolioViewer.tsx` (help/UI copy), and two internal comments in `engine/heartbeat.py` +
+  `engine/profiles.py`. See Step 8.
 
 **Out of scope** (do NOT touch, even though it looks related):
 - **Native Windows (no WSL) support.** `uvicorn[standard]` pulls uvloop (POSIX-only), the
@@ -122,8 +127,16 @@ scope (see Scope).
   Windows path; say so in the docs instead of chasing win32.
 - `engine/paths.py`, `scripts/run.sh`, `scripts/check.sh` — already portable; no speculative
   refactors.
-- The brain SKILL/prompts, dashboard backend/frontend code — no platform assumptions found.
+- `engine/discovery/http.py`'s `Macintosh` User-Agent — a deliberate browser fingerprint for
+  scraping, NOT a platform assumption. Leave it.
 - Rewriting SETUP.md beyond the additions described here (plan 022/026 own doc accuracy).
+
+> **Execution note (correction to the original audit):** the audit line "dashboard
+> backend/frontend code — no platform assumptions found" was WRONG. An adversarial review
+> during execution found the downtime keep-awake alarm hardcodes "el Mac" in *shipped*
+> output — `brain/run_brain.py` writes it into `MORNING_BRIEF.md` and
+> `PipelinePage.tsx` renders the same banner live — plus three cosmetic "en tu Mac" strings
+> in `HelpGuide.tsx`/`PortfolioViewer.tsx`. Since a WSL user reads these, Step 8 fixes them.
 
 ## Git workflow
 
@@ -170,7 +183,12 @@ In `portfolio_open`, replace the `import subprocess` + `subprocess.run(["open", 
         console.print(f"No encontré con qué abrirlo — ábrelo manualmente: {p['path_html']}")
 ```
 
-**Verify**: `grep -n '\["open"' engine/cli.py` → 0 matches.
+**Verify**: `grep -n 'subprocess' engine/cli.py` shows NO `import subprocess` inside
+`portfolio_open` — the only `["open", ...]` left is the darwin branch INSIDE
+`_open_local_file` (that call is correct; macOS `open` always exists). So the real check is
+that `portfolio_open` no longer calls `subprocess.run(["open"...])` directly:
+`grep -n 'subprocess.run(\["open"' engine/cli.py` → exactly 1 match, and it is within
+`_open_local_file` (line ~689), not `portfolio_open`.
 **Verify**: `uv run atlas portfolio open` on the dev Mac still opens (or prints "Sin
 portafolios" if none exist — either proves the command imports and runs).
 
@@ -258,9 +276,17 @@ terminal unless noted). Native Windows (no WSL) is not supported.
       in WSL — the task's shell command must enter WSL, e.g.:
       `wsl.exe -e bash -lc 'cd ~/dev/atlas && uv run atlas --profile owner brain --limit 8 --json'`
       (adapt the inner command to whatever the task runs today).
-- [ ] Git line endings are enforced by `.gitattributes` (LF). If you cloned before that file
-      existed, run `git config core.autocrlf input` and re-checkout.
+- [ ] Git line endings are enforced by `.gitattributes` (LF), so a fresh clone is always
+      correct. If you cloned BEFORE that file existed and your `scripts/*.sh` already have CRLF,
+      a plain re-checkout won't fix them (git leaves files it thinks are unchanged) — force a
+      renormalization once: `git rm --cached -r . && git reset --hard`.
 ```
+
+> **Execution note (review correction):** an earlier draft of this bullet said "run
+> `git config core.autocrlf input` and re-checkout" — that is WRONG. A verifier reproduced it:
+> git skips re-writing files it considers unchanged, so an already-CRLF `scripts/*.sh` stays
+> CRLF after that. The `git rm --cached -r . && git reset --hard` renormalization above is the
+> reliable fix. (For a fresh clone the bullet is moot — `eol=lf` forces LF regardless.)
 
 **4b. `README.md`** — minimal wording pass (keep Spanish, keep voice):
 - line 3: `corriendo 100% en tu Mac.` → `corriendo 100% en tu máquina (macOS, o Windows vía WSL2).`
@@ -350,6 +376,26 @@ report the failing test as a finding (STOP condition below), don't patch around 
 **Verify**: `git status --short` → only in-scope files modified.
 Update this plan's row in `plans/README.md`.
 
+### Step 8 (added at execution): de-Mac the user-facing app strings the audit missed
+
+An adversarial review during execution found "Mac" hardcoded in *shipped* output — the
+initial audit's "frontend/backend has no platform assumptions" line was wrong. Fix these so a
+WSL user isn't told to check a Mac they don't have:
+
+- `brain/run_brain.py` (downtime banner written into `MORNING_BRIEF.md`): `Revisa que el Mac
+  esté despierto` → `Revisa que tu equipo esté despierto`.
+- `dashboard/frontend/src/pages/PipelinePage.tsx` (the same banner rendered live): same change.
+  NOTE: JSX text reflows — after editing, run `npm --prefix dashboard/frontend run format`
+  (or `format:check`) so Prettier's line-wrapping stays canonical, else `check.sh` fails on
+  `format:check`.
+- `dashboard/frontend/src/components/HelpGuide.tsx` (×2) + `PortfolioViewer.tsx` (×1):
+  `en tu Mac` → `en tu equipo`.
+- `engine/heartbeat.py` + `engine/profiles.py` (internal comments only): `Mac` → `machine`.
+- Do NOT touch `engine/discovery/http.py`'s `Macintosh` User-Agent (deliberate spoof).
+
+**Verify**: `grep -rnE "en tu Mac|el Mac|on one Mac|sleeping Mac" brain/ engine/ dashboard/frontend/src/`
+→ 0 matches (the only remaining `Mac*` is the http.py UA spoof).
+
 ## Test plan
 
 - 3 new unit tests for `_open_local_file` (Step 2) — darwin dispatch, WSL/linux `wslview`
@@ -367,7 +413,7 @@ Update this plan's row in `plans/README.md`.
 
 Machine-checkable. ALL must hold:
 
-- [ ] `grep -n '\["open"' engine/cli.py` → 0 matches; `grep -n "_open_local_file" engine/cli.py` → ≥2 matches
+- [ ] `grep -n "_open_local_file" engine/cli.py` → ≥2 matches; `grep -n 'subprocess.run(\["open"' engine/cli.py` → exactly 1 match, inside `_open_local_file` (macOS branch), NOT inside `portfolio_open`
 - [ ] `grep -n "_wsl_repo_warning" engine/cli.py` → ≥2 matches
 - [ ] `.gitattributes` exists; `git add --renormalize .` introduces no changes beyond this plan's files
 - [ ] `grep -rniE "tu mac\b|la misma mac|user's mac" README.md AGENTS.md docs/SETUP.md` → 0 matches

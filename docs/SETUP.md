@@ -9,10 +9,12 @@
       "API Usage Billing".
 
 ## 2. Keep the scheduled brain reliable
-The brain (`atlas-job-brain`, daily 8:10am) only runs while your Mac is **awake** and **Claude
+The brain (`atlas-job-brain`, daily 8:10am) only runs while your machine is **awake** and **Claude
 Desktop is open**, and a missed day collapses to one catch-up run.
 - [ ] Claude Desktop → Settings → enable **"Keep computer awake"**, and keep the app running.
-- [ ] Don't close the laptop lid during the scheduled window (clamshell sleeps the Mac).
+- [ ] macOS: don't close the laptop lid during the scheduled window (clamshell sleeps the Mac).
+- [ ] Windows: Settings → System → Power → set **Sleep: Never** while plugged in (the brain
+      can't run on a sleeping PC), and note the brain command must enter WSL (section 5).
 - [ ] The dashboard shows an **"Estuve sin correr ~Nh"** banner if a run was missed — that's your
       alarm. (Notifications are on; absence of a completion ping also signals downtime.)
 - [ ] First run: open the task in Claude Desktop → **Run now** once, and "always allow" the tools
@@ -40,3 +42,29 @@ Desktop is open**, and a missed day collapses to one catch-up run.
    drawer has the apply link, the tailored CV (download), and every message draft (copy / mark
    sent). You send; Atlas tracks.
 4. Follow-ups are scheduled automatically and **halt the moment you mark a reply**.
+
+## 5. Windows — supported via WSL2
+
+Atlas on Windows runs **inside WSL2** (it is Linux; everything below happens in the WSL
+terminal unless noted). Native Windows (no WSL) is not supported.
+
+- [ ] Install WSL2 + Ubuntu (PowerShell, admin): `wsl --install -d Ubuntu`, reboot, create
+      your Linux user.
+- [ ] **Clone inside the Linux filesystem** (e.g. `~/dev/atlas`) — **never under `/mnt/c`**:
+      SQLite locking and file watchers are unreliable/slow on the Windows-drive mount.
+      `atlas doctor` warns if it detects this.
+- [ ] Install tooling inside WSL: `uv` (`curl -LsSf https://astral.sh/uv/install.sh | sh`)
+      and Node 20+ (e.g. via `nvm`). Then the normal flow works as-is:
+      `./scripts/check.sh`, `./scripts/run.sh`.
+- [ ] Dashboard: `./scripts/run.sh` inside WSL, then open http://127.0.0.1:8787 in your
+      **Windows** browser (WSL2 forwards localhost automatically).
+- [ ] (Optional) `sudo apt install wslu` so `atlas portfolio open` can open files in the
+      Windows browser via `wslview`; without it the CLI prints the path for you to open.
+- [ ] **Scheduled brain:** Claude Desktop for **Windows** runs the task, but the repo lives
+      in WSL — the task's shell command must enter WSL, e.g.:
+      `wsl.exe -e bash -lc 'cd ~/dev/atlas && uv run atlas --profile owner brain --limit 8 --json'`
+      (adapt the inner command to whatever the task runs today).
+- [ ] Git line endings are enforced by `.gitattributes` (LF), so a fresh clone is always
+      correct. If you cloned BEFORE that file existed and your `scripts/*.sh` already have CRLF,
+      a plain re-checkout won't fix them (git leaves files it thinks are unchanged) — force a
+      renormalization once: `git rm --cached -r . && git reset --hard`.

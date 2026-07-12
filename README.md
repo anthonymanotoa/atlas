@@ -1,6 +1,6 @@
 # Atlas
 
-**Tu centro de mando personal para la búsqueda de empleo**, corriendo 100% en tu Mac.
+**Tu centro de mando personal para la búsqueda de empleo**, corriendo 100% en tu máquina (macOS, o Windows vía WSL2).
 
 Atlas descubre vacantes remotas, puntúa qué tan bien encajas, adapta tu CV a cada puesto
 (optimizado para los filtros automáticos ATS), redacta los mensajes de contacto, detecta
@@ -89,7 +89,8 @@ usa esos caminos**. Tres seguros convierten el "$0" en una garantía, no en una 
 
 Todo lo demás —JobSpy, las APIs de ATS/Himalayas/Adzuna, SQLite, el tablero local, Claude en
 Chrome— es gratis. La lista de verificación de una sola vez está en
-[docs/SETUP.md](docs/SETUP.md).
+[docs/SETUP.md](docs/SETUP.md). En Windows, Atlas corre dentro de WSL2 — ver la sección
+"Windows" de [docs/SETUP.md](docs/SETUP.md).
 
 ---
 
@@ -271,7 +272,7 @@ uv run atlas advise                 asesoría de CV/LinkedIn
 uv run atlas status                 estado general (última corrida, salud de fuentes)
 ```
 
-**Varias cuentas en la misma Mac (perfiles).** Atlas puede alojar varios perfiles
+**Varias cuentas en la misma máquina (perfiles).** Atlas puede alojar varios perfiles
 independientes —pensado para unas pocas personas de confianza (≤5)—, cada uno con su
 **propia base de datos, su CV y sus criterios**, todo aislado y siempre local ($0). No hay
 contraseñas: es un *selector* de perfil, no un control de acceso (la app solo escucha en
@@ -315,13 +316,13 @@ uv run rtk pytest
 
 ## 8. Tus datos y tu privacidad
 
-Atlas corre **enteramente en tu Mac**. Nada de lo personal sale de tu equipo ni se sube a
+Atlas corre **enteramente en tu máquina**. Nada de lo personal sale de tu equipo ni se sube a
 GitHub. El `.gitignore` protege explícitamente: tu CV maestro (`master_cv.yaml`), la base de
 datos (`*.db`), las carpetas `data/` y `profiles/` (donde vive cada perfil con su BD, su CV
 y sus criterios), los documentos generados (`*.docx`, `*.pdf`), tu `Connections.csv` y
 cualquier `.env`. Cada perfil queda **aislado** en su propia carpeta. El repositorio en
 GitHub es **público**, así que la protección de tus datos es exactamente esa lista del
-`.gitignore`: lo personal vive solo en tu Mac y **nunca** debe commitearse.
+`.gitignore`: lo personal vive solo en tu máquina y **nunca** debe commitearse.
 
 **Seguridad de dependencias:** la auditoría de **producción** da **0 vulnerabilidades**
 (`npm --prefix dashboard/frontend run audit:prod`). Las alertas que pueda mostrar `npm audit`

@@ -201,7 +201,7 @@ export function PortfolioViewer() {
               </TooltipTrigger>
               <TooltipContent>
                 Renderiza tu CV maestro en un sitio HTML local (un borrador de arranque). Nunca se
-                publica; queda solo en tu Mac. Para algo pulido, usa el prompt de arriba.
+                publica; queda solo en tu equipo. Para algo pulido, usa el prompt de arriba.
               </TooltipContent>
             </Tooltip>
             {portfolio && (

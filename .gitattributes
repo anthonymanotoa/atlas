@@ -1,0 +1,17 @@
+# LF everywhere, on every platform. A Windows-side clone with core.autocrlf=true would
+# otherwise checkout CRLF and break scripts/*.sh under WSL bash.
+* text=auto eol=lf
+*.sh text eol=lf
+
+# Defensive: keep future binary assets untouched (none are tracked today).
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.otf binary
+*.pdf binary
+*.docx binary

@@ -93,6 +93,26 @@ def version() -> None:
     console.print(f"Atlas v{__version__}")
 
 
+def _wsl_repo_warning() -> str | None:
+    """On WSL, warn when the repo lives on a Windows drive (/mnt/*): drvfs breaks SQLite
+    locking and slows IO — the repo belongs in the Linux filesystem (e.g. ~/dev/atlas)."""
+    from pathlib import Path
+
+    try:
+        osrelease = Path("/proc/sys/kernel/osrelease").read_text()
+    except OSError:
+        return None  # not Linux/WSL
+    if "microsoft" not in osrelease.lower():
+        return None
+    if str(paths.REPO_ROOT).startswith("/mnt/"):
+        return (
+            f"WSL detectado y el repo vive en {paths.REPO_ROOT} (disco de Windows). "
+            "Muévelo al filesystem de Linux (p. ej. ~/dev/atlas): SQLite y los watchers "
+            "no son confiables sobre /mnt/*."
+        )
+    return None
+
+
 @app.command()
 def doctor() -> None:
     """Check the environment + the three $0 safeguards."""
@@ -121,6 +141,9 @@ def doctor() -> None:
     console.print(f"[green]✓[/] Active profile: {paths.PROFILE_ID or 'legacy'}")
     console.print(f"[green]✓[/] DB path: {paths.DB_PATH}")
     _warn_if_template_cv(console)
+    wsl_warn = _wsl_repo_warning()
+    if wsl_warn:
+        console.print(f"[yellow]![/] {wsl_warn}")
     console.print("\n[bold]Manual checklist for a true $0 guarantee:[/]")
     console.print(
         "  1. Run the brain as a Claude [bold]Cowork/Desktop scheduled task[/] (never `claude -p`)."
@@ -763,18 +786,39 @@ def portfolio_list() -> None:
         console.print(f"  [bold]{r['version']}[/] → {r['path_html']}")
 
 
+def _open_local_file(path: str) -> bool:
+    """Open a local file with the platform's default handler (best-effort).
+
+    macOS → `open`; Linux/WSL → `wslview` (WSL bridge to the Windows browser,
+    from the `wslu` package) or `xdg-open`, whichever exists. Returns False when
+    no opener is available so the caller can print the path instead.
+    """
+    import shutil
+    import subprocess
+    import sys
+
+    if sys.platform == "darwin":
+        subprocess.run(["open", path], check=False)  # noqa: S607 — local macOS open
+        return True
+    for cmd in ("wslview", "xdg-open"):
+        if shutil.which(cmd):
+            subprocess.run([cmd, path], check=False)  # noqa: S603 — local file opener
+            return True
+    return False
+
+
 @portfolio_app.command("open")
 def portfolio_open() -> None:
     """Open the latest portfolio in your browser (local file)."""
-    import subprocess
-
     with _db() as db:
         p = db.latest_portfolio()
     if not p:
         console.print("Sin portafolios. Corre `atlas portfolio generate`.")
         raise typer.Exit(1)
-    subprocess.run(["open", p["path_html"]], check=False)  # noqa: S607 — local macOS open
-    console.print(f"Abriendo {p['path_html']}")
+    if _open_local_file(p["path_html"]):
+        console.print(f"Abriendo {p['path_html']}")
+    else:
+        console.print(f"No encontré con qué abrirlo — ábrelo manualmente: {p['path_html']}")
 
 
 @portfolio_app.command("research")

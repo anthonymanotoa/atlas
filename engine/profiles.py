@@ -4,7 +4,7 @@ A profile is a self-contained mini-Atlas root under ``profiles/<id>/{config,prof
 The registry (``profiles/registry.json``) lists the profiles and records the active one.
 
 There is NO authentication here — this is profile *selection* and data *isolation*, not
-security. Atlas binds to 127.0.0.1 and is meant for a few trusted users on one Mac.
+security. Atlas binds to 127.0.0.1 and is meant for a few trusted users on one machine.
 """
 
 from __future__ import annotations

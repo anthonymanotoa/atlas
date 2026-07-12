@@ -2,7 +2,7 @@
 
 Every successful brain run stamps `last_success_ts`. If the gap since the last success
 exceeds the threshold, the dashboard shows an 'I was down' banner so a silently-skipped
-schedule (sleeping Mac / closed app) never goes unnoticed.
+schedule (sleeping machine / closed app) never goes unnoticed.
 """
 
 from __future__ import annotations
