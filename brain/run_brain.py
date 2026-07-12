@@ -144,9 +144,10 @@ def plan_and_enqueue(db: DB, limit: int = PLANNER_CAP) -> dict:
     already_pending = any(p["type"] == "portfolio_research" for p in pending)
     if not already_pending:
         last_review = parse_dt_utc(db.last_peer_review())
-        stale = last_review is None or (
-            datetime.now(UTC) - last_review
-        ).days >= PORTFOLIO_REVIEW_MAX_AGE_DAYS
+        stale = (
+            last_review is None
+            or (datetime.now(UTC) - last_review).days >= PORTFOLIO_REVIEW_MAX_AGE_DAYS
+        )
         if stale:
             intent_queue.enqueue(db, "portfolio_research")
             enqueued["portfolio_research"] += 1
@@ -325,12 +326,8 @@ def write_morning_brief(db: DB, summary: dict, language: str = "en") -> None:
     stale = intent_queue.stale_intents(db)
     if stale:
         lines += ["", "## 🧟 Intents atascados (>48h sin drenar)"]
-        lines += [
-            f"- `{i['id']}` · {i['type']} · {i['age_hours']:.0f}h" for i in stale
-        ]
-    flaky_sources = [
-        s for s in classify_sources(db) if s["state"] in ("ok_empty", "unconfigured")
-    ]
+        lines += [f"- `{i['id']}` · {i['type']} · {i['age_hours']:.0f}h" for i in stale]
+    flaky_sources = [s for s in classify_sources(db) if s["state"] in ("ok_empty", "unconfigured")]
     if flaky_sources:
         lines += ["", "## 🔎 Fuentes sospechosas (revisa credenciales/filtros)"]
         lines += [f"- {s['source']} ({s['state']}): {s['hint']}" for s in flaky_sources]

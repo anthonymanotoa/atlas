@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import yaml
@@ -38,7 +38,7 @@ def promote_draft(profile_root: Path) -> Path:
         raise PromoteError("El draft sigue con identidad de plantilla: " + "; ".join(findings))
     if not draft.get("experience"):
         raise PromoteError("El draft no tiene experiencia (experience) — mapéala primero.")
-    ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    ts = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     if master_path.exists():
         backup_path = prof / f"master_cv.backup-{ts}.yaml"
         suffix = 2

@@ -273,7 +273,7 @@ def _cv_template_findings() -> list[str]:
     """Placeholder findings on the master CV (empty once it's the user's real CV)."""
     try:
         return find_placeholders(load_master_cv())
-    except Exception:
+    except Exception:  # noqa: BLE001 — a broken/missing CV is not this endpoint's job
         return []
 
 

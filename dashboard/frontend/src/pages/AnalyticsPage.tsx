@@ -59,7 +59,9 @@ function RateBreakdown({ title, rows }: { title: string; rows: RateRow[] }) {
     <Card className="p-4">
       <div className="mb-3 text-caption text-muted-foreground uppercase">{title}</div>
       {rows.length === 0 ? (
-        <div className="text-[0.78rem] text-muted-foreground">Sin aplicaciones atribuibles todavía.</div>
+        <div className="text-[0.78rem] text-muted-foreground">
+          Sin aplicaciones atribuibles todavía.
+        </div>
       ) : (
         <ul className="space-y-2.5">
           {rows.map((r) => (

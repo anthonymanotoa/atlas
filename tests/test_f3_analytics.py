@@ -237,7 +237,12 @@ def test_analytics_payload_shape(db: DB):
 
 # ── Task 19: outcome calibration — response rate por canal y por versión de CV ─────────────
 def _mk_outreach(
-    db: DB, n: int, *, channel: str = "email", ats_target: str = "greenhouse", responded: bool = False
+    db: DB,
+    n: int,
+    *,
+    channel: str = "email",
+    ats_target: str = "greenhouse",
+    responded: bool = False,
 ) -> str:
     """Un job APLICADO con un mensaje ENVIADO (channel) y una CV tailoreada empaquetada en
     `applications` (ats_target) — los dos insumos que Task 19 necesita para atribuir canal y

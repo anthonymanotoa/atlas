@@ -39,7 +39,9 @@ def test_contact_discovery_is_a_registered_intent_type():
 
 
 def test_context_includes_company_role_and_existing_contacts(db):
-    db.add_contact(name="Prior Contact", company="Acme Robotics", role="connection", source="manual")
+    db.add_contact(
+        name="Prior Contact", company="Acme Robotics", role="connection", source="manual"
+    )
     jid = _job(db)
     iid = intents.enqueue(db, "contact_discovery", {"role_title": "Hiring Manager"}, job_id=jid)
     ctx = intents.context_for(db, iid)

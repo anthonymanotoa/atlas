@@ -617,9 +617,7 @@ def _write_contact_discovery(db: DB, intent: dict, result: dict) -> str:
         if c.get("confidence") not in _CONTACT_CONFIDENCES:
             raise ValueError(f"every contact needs confidence ∈ {_CONTACT_CONFIDENCES}")
     draft_message = result.get("draft_message")
-    if draft_message is not None and not (
-        isinstance(draft_message, str) and draft_message.strip()
-    ):
+    if draft_message is not None and not (isinstance(draft_message, str) and draft_message.strip()):
         raise ValueError("draft_message must be a non-empty string when present")
 
     job = db.get_job(intent["job_id"]) or {}

@@ -68,7 +68,14 @@ function analytics(overrides: Partial<Record<string, unknown>> = {}) {
       { key: "linkedin", applied: 3, responded: 1, n: 3, response_rate: null, insufficient: true },
     ],
     response_rate_by_cv_version: [
-      { key: "greenhouse", applied: 5, responded: 4, n: 5, response_rate: 0.8, insufficient: false },
+      {
+        key: "greenhouse",
+        applied: 5,
+        responded: 4,
+        n: 5,
+        response_rate: 0.8,
+        insufficient: false,
+      },
     ],
     recommendations: [
       {

@@ -25,15 +25,13 @@ if TYPE_CHECKING:
 UNCONFIGURED_PREFIX = "unconfigured:"
 
 
-def classify_sources(db: "DB", empty_streak: int = 3) -> list[dict]:
+def classify_sources(db: DB, empty_streak: int = 3) -> list[dict]:
     """Return one classification dict per known source.
 
     Each dict: ``{"source", "state", "hint", "last_run", "last_count"}`` with
     ``state`` in ``{"ok", "ok_empty", "unconfigured", "error"}``.
     """
-    sources = [
-        r["source"] for r in db.conn.execute("SELECT DISTINCT source FROM source_health")
-    ]
+    sources = [r["source"] for r in db.conn.execute("SELECT DISTINCT source FROM source_health")]
     out = []
     for source in sources:
         rows = [

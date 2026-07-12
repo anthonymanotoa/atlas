@@ -57,9 +57,7 @@ def collapse_variants(jobs: list[dict]) -> list[dict]:
         members = groups[key]
         # Highest fit wins; ties broken by most recent discovered_at.
         canonical = max(members, key=lambda j: (_fit(j), _discovered(j)))
-        variant_ids = [canonical["id"]] + [
-            m["id"] for m in members if m is not canonical
-        ]
+        variant_ids = [canonical["id"]] + [m["id"] for m in members if m is not canonical]
         result = dict(canonical)
         result["variant_count"] = len(members)
         result["variant_ids"] = variant_ids

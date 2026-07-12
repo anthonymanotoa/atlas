@@ -117,9 +117,7 @@ def test_apply_result_missing_peer_name_raises_and_stays_running(db):
     iid = intents.enqueue(db, "portfolio_research", {})
     intents.mark_running(db, iid)
     with pytest.raises(ValueError):
-        intents.apply_result(
-            db, iid, {"portfolios": [{"peer_portfolio_url": "https://x.example"}]}
-        )
+        intents.apply_result(db, iid, {"portfolios": [{"peer_portfolio_url": "https://x.example"}]})
     assert intents.get_intent(db, iid)["status"] == "running"
     assert db.list_peer_portfolios() == []
 
@@ -143,9 +141,7 @@ def test_apply_result_empty_portfolios_list_raises(db):
 
 # ── DB.upsert_peer_portfolio (Task 16 Part B) ───────────────────────────────────
 def test_db_upsert_peer_portfolio_inserts_new_row(db):
-    pid = db.upsert_peer_portfolio(
-        peer_name="New Peer", peer_portfolio_url="https://new.example"
-    )
+    pid = db.upsert_peer_portfolio(peer_name="New Peer", peer_portfolio_url="https://new.example")
     row = next(p for p in db.list_peer_portfolios() if p["id"] == pid)
     assert row["peer_name"] == "New Peer"
     assert row["reviewed_at"]
@@ -159,7 +155,9 @@ def test_db_upsert_peer_portfolio_updates_existing_row_by_url(db):
         peer_name="New Name", peer_portfolio_url="https://same.example", role_match="New"
     )
     assert pid1 == pid2
-    rows = [p for p in db.list_peer_portfolios() if p["peer_portfolio_url"] == "https://same.example"]
+    rows = [
+        p for p in db.list_peer_portfolios() if p["peer_portfolio_url"] == "https://same.example"
+    ]
     assert len(rows) == 1
     assert rows[0]["peer_name"] == "New Name"
     assert rows[0]["role_match"] == "New"

@@ -14,7 +14,8 @@ def _seed(db, source, runs):  # runs: list[(ok, count, error)]
 
 
 def test_ok_empty_streak_is_flagged():
-    db = DB(":memory:"); db.init_schema()
+    db = DB(":memory:")
+    db.init_schema()
     _seed(db, "adzuna", [(1, 0, None)] * 3)
     (row,) = [r for r in classify_sources(db) if r["source"] == "adzuna"]
     assert row["state"] == "ok_empty"
@@ -22,14 +23,16 @@ def test_ok_empty_streak_is_flagged():
 
 
 def test_unconfigured_error_marker():
-    db = DB(":memory:"); db.init_schema()
+    db = DB(":memory:")
+    db.init_schema()
     _seed(db, "adzuna", [(0, 0, "unconfigured: missing ADZUNA_APP_ID")])
     (row,) = [r for r in classify_sources(db) if r["source"] == "adzuna"]
     assert row["state"] == "unconfigured"
 
 
 def test_ok_with_data():
-    db = DB(":memory:"); db.init_schema()
+    db = DB(":memory:")
+    db.init_schema()
     _seed(db, "greenhouse", [(1, 12, None)] * 3)
     (row,) = [r for r in classify_sources(db) if r["source"] == "greenhouse"]
     assert row["state"] == "ok"
@@ -47,8 +50,9 @@ def test_atlas_status_cli_colorizes_all_source_health_states(tmp_path, monkeypat
     app. A wide, colorless Rich console is swapped in too, so CliRunner's non-tty output
     doesn't wrap/truncate the hint column and break substring assertions.
     """
-    import engine.cli as cli
     from rich.console import Console
+
+    import engine.cli as cli
 
     db_path = tmp_path / "status_test.db"
     db = DB(str(db_path))

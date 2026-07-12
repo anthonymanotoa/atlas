@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from engine.config import CompanyTarget
 from engine.db.models import DB
-from engine.discovery.runner import partition_demo, discover
+from engine.discovery.runner import discover, partition_demo
 
 
 def test_partition_excludes_demo_by_default():

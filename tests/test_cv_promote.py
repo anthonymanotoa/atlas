@@ -6,7 +6,11 @@ import yaml
 from engine.cv.promote import PromoteError, promote_draft
 
 REAL = {
-    "basics": {"name": "Jane Roe", "email": "jane@gmail.com", "linkedin": "linkedin.com/in/janeroe"},
+    "basics": {
+        "name": "Jane Roe",
+        "email": "jane@gmail.com",
+        "linkedin": "linkedin.com/in/janeroe",
+    },
     "experience": [{"company": "Acme", "title": "Data Analyst", "start": "2022-01"}],
 }
 
@@ -58,7 +62,7 @@ def test_promote_twice_keeps_both_backups(tmp_path, monkeypatch):
     # simulating two promotions within the same UTC second.
     import engine.cv.promote as promote_mod
 
-    frozen = promote_mod.datetime(2026, 1, 1, 12, 0, 0, tzinfo=promote_mod.timezone.utc)
+    frozen = promote_mod.datetime(2026, 1, 1, 12, 0, 0, tzinfo=promote_mod.UTC)
 
     class _FrozenDatetime(promote_mod.datetime):
         @classmethod
@@ -83,6 +87,5 @@ def test_promote_twice_keeps_both_backups(tmp_path, monkeypatch):
 
     names = sorted(yaml.safe_load(b.read_text())["basics"]["name"] for b in backups)
     assert names == ["Ada Lovelace", "Jane Roe"], (
-        "one of the two backups was clobbered by the other promotion; "
-        f"got {names}"
+        f"one of the two backups was clobbered by the other promotion; got {names}"
     )

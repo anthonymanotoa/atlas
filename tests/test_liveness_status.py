@@ -29,8 +29,9 @@ def test_status_reports_expired_count_and_last_sweep(tmp_path, monkeypatch):
     monkeypatch `engine.cli._db` at a throwaway on-disk DB, and swap in a wide,
     colorless Rich console so CliRunner's non-tty output doesn't wrap/truncate.
     """
-    import engine.cli as cli
     from rich.console import Console
+
+    import engine.cli as cli
 
     db_path = tmp_path / "liveness_status.db"
     db = DB(str(db_path))
@@ -57,8 +58,9 @@ def test_status_reports_expired_count_and_last_sweep(tmp_path, monkeypatch):
 
 def test_status_reports_never_swept_when_no_liveness_checks(tmp_path, monkeypatch):
     """No job has ever been liveness-checked → status says so instead of a blank/None."""
-    import engine.cli as cli
     from rich.console import Console
+
+    import engine.cli as cli
 
     db_path = tmp_path / "liveness_status_never.db"
     db = DB(str(db_path))

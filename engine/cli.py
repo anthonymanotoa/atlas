@@ -245,7 +245,15 @@ def top(
             reverse=True,
         )[:n]
     table = Table(title=f"Top {state}" + ("" if show_all else "  (variantes colapsadas)"))
-    for col in ("PRIORIDAD", "FIT (criterios)", "CV MATCH (keywords)", "title", "company", "remote", "id"):
+    for col in (
+        "PRIORIDAD",
+        "FIT (criterios)",
+        "CV MATCH (keywords)",
+        "title",
+        "company",
+        "remote",
+        "id",
+    ):
         table.add_column(col)
     for j in jobs:
         rem = {1: "✓", 0: "✗"}.get(j["is_remote"], "?")
@@ -824,7 +832,9 @@ def portfolio_open() -> None:
 @portfolio_app.command("research")
 def portfolio_research(
     enqueue: bool = typer.Option(
-        False, "--enqueue", help="Encola el intent portfolio_research (el brain investiga peers vivos)."
+        False,
+        "--enqueue",
+        help="Encola el intent portfolio_research (el brain investiga peers vivos).",
     ),
 ) -> None:
     """Muestra las referencias curadas + los peers descubiertos (con fecha de research)."""

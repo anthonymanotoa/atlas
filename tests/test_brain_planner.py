@@ -68,9 +68,7 @@ def test_plan_skips_company_research_when_research_already_exists(db: DB):
     from engine.normalize import norm_company
 
     job_id = _shortlisted_job(db, company="Beta Inc")
-    db.add_company_research(
-        norm_company("Beta Inc"), job_id=job_id, summary="Already researched."
-    )
+    db.add_company_research(norm_company("Beta Inc"), job_id=job_id, summary="Already researched.")
 
     result = plan_and_enqueue(db, limit=5)
 
