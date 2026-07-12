@@ -74,12 +74,40 @@ def build_outreach(db: DB, job_id: str, language: str | None = None) -> list[Dra
     return drafts
 
 
+def _write_review(job: dict, cv_version: dict) -> None:
+    """Best-effort: run the deterministic CV review and write `review.md` next to the CV's
+    DOCX — this used to only happen in `atlas tailor`/`atlas prep` (engine/cli.py), so the web
+    `/api/jobs/{id}/prep` route and the daily brain (both of which prepare CVs by calling
+    write_package directly) never produced a review_report for job detail. Wrapped in
+    try/except: a review-write failure must never break packaging."""
+    path_docx = cv_version.get("path_docx")
+    if not path_docx:
+        return
+    try:
+        from engine.cv.review_report import build_review
+
+        master = load_master_cv()
+        coverage = {
+            "coverage": cv_version.get("keyword_coverage"),
+            "matched": json.loads(cv_version.get("matched_keywords") or "[]"),
+            "missing": json.loads(cv_version.get("missing_keywords") or "[]"),
+        }
+        docx_path = Path(path_docx)
+        pdf_path = Path(cv_version["path_pdf"]) if cv_version.get("path_pdf") else None
+        review = build_review(docx_path, pdf_path, master, job, coverage)
+        (docx_path.parent / "review.md").write_text(review.markdown)
+    except Exception:  # noqa: BLE001 — review.md is a nice-to-have, never break packaging
+        pass
+
+
 def write_package(db: DB, job_id: str, language: str = "en") -> Path:
     """Write the human-facing 'exactly what to send' package (Spanish) + mark ready."""
     job = db.get_job(job_id)
     method = _apply_method(job)
     versions = db.cv_versions_for(job_id)
     cv = versions[0] if versions else {}
+    if cv:
+        _write_review(job, cv)
     msgs = db.messages_for(job_id)
     refs = match_referrals(db, job.get("company", ""))
 

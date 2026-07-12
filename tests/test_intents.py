@@ -695,10 +695,15 @@ def test_requeue_error_intent_clears_error_and_reenqueues(db):
     iid = intents.enqueue(db, "upskill_report", {})
     intents.mark_running(db, iid)
     intents.mark_error(db, iid, "boom")
+    assert intents.get_intent(db, iid)["completed_at"] is not None  # mark_error sets it
     row = intents.requeue(db, iid)
     assert row["status"] == "pending"
     assert row["error"] is None
+    # Regression: requeue used to leave a stale completed_at from the earlier error/done
+    # lifecycle, making a freshly-requeued (pending) intent look already finished.
+    assert row["completed_at"] is None
     assert intents.get_intent(db, iid)["status"] == "pending"
+    assert intents.get_intent(db, iid)["completed_at"] is None
 
 
 def test_requeue_running_intent_becomes_pending(db):
@@ -743,7 +748,7 @@ def test_cli_intents_requeue_done_exits_nonzero(cli_db):
     intents.mark_running(cli_db, iid)
     intents.mark_done(cli_db, iid, "x:1")
     res = _run(["intents", "requeue", iid])
-    assert res.exit_code == 1
+    assert res.exit_code == 2  # consistent with sibling intents commands (complete/fail/etc.)
     assert intents.get_intent(cli_db, iid)["status"] == "done"
 
 

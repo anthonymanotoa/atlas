@@ -199,3 +199,37 @@ def test_review_md_lands_next_to_docx_and_pdf_like_the_cli_does(tmp_path, monkey
     assert review_path.exists()
     assert review_path.parent == res.docx_path.parent == res.pdf_path.parent
     assert "Texto extraíble" in review_path.read_text()
+
+
+def test_write_package_writes_review_md_too(tmp_path, monkeypatch):
+    """Regression: write_package() (called by the web route POST /api/jobs/{id}/prep and the
+    daily brain in brain/run_brain.py — the DOMINANT prep paths, not `atlas tailor`/`prep`)
+    used to never write review.md, since build_review only lived in engine/cli.py. Both those
+    call sites go through write_package, so review.md must land there too."""
+    import engine.paths as paths
+    from engine.cv.build import build_for_job
+    from engine.outreach.build import write_package
+
+    monkeypatch.setattr(paths, "OUTBOX_DIR", tmp_path / "outbox")
+    master_path = tmp_path / "master_cv.yaml"
+    master_path.write_text(yaml.safe_dump(MASTER, allow_unicode=True))
+    monkeypatch.setattr(paths, "MASTER_CV_PATH", master_path)
+
+    with DB(tmp_path / "t.db") as db:
+        db.upsert_job(
+            Job(
+                source="greenhouse",
+                source_job_id="1",
+                title="Senior Backend Engineer",
+                company="Acme Inc",
+                url="https://x/1",
+                description="Python, AWS and Kubernetes experience needed.",
+            )
+        )
+        job_id = db.list_jobs()[0]["id"]
+        build_for_job(db, job_id, language="en")
+        pkg_path = write_package(db, job_id, language="en")
+
+    review_path = pkg_path.parent / "review.md"
+    assert review_path.exists()
+    assert "Texto extraíble" in review_path.read_text()

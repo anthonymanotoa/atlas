@@ -90,7 +90,7 @@ CREATE TABLE IF NOT EXISTS messages (
     job_id         TEXT REFERENCES jobs(id) ON DELETE CASCADE,
     contact_id     INTEGER REFERENCES contacts(id) ON DELETE SET NULL,
     channel        TEXT,                       -- email | linkedin_note | linkedin_inmail | referral
-    kind           TEXT,                       -- cover_letter | recruiter | hiring_manager | referral_ask | follow_up | breakup
+    kind           TEXT,                       -- cover_letter | recruiter | hiring_manager | referral_ask | referral_or_intro | follow_up | breakup
     variant        TEXT,
     language       TEXT DEFAULT 'en',
     subject        TEXT,

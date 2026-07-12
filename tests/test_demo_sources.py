@@ -42,3 +42,27 @@ def test_discover_skips_demo_and_records_it():
 
     assert summary["skipped_demo"] == ["DemoCo"]
     assert not any("DemoCo" in label for label in summary["sources"])
+
+
+def test_discover_reports_unconfigured_adzuna_in_summary(monkeypatch):
+    """Regression: the adzuna-unconfigured branch used to call log_source_health but never
+    touch summary["sources"]/summary["errors"], so `atlas discover`'s printed table silently
+    omitted adzuna instead of showing it as unconfigured."""
+    monkeypatch.delenv("ADZUNA_APP_ID", raising=False)
+    monkeypatch.delenv("ADZUNA_APP_KEY", raising=False)
+    db = DB(":memory:")
+    db.init_schema()
+
+    summary = discover(
+        db,
+        sources_cfg={"adzuna": {"enabled": True}},
+        companies=[],
+        only={"adzuna"},
+    )
+
+    assert "adzuna" in summary["sources"]
+    assert summary["sources"]["adzuna"]["ok"] is False
+    assert summary["sources"]["adzuna"]["error"] == (
+        "unconfigured: missing ADZUNA_APP_ID/ADZUNA_APP_KEY"
+    )
+    assert any("adzuna" in e for e in summary["errors"])

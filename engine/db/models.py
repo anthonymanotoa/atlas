@@ -551,7 +551,17 @@ class DB:
         return [dict(r) for r in rows]
 
     def contacts_for_company(self, company_norm: str) -> list[dict]:
-        return self.all_contacts()  # fuzzy matching happens in referrals layer
+        """Contacts whose company fuzzy-matches `company_norm`. Reuses the exact fuzzy
+        matching engine.referrals.connections.match_referrals already uses for job↔contact
+        company matching (same MATCH_THRESHOLD/rapidfuzz call — see engine/analytics.py's
+        job-detail `suggested_contacts`), so a caller like intents.py's contact_discovery
+        context is genuinely scoped to one company instead of every contact ever discovered.
+        Local import: avoids a models.py <-> connections.py import cycle (connections.py
+        imports DB)."""
+        from engine.referrals.connections import match_referrals
+
+        matched = match_referrals(self, company_norm, contacts=self.all_contacts())
+        return [{k: v for k, v in c.items() if k != "_match"} for c in matched]
 
     # ── company research (F4 Task 14) ───────────────────────────────────────
     def add_company_research(

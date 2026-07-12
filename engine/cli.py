@@ -61,17 +61,19 @@ def _db():
     return DB()
 
 
-def _warn_if_template_cv(console: Console) -> bool:
+def _warn_if_template_cv(console: Console, cv: dict | None = None) -> bool:
     """Print a prominent warning if the active master CV is still the seed template.
 
     Never blocks: only warns. Returns True iff a warning was printed (useful for
-    `doctor`, which folds this into its report)."""
+    `doctor`, which folds this into its report). Pass a pre-loaded `cv` (e.g. from a caller
+    that already called `load_master_cv()`) to avoid re-parsing the file."""
     from engine.cv.placeholder import find_placeholders
 
-    try:
-        cv = load_master_cv()
-    except Exception:  # noqa: BLE001 — a broken/missing CV is not this helper's job
-        return False
+    if cv is None:
+        try:
+            cv = load_master_cv()
+        except Exception:  # noqa: BLE001 — a broken/missing CV is not this helper's job
+            return False
     findings = find_placeholders(cv)
     if findings:
         console.print(
@@ -257,11 +259,11 @@ def tailor(
     from engine.cv.match import match_score
     from engine.cv.review_report import build_review
 
-    _warn_if_template_cv(console)
+    master = load_master_cv()
+    _warn_if_template_cv(console, cv=master)
     with _db() as db:
         res = build_for_job(db, job_id, language=language, make_pdf=pdf)
         job = db.get_job(job_id) or {}
-    master = load_master_cv()
     m = match_score(job, master, load_ontology())
     console.print(f"[bold]CV built[/] for {job_id}  (ATS: {res.ats_target})")
     console.print(f"  DOCX: {res.docx_path}")
@@ -358,25 +360,16 @@ def prep(
 ) -> None:
     """Full prep for one job: tailor CV → draft outreach → write the send-ready package."""
     from engine.cv.build import build_for_job
-    from engine.cv.review_report import build_review
     from engine.outreach.build import build_outreach, write_package
 
     _warn_if_template_cv(console)
-    master = load_master_cv()
     with _db() as db:
         cv = build_for_job(db, job_id, language=language)
         build_outreach(db, job_id, language=language)
-        pkg = write_package(db, job_id, language=language)
-        job = db.get_job(job_id) or {}
+        pkg = write_package(db, job_id, language=language)  # also writes review.md (Important 1)
     console.print(f"[bold green]Ready[/]: {job_id}")
     console.print(f"  Coverage {cv.coverage:.0%} · parse {'✓' if cv.parse_ok else '✗'}")
     console.print(f"  Package: {pkg}")
-    coverage = {"coverage": cv.coverage, "matched": cv.matched, "missing": cv.missing}
-    review = build_review(cv.docx_path, cv.pdf_path, master, job, coverage)
-    (cv.docx_path.parent / "review.md").write_text(review.markdown)
-    console.print("  Revisión determinista:")
-    for c in review.checks:
-        console.print(f"    {'✅' if c.ok else '⚠️ '} {c.name}: {c.detail}")
 
 
 @app.command(name="import-connections")
@@ -748,10 +741,11 @@ def portfolio_generate(
 
     from engine.portfolio.builder import generate_portfolio
 
-    _warn_if_template_cv(console)
+    master = load_master_cv()
+    _warn_if_template_cv(console, cv=master)
     version = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
     with _db() as db:
-        path = generate_portfolio(load_master_cv(), version=version, include_github=github)
+        path = generate_portfolio(master, version=version, include_github=github)
         db.add_portfolio(version=version, path_html=str(path))
     console.print(f"[green]✓[/] Portafolio → {path}")
     console.print("[dim]Local y privado. Ábrelo con `atlas portfolio open`.[/]")
@@ -962,7 +956,7 @@ def intents_requeue(intent_id: str) -> None:
             eng_intents.requeue(db, intent_id)
         except ValueError as e:
             console.print(f"[red]✗[/] {e}")
-            raise typer.Exit(1) from None
+            raise typer.Exit(2) from None
     console.print(f"[green]✓[/] {intent_id} → pending (requeued)")
 
 

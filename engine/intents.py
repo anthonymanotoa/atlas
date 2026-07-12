@@ -146,9 +146,16 @@ def stale_intents(db: DB, max_age_hours: float = 48.0) -> list[dict]:
 
 
 def requeue(db: DB, intent_id: str) -> dict:
-    """Re-enqueue a stuck `error`/`running` intent as `pending`, clearing its error."""
+    """Re-enqueue a stuck `error`/`running` intent as `pending`, clearing its error.
+
+    Also clears `completed_at`: a previously-errored intent may carry a stale completed_at
+    from an earlier lifecycle, which would otherwise make a freshly-requeued (pending) intent
+    look already finished."""
     _require(db, intent_id, ("error", "running"))
-    db.conn.execute("UPDATE intents SET status='pending', error=NULL WHERE id=?", (intent_id,))
+    db.conn.execute(
+        "UPDATE intents SET status='pending', error=NULL, completed_at=NULL WHERE id=?",
+        (intent_id,),
+    )
     db.conn.commit()
     return get_intent(db, intent_id)
 

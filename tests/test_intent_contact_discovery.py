@@ -198,6 +198,20 @@ def test_apply_result_contact_missing_confidence_raises_and_stays_running(db):
     assert not any(c["name"] == "No Confidence Guy" for c in contacts)
 
 
+def test_contacts_for_company_excludes_other_companies(db):
+    """Regression: contacts_for_company used to ignore its argument and return EVERY contact
+    in the DB, so the contact_discovery intent's "don't re-propose duplicates" context grew
+    unbounded with contacts from unrelated companies."""
+    db.add_contact(name="Alice A", company="Acme Robotics", role="connection", source="manual")
+    db.add_contact(name="Bob B", company="Zeta Systems", role="connection", source="manual")
+
+    contacts = db.contacts_for_company(norm_company("Acme Robotics"))
+
+    names = {c["name"] for c in contacts}
+    assert "Alice A" in names
+    assert "Bob B" not in names
+
+
 def test_apply_result_contact_bad_confidence_value_raises(db):
     jid = _job(db, source_job_id="4", company="Delta LLC")
     iid = intents.enqueue(db, "contact_discovery", {}, job_id=jid)

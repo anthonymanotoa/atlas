@@ -140,9 +140,19 @@ def discover(
     # empty fetch when ADZUNA_APP_ID/ADZUNA_APP_KEY are missing — see health.py).
     if want("adzuna") and cfg.get("adzuna", {}).get("enabled", True):
         if not adzuna.configured():
-            db.log_source_health(
-                "adzuna", False, 0, "unconfigured: missing ADZUNA_APP_ID/ADZUNA_APP_KEY", 0
-            )
+            err = "unconfigured: missing ADZUNA_APP_ID/ADZUNA_APP_KEY"
+            db.log_source_health("adzuna", False, 0, err, 0)
+            # Mirror the shape `store()` builds so `atlas discover`'s printed table (and
+            # summary["errors"]) don't silently drop adzuna when it's just unconfigured.
+            summary["sources"]["adzuna"] = {
+                "ok": False,
+                "fetched": 0,
+                "new": 0,
+                "seen": 0,
+                "ms": 0,
+                "error": err,
+            }
+            summary["errors"].append(f"adzuna: {err}")
         else:
             store("adzuna", lambda: adzuna.fetch(cfg["adzuna"], terms, client))
 
