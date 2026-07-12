@@ -391,6 +391,17 @@ export type Recommendation = {
   action_type: "set_criteria" | "block_company" | "none";
   payload: Record<string, unknown>;
 };
+// Task 19 — calibración de outcomes: response rate por canal de outreach y por variante de
+// CV, con muestra mínima honesta (n<5 ⇒ response_rate=null + insufficient=true, nunca un %
+// engañoso). Ver engine/analytics.py:response_rate_by_channel / response_rate_by_cv_version.
+export type RateRow = {
+  key: string;
+  applied: number;
+  responded: number;
+  n: number;
+  response_rate: number | null;
+  insufficient: boolean;
+};
 export type Analytics = {
   funnel: FunnelStage[];
   score_floor: number | null;
@@ -400,6 +411,8 @@ export type Analytics = {
   by_role_term: ConversionRow[];
   response_times: ResponseTimes;
   recommendations: Recommendation[];
+  response_rate_by_channel: RateRow[];
+  response_rate_by_cv_version: RateRow[];
 };
 
 async function get<T>(url: string): Promise<T> {

@@ -173,6 +173,122 @@ def conversion_by(db: DB, dim: str, criteria: Criteria | None = None) -> list[di
     return sorted(groups.values(), key=lambda g: -g["applied"])
 
 
+MIN_SAMPLE = 5  # Task 19: nunca mostrar un % con menos muestras que esto — sesga el criterio.
+
+
+def _finalize_rate_groups(groups: dict[str, dict]) -> list[dict]:
+    """Cierra {key, applied, responded} → agrega n/response_rate/insufficient (Task 19).
+
+    n < MIN_SAMPLE ⇒ response_rate=None + insufficient=True, NUNCA un porcentaje engañoso
+    tipo "0%" sobre 1 o 2 muestras. Ordenado por `applied` desc, igual que `conversion_by`.
+    """
+    out = []
+    for g in groups.values():
+        n = g["applied"]
+        insufficient = n < MIN_SAMPLE
+        g["n"] = n
+        g["response_rate"] = None if insufficient else round(g["responded"] / n, 3)
+        g["insufficient"] = insufficient
+        out.append(g)
+    return sorted(out, key=lambda g: -g["applied"])
+
+
+def _channel_bucket(channel: str | None) -> str:
+    """Agrupa las variantes de `messages.channel` en buckets legibles para la UI."""
+    c = (channel or "").strip().lower()
+    if c == "email":
+        return "email"
+    if c.startswith("linkedin"):
+        return "linkedin"
+    if c == "referral":
+        return "referral"
+    return c or "unknown"
+
+
+def response_rate_by_channel(db: DB) -> list[dict]:
+    """Response rate por canal de outreach (email/linkedin/referral) — Task 19 calibración.
+
+    APROXIMACIÓN DOCUMENTADA: Atlas no registra "por cuál canal se envió LA aplicación" como
+    un campo propio — sólo qué mensajes de outreach (`messages.channel`) el usuario marcó
+    `state='sent'` para cada job (vía POST /api/messages/{id}/sent). Se atribuye cada job
+    APLICADO (mismo cohorte que `conversion_by`: `applied_at` no nulo) a TODOS los canales por
+    los que envió al menos un mensaje `sent` — un job que mandó email Y LinkedIn cuenta en
+    ambos buckets, porque no hay forma de saber cuál "ganó" la respuesta. Un job aplicado sin
+    ningún mensaje `sent` (aplicó fuera de Atlas, p.ej. directo en el ATS) no se puede atribuir
+    a ningún canal y se excluye — nunca se inventa una atribución.
+
+    positive/responded usa el mismo criterio que `conversion_by`: responded_at/interview_at/
+    offer_at en `jobs` (los timestamps del funnel, no application_outcomes).
+
+    Cada fila: {key, applied, responded, n, response_rate, insufficient}. n < MIN_SAMPLE (5)
+    ⇒ response_rate=None + insufficient=True.
+    """
+    jobs_by_id = {j["id"]: j for j in db.list_jobs() if j.get("applied_at")}
+    if not jobs_by_id:
+        return []
+    placeholders = ",".join("?" * len(jobs_by_id))
+    rows = db.conn.execute(
+        f"SELECT DISTINCT job_id, channel FROM messages "
+        f"WHERE state='sent' AND channel IS NOT NULL AND job_id IN ({placeholders})",
+        list(jobs_by_id),
+    ).fetchall()
+    groups: dict[str, dict] = {}
+    attributed: set[tuple[str, str]] = set()
+    for r in rows:
+        bucket = _channel_bucket(r["channel"])
+        dedup_key = (r["job_id"], bucket)
+        if dedup_key in attributed:
+            continue  # 2 mensajes 'sent' del mismo job al mismo bucket (p.ej. linkedin_note +
+        attributed.add(dedup_key)  # linkedin_inmail) cuentan una sola vez para ese job.
+        job = jobs_by_id[r["job_id"]]
+        g = groups.setdefault(bucket, {"key": bucket, "applied": 0, "responded": 0})
+        positive = bool(job.get("responded_at") or job.get("interview_at") or job.get("offer_at"))
+        g["applied"] += 1
+        g["responded"] += 1 if positive else 0
+    return _finalize_rate_groups(groups)
+
+
+def response_rate_by_cv_version(db: DB) -> list[dict]:
+    """Response rate por variante de CV tailoreada — Task 19 calibración.
+
+    Se agrupa por `cv_versions.ats_target` (p.ej. 'greenhouse', 'lever', o 'general' cuando no
+    se detectó ATS de destino) — NO por `cv_versions.id`. Cada fila de `cv_versions` es 1:1
+    con el job para el que se generó (una CV tailoreada por vacante), así que agrupar por id
+    nunca junta más de 1 muestra por grupo; `ats_target` es la dimensión que SÍ se repite entre
+    vacantes y permite calibrar "¿esta variante de CV consigue más respuestas?".
+
+    La atribución usa `applications.cv_version_id` — la versión efectivamente empaquetada para
+    postular vía `write_package` — unida al job por `job_id`. Un job aplicado sin fila en
+    `applications` (o sin `cv_version_id`) no se puede atribuir y se excluye.
+
+    positive/responded usa el mismo criterio que `conversion_by`/`response_rate_by_channel`.
+    Cada fila: {key, applied, responded, n, response_rate, insufficient}.
+    """
+    jobs = [j for j in db.list_jobs() if j.get("applied_at")]
+    if not jobs:
+        return []
+    job_ids = [j["id"] for j in jobs]
+    placeholders = ",".join("?" * len(job_ids))
+    rows = db.conn.execute(
+        f"""SELECT a.job_id AS job_id, cv.ats_target AS ats_target
+            FROM applications a JOIN cv_versions cv ON cv.id = a.cv_version_id
+            WHERE a.cv_version_id IS NOT NULL AND a.job_id IN ({placeholders})
+            GROUP BY a.job_id""",
+        job_ids,
+    ).fetchall()
+    ats_by_job = {r["job_id"]: (r["ats_target"] or "general") for r in rows}
+    groups: dict[str, dict] = {}
+    for j in jobs:
+        key = ats_by_job.get(j["id"])
+        if key is None:
+            continue  # aplicado sin CV empaquetada en `applications` → sin atribución posible
+        g = groups.setdefault(key, {"key": key, "applied": 0, "responded": 0})
+        positive = bool(j.get("responded_at") or j.get("interview_at") or j.get("offer_at"))
+        g["applied"] += 1
+        g["responded"] += 1 if positive else 0
+    return _finalize_rate_groups(groups)
+
+
 def response_times(db: DB) -> dict:
     """Días applied→responded (timestamps de jobs) + response_days confirmados (outcomes).
 
@@ -290,6 +406,8 @@ def analytics_payload(db: DB, criteria: Criteria) -> dict:
         "by_role_term": conversion_by(db, "role_term", criteria),
         "response_times": response_times(db),
         "recommendations": recommendations(db, criteria),
+        "response_rate_by_channel": response_rate_by_channel(db),
+        "response_rate_by_cv_version": response_rate_by_cv_version(db),
     }
 
 

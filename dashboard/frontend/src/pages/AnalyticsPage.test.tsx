@@ -63,6 +63,13 @@ function analytics(overrides: Partial<Record<string, unknown>> = {}) {
       },
     ],
     response_times: { n: 4, avg_days: 6.2, median_days: 5, p90_days: 12 },
+    response_rate_by_channel: [
+      { key: "email", applied: 6, responded: 3, n: 6, response_rate: 0.5, insufficient: false },
+      { key: "linkedin", applied: 3, responded: 1, n: 3, response_rate: null, insufficient: true },
+    ],
+    response_rate_by_cv_version: [
+      { key: "greenhouse", applied: 5, responded: 4, n: 5, response_rate: 0.8, insufficient: false },
+    ],
     recommendations: [
       {
         id: "threshold-62",
@@ -147,6 +154,16 @@ describe("AnalyticsPage", () => {
     // response times
     expect(screen.getByText("Tiempos de respuesta")).toBeInTheDocument();
     expect(screen.getByText("6.2")).toBeInTheDocument();
+  });
+
+  it("calibración de outcomes: canal suficiente muestra %, canal insuficiente muestra n sin señal", async () => {
+    api.overview.mockResolvedValue(overview());
+    renderRoutes("/analytics");
+    expect(await screen.findByText("Por canal de outreach")).toBeInTheDocument();
+    expect(screen.getByText("Por versión de CV")).toBeInTheDocument();
+    expect(screen.getByText("6 apl · 50% resp")).toBeInTheDocument();
+    expect(screen.getByText("n=3, aún sin señal")).toBeInTheDocument();
+    expect(screen.getByText("5 apl · 80% resp")).toBeInTheDocument();
   });
 
   it("aplicar una recomendación llama a useApplyRec", async () => {
