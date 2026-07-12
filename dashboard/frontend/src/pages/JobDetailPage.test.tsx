@@ -26,6 +26,9 @@ const { toast, api } = vi.hoisted(() => ({
     recordOutcome: vi.fn(() => Promise.resolve({ ok: true, learnings: [] })),
     enqueueIntent: vi.fn(() => Promise.resolve({ ok: true, id: "in_new" })),
     intents: vi.fn(() => Promise.resolve({ intents: [], pending: 0 })),
+    cvReviews: vi.fn(() => Promise.resolve({ reviews: [] })),
+    applyCvReviewEdit: vi.fn(() => Promise.resolve({ ok: true })),
+    resolveCvReviewFlag: vi.fn(() => Promise.resolve({ ok: true })),
   },
 }));
 vi.mock("sonner", async (importOriginal) => ({
@@ -65,6 +68,10 @@ function jobDetail() {
     learnings: [],
     social_mentions: [],
     timeline: [],
+    cv_reviews: [],
+    review_report: null,
+    company_research: null,
+    suggested_contacts: [],
   };
 }
 
@@ -151,6 +158,92 @@ describe("JobDetailPage — página /jobs/:id con tabs", () => {
     await userEvent.click(screen.getByRole("tab", { name: "CV" }));
     const pdf = await screen.findByRole("link", { name: /CV PDF/ });
     expect(pdf.getAttribute("href")).toMatch(/\/api\/cv\/job-1\/1\/download\?fmt=pdf/);
+  });
+
+  it("el tab CV muestra la revisión determinista (review.md) cuando está presente", async () => {
+    api.job.mockResolvedValue({
+      ...jobDetail(),
+      review_report:
+        "# Revisión determinista del CV\n\n" +
+        "- ✅ **Texto extraíble**: 1200 caracteres extraídos del DOCX (mínimo 400)\n" +
+        "- ⚠️ **Cobertura de keywords** _(informativo)_: 55% de cobertura — faltan: kubernetes\n",
+    });
+    renderRoutes("/jobs/job-1");
+    await screen.findByText("Senior Data Scientist");
+    await userEvent.click(screen.getByRole("tab", { name: "CV" }));
+    expect(await screen.findByText("Texto extraíble")).toBeInTheDocument();
+    expect(screen.getByText(/1200 caracteres extraídos/)).toBeInTheDocument();
+    expect(screen.getByText("Cobertura de keywords")).toBeInTheDocument();
+    expect(screen.getByText(/faltan: kubernetes/)).toBeInTheDocument();
+  });
+
+  it("sin review_report el tab CV no muestra la sección de revisión determinista", async () => {
+    renderRoutes("/jobs/job-1");
+    await screen.findByText("Senior Data Scientist");
+    await userEvent.click(screen.getByRole("tab", { name: "CV" }));
+    await screen.findByRole("link", { name: /CV PDF/ });
+    expect(screen.queryByText("Revisión determinista del CV")).not.toBeInTheDocument();
+  });
+
+  it("el tab Research muestra la investigación de la empresa cuando está presente", async () => {
+    api.job.mockResolvedValue({
+      ...jobDetail(),
+      company_research: {
+        id: 1,
+        company_norm: "acme",
+        summary: "Acme is scaling its data platform team.",
+        signals: ["hiring surge"],
+        sources: ["https://acme.example/blog"],
+        researched_at: "2026-07-01T00:00:00Z",
+      },
+    });
+    renderRoutes("/jobs/job-1");
+    await screen.findByText("Senior Data Scientist");
+    await userEvent.click(screen.getByRole("tab", { name: "Research" }));
+    expect(await screen.findByText("Sobre la empresa")).toBeInTheDocument();
+    expect(screen.getByText("Acme is scaling its data platform team.")).toBeInTheDocument();
+    expect(screen.getByText("hiring surge")).toBeInTheDocument();
+  });
+
+  it("el tab Research muestra contactos sugeridos por el brain y permite copiar el borrador", async () => {
+    const writeText = vi.fn(() => Promise.resolve());
+    Object.assign(navigator, { clipboard: { writeText } });
+    api.job.mockResolvedValue({
+      ...jobDetail(),
+      suggested_contacts: [
+        {
+          id: 7,
+          name: "Jamie Rivera",
+          company: "Acme",
+          title: "Engineering Manager",
+          linkedin_url: "https://linkedin.com/in/jamierivera",
+          source: "brain_research",
+          notes: "[brain_research] confidence=high; posted about the open role",
+        },
+      ],
+      messages: [
+        {
+          id: 55,
+          job_id: "job-1",
+          channel: "referral",
+          kind: "referral_or_intro",
+          variant: "brain",
+          language: "en",
+          body: "Hi Jamie, I saw the opening on your team...",
+          state: "draft",
+        },
+      ],
+    });
+    renderRoutes("/jobs/job-1");
+    await screen.findByText("Senior Data Scientist");
+    await userEvent.click(screen.getByRole("tab", { name: "Research" }));
+    expect(await screen.findByText("Contactos sugeridos")).toBeInTheDocument();
+    expect(screen.getByText("Jamie Rivera")).toBeInTheDocument();
+    expect(screen.getByText(/confianza high/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /Copiar borrador de mensaje/ }));
+    await waitFor(() =>
+      expect(writeText).toHaveBeenCalledWith("Hi Jamie, I saw the opening on your team..."),
+    );
   });
 
   it("el tab Mensajes ofrece generar borradores cuando no hay mensajes", async () => {

@@ -27,6 +27,17 @@ ATS_DISPATCH: dict[str, Callable] = {
 }
 
 
+def partition_demo(
+    companies: list[CompanyTarget], include_demo: bool
+) -> tuple[list[CompanyTarget], list[str]]:
+    """Split into (active, skipped_names). Demo companies are dropped unless include_demo."""
+    if include_demo:
+        return list(companies), []
+    active = [c for c in companies if not getattr(c, "demo", False)]
+    skipped = [c.company for c in companies if getattr(c, "demo", False)]
+    return active, skipped
+
+
 def discover(
     db: DB,
     *,
@@ -37,12 +48,21 @@ def discover(
 ) -> dict:
     cfg = sources_cfg or load_sources()
     companies = companies if companies is not None else load_companies()
+    include_demo = bool(cfg.get("include_demo"))
+    companies, skipped_demo = partition_demo(companies, include_demo)
     terms = terms or cfg.get("search_terms", [])
     limits = cfg.get("limits", {})
     cap = int(limits.get("max_jobs_per_run", 400))
     client = make_client(timeout=float(limits.get("per_source_timeout_s", 45)))
 
-    summary: dict = {"sources": {}, "new": 0, "seen": 0, "fetched": 0, "errors": []}
+    summary: dict = {
+        "sources": {},
+        "new": 0,
+        "seen": 0,
+        "fetched": 0,
+        "errors": [],
+        "skipped_demo": skipped_demo,
+    }
     stored_total = 0
 
     def store(label: str, fetch_fn: Callable[[], list[Job]]) -> None:
@@ -116,13 +136,29 @@ def discover(
     if want("himalayas") and cfg.get("himalayas", {}).get("enabled", True):
         store("himalayas", lambda: himalayas.fetch(cfg["himalayas"], terms, client))
 
-    # 4. Adzuna (free, optional keys; skips silently if unconfigured).
+    # 4. Adzuna (free, optional keys; reports "unconfigured" instead of a silent
+    # empty fetch when ADZUNA_APP_ID/ADZUNA_APP_KEY are missing — see health.py).
     if want("adzuna") and cfg.get("adzuna", {}).get("enabled", True):
-        store("adzuna", lambda: adzuna.fetch(cfg["adzuna"], terms, client))
+        if not adzuna.configured():
+            err = "unconfigured: missing ADZUNA_APP_ID/ADZUNA_APP_KEY"
+            db.log_source_health("adzuna", False, 0, err, 0)
+            # Mirror the shape `store()` builds so `atlas discover`'s printed table (and
+            # summary["errors"]) don't silently drop adzuna when it's just unconfigured.
+            summary["sources"]["adzuna"] = {
+                "ok": False,
+                "fetched": 0,
+                "new": 0,
+                "seen": 0,
+                "ms": 0,
+                "error": err,
+            }
+            summary["errors"].append(f"adzuna: {err}")
+        else:
+            store("adzuna", lambda: adzuna.fetch(cfg["adzuna"], terms, client))
 
-    # F2 hygiene (opt-in via sources.yaml): expire dead postings at the end of a discover.
-    # Off by default — it adds N paced HTTP calls per run; always available on demand from
-    # the web UI via POST /api/liveness/sweep. Reuses the run's shared client.
+    # F2 hygiene (configured via sources.yaml, on by default): expire dead postings at the
+    # end of a discover. Adds up to `limit` paced HTTP calls per run; also available on
+    # demand from the web UI via POST /api/liveness/sweep. Reuses the run's shared client.
     lv = cfg.get("liveness", {})
     if want("liveness") and lv.get("enabled", False):
         from engine.discovery.liveness import sweep_liveness

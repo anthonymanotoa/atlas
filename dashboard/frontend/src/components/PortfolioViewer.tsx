@@ -1,5 +1,6 @@
 import {
   Check,
+  Clock,
   Copy,
   ExternalLink,
   Lightbulb,
@@ -11,6 +12,7 @@ import {
 import { useEffect, useState } from "react";
 import { api, type Peer, type Portfolio, type PortfolioResearch } from "../api";
 import { copy } from "../lib";
+import { IntentConfirmDialog } from "./IntentConfirmDialog";
 import { Button, buttonVariants } from "./ui/button";
 import { Card } from "./ui/card";
 import { Input } from "./ui/input";
@@ -227,11 +229,29 @@ export function PortfolioViewer() {
         )}
       </section>
 
-      {/* 5 — Save your own references */}
+      {/* 5 — Save your own references + the living peer set the brain keeps fresh */}
       <section>
-        <h2 className="mb-2 text-caption text-muted-foreground uppercase">
-          Guardar mis propias referencias
-        </h2>
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-caption text-muted-foreground uppercase">
+            Mis referencias guardadas (+ research vivo del brain)
+          </h2>
+          <div className="flex items-center gap-2">
+            <span className="flex items-center gap-1 text-[0.72rem] text-muted-foreground">
+              <Clock className="size-3" />
+              {research?.last_reviewed_at
+                ? `Última actualización: ${new Date(research.last_reviewed_at).toLocaleDateString("es")}`
+                : "Sin research vivo todavía"}
+            </span>
+            <IntentConfirmDialog
+              buttonLabel="Refrescar (encolar al brain)"
+              title="Research de portafolios de referencia"
+              what="El brain busca portafolios de referencia ACTUALES para tu dominio y rol objetivo — el set curado de arriba es una foto fija que envejece; esto la mantiene viva."
+              produces="Peers nuevos (o actualizaciones de los ya vistos) en la lista de abajo, con fecha de research."
+              where="En esta misma vista, tras correr el brain."
+              type="portfolio_research"
+            />
+          </div>
+        </div>
         <Card className="space-y-2.5 p-3.5 text-sm">
           {peers.map((p) => (
             <div key={p.id}>
@@ -246,6 +266,11 @@ export function PortfolioViewer() {
                 >
                   portafolio ↗
                 </a>
+              )}
+              {p.reviewed_at && (
+                <span className="ml-2 text-[0.7rem] text-muted-foreground">
+                  revisado {new Date(p.reviewed_at).toLocaleDateString("es")}
+                </span>
               )}
               {p.notes && <div className="text-[0.8rem] text-muted-foreground">{p.notes}</div>}
             </div>

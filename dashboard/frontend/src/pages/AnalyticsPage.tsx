@@ -1,5 +1,5 @@
 import { AnalyticsStrip } from "../components/AnalyticsStrip";
-import type { ConversionRow, Recommendation } from "../api";
+import type { ConversionRow, RateRow, Recommendation } from "../api";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
@@ -39,6 +39,37 @@ function ConversionBreakdown({ title, rows }: { title: string; rows: ConversionR
                 <span className="truncate font-medium">{r.key}</span>
                 <span className="shrink-0 text-muted-foreground tabular-nums">
                   {r.applied} apl · {pct(r.response_rate)} resp
+                </span>
+              </div>
+              <Bar value={r.applied} max={max} />
+            </li>
+          ))}
+        </ul>
+      )}
+    </Card>
+  );
+}
+
+// Task 19 — calibración de outcomes: a diferencia de ConversionBreakdown, cada fila puede
+// venir con muestra insuficiente (n<5); ahí se muestra "n=X, aún sin señal" en vez de un %
+// que induciría a error (0% con 1 muestra no es lo mismo que 0% con 20).
+function RateBreakdown({ title, rows }: { title: string; rows: RateRow[] }) {
+  const max = Math.max(...rows.map((r) => r.applied), 1);
+  return (
+    <Card className="p-4">
+      <div className="mb-3 text-caption text-muted-foreground uppercase">{title}</div>
+      {rows.length === 0 ? (
+        <div className="text-[0.78rem] text-muted-foreground">Sin aplicaciones atribuibles todavía.</div>
+      ) : (
+        <ul className="space-y-2.5">
+          {rows.map((r) => (
+            <li key={r.key}>
+              <div className="mb-1 flex items-center justify-between gap-2 text-[0.78rem]">
+                <span className="truncate font-medium">{r.key}</span>
+                <span className="shrink-0 text-muted-foreground tabular-nums">
+                  {r.insufficient
+                    ? `n=${r.n}, aún sin señal`
+                    : `${r.applied} apl · ${pct(r.response_rate)} resp`}
                 </span>
               </div>
               <Bar value={r.applied} max={max} />
@@ -152,6 +183,13 @@ export function AnalyticsPage() {
             <ConversionBreakdown title="Por ATS" rows={a.by_ats} />
             <ConversionBreakdown title="Por política remota" rows={a.by_remote_policy} />
             <ConversionBreakdown title="Por término de rol" rows={a.by_role_term} />
+          </div>
+
+          {/* Calibración de outcomes (Task 19): qué canal y qué variante de CV consiguen
+              respuesta de verdad — con la misma disciplina de muestra mínima que el resto. */}
+          <div className="grid gap-4 lg:grid-cols-2">
+            <RateBreakdown title="Por canal de outreach" rows={a.response_rate_by_channel} />
+            <RateBreakdown title="Por versión de CV" rows={a.response_rate_by_cv_version} />
           </div>
 
           {/* Tiempos de respuesta */}

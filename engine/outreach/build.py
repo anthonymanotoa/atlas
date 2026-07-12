@@ -13,6 +13,7 @@ import engine.paths as paths
 from engine.config import default_language, load_master_cv
 from engine.cv.tailor import detect_ats
 from engine.db.models import DB
+from engine.normalize import norm_company
 from engine.outreach.templates import Draft, build_package
 from engine.referrals.connections import match_referrals
 
@@ -73,12 +74,40 @@ def build_outreach(db: DB, job_id: str, language: str | None = None) -> list[Dra
     return drafts
 
 
+def _write_review(job: dict, cv_version: dict) -> None:
+    """Best-effort: run the deterministic CV review and write `review.md` next to the CV's
+    DOCX — this used to only happen in `atlas tailor`/`atlas prep` (engine/cli.py), so the web
+    `/api/jobs/{id}/prep` route and the daily brain (both of which prepare CVs by calling
+    write_package directly) never produced a review_report for job detail. Wrapped in
+    try/except: a review-write failure must never break packaging."""
+    path_docx = cv_version.get("path_docx")
+    if not path_docx:
+        return
+    try:
+        from engine.cv.review_report import build_review
+
+        master = load_master_cv()
+        coverage = {
+            "coverage": cv_version.get("keyword_coverage"),
+            "matched": json.loads(cv_version.get("matched_keywords") or "[]"),
+            "missing": json.loads(cv_version.get("missing_keywords") or "[]"),
+        }
+        docx_path = Path(path_docx)
+        pdf_path = Path(cv_version["path_pdf"]) if cv_version.get("path_pdf") else None
+        review = build_review(docx_path, pdf_path, master, job, coverage)
+        (docx_path.parent / "review.md").write_text(review.markdown)
+    except Exception:  # noqa: BLE001 — review.md is a nice-to-have, never break packaging
+        pass
+
+
 def write_package(db: DB, job_id: str, language: str = "en") -> Path:
     """Write the human-facing 'exactly what to send' package (Spanish) + mark ready."""
     job = db.get_job(job_id)
     method = _apply_method(job)
     versions = db.cv_versions_for(job_id)
     cv = versions[0] if versions else {}
+    if cv:
+        _write_review(job, cv)
     msgs = db.messages_for(job_id)
     refs = match_referrals(db, job.get("company", ""))
 
@@ -110,6 +139,19 @@ def write_package(db: DB, job_id: str, language: str = "en") -> Path:
             f"{', '.join(json.loads(job['knockout_flags']))}"
         )
         lines.append("")
+    research = db.company_research_for(norm_company(job.get("company", "")))
+    if research and research.get("summary"):
+        lines.append("## 🏢 Sobre la empresa")
+        lines.append(research["summary"])
+        if research.get("signals"):
+            lines.append("")
+            lines.append("**Señales:**")
+            for s in research["signals"]:
+                lines.append(f"- {s}")
+        if research.get("sources"):
+            lines.append("")
+            lines.append("**Fuentes:** " + ", ".join(research["sources"]))
+        lines.append("")
     if refs:
         c = refs[0]
         lines += [
@@ -118,6 +160,16 @@ def write_package(db: DB, job_id: str, language: str = "en") -> Path:
             f"  {c.get('linkedin_url') or ''}",
             "",
         ]
+    suggested = [c for c in refs if c.get("source") == "brain_research"]
+    if suggested:
+        lines.append("## 🔍 Contactos sugeridos (candidatos — revisa antes de contactar)")
+        for c in suggested:
+            lines.append(f"- **{c['name']}** — {c.get('title') or ''} @ {c.get('company')}")
+            if c.get("linkedin_url"):
+                lines.append(f"  {c['linkedin_url']}")
+            if c.get("notes"):
+                lines.append(f"  _{c['notes']}_")
+        lines.append("")
     insights = db.learnings_for_company(job.get("company", ""))
     if insights:
         lines.append("## 🧠 Lo aprendido de esta empresa")

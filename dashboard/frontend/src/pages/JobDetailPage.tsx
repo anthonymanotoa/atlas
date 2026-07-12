@@ -14,13 +14,16 @@ import { api } from "../api";
 import { CvReviewPanel } from "../components/CvReviewPanel";
 import { IntentConfirmDialog } from "../components/IntentConfirmDialog";
 import { CompanyInsights } from "../components/job-detail/CompanyInsights";
+import { CompanyResearchCard } from "../components/job-detail/CompanyResearchCard";
 import { JobOverview } from "../components/job-detail/JobOverview";
 import { Ledger } from "../components/job-detail/Ledger";
 import { MessageCard } from "../components/job-detail/MessageCard";
 import { RecordOutcome } from "../components/job-detail/RecordOutcome";
+import { ReviewReport } from "../components/job-detail/ReviewReport";
 import { ScoreBreakdown } from "../components/job-detail/ScoreBreakdown";
 import { SectionTitle } from "../components/job-detail/SectionTitle";
 import { SocialSearch } from "../components/job-detail/SocialSearch";
+import { SuggestedContacts } from "../components/job-detail/SuggestedContacts";
 import { InterviewPanel } from "../components/InterviewPanel";
 import { GeoBadge, LegitimacyBadge, RepostBadge } from "../components/JobBadges";
 import { Badge } from "../components/ui/badge";
@@ -268,6 +271,7 @@ export function JobDetailPage() {
               Aún no hay CV adaptado para esta oferta — usa “Re-preparar” (abajo) para generarlo.
             </Card>
           )}
+          <ReviewReport markdown={d.review_report} />
           <CvReviewPanel jobId={jobId} />
         </TabsContent>
 
@@ -315,6 +319,13 @@ export function JobDetailPage() {
         </TabsContent>
 
         <TabsContent value="research" className="mt-4 space-y-4">
+          <CompanyResearchCard research={d.company_research ?? null} />
+          <SuggestedContacts
+            contacts={d.suggested_contacts ?? []}
+            draftMessage={d.messages.find(
+              (m) => m.kind === "referral_or_intro" && m.variant === "brain",
+            )}
+          />
           <SocialSearch jobId={jobId} />
           <RecordOutcome jobId={jobId} onSaved={() => jobQ.refetch()} />
         </TabsContent>

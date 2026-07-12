@@ -12,6 +12,7 @@ from engine.config import Criteria
 from engine.db.models import DB
 from engine.normalize import norm_company, parse_dt_utc
 from engine.referrals.connections import match_referrals
+from engine.scoring.priority import priority
 
 FUNNEL = [
     ("discovered", "discovered_at"),
@@ -39,12 +40,14 @@ def annotate(job: dict) -> dict:
 
     `posted_days` is from the posting's own date_posted (how long the vacancy has been
     open); `age_days` is since we discovered it. `salary_visible` drives the
-    'solo con salario' filter + the salary chip.
+    'solo con salario' filter + the salary chip. `priority` (Task 10) is the blended
+    fit/CV-match ranking score — lets the UI sort/label without recomputing it.
     """
     job["age_days"] = _days_since(job.get("discovered_at"))
     posted = _days_since(job.get("date_posted"))
     job["posted_days"] = posted if posted is not None else job["age_days"]
     job["salary_visible"] = bool(job.get("salary_min") or job.get("salary_max"))
+    job["priority"] = priority(job.get("fit_score"), job.get("match_score"))
     return job
 
 
@@ -170,6 +173,122 @@ def conversion_by(db: DB, dim: str, criteria: Criteria | None = None) -> list[di
     return sorted(groups.values(), key=lambda g: -g["applied"])
 
 
+MIN_SAMPLE = 5  # Task 19: nunca mostrar un % con menos muestras que esto — sesga el criterio.
+
+
+def _finalize_rate_groups(groups: dict[str, dict]) -> list[dict]:
+    """Cierra {key, applied, responded} → agrega n/response_rate/insufficient (Task 19).
+
+    n < MIN_SAMPLE ⇒ response_rate=None + insufficient=True, NUNCA un porcentaje engañoso
+    tipo "0%" sobre 1 o 2 muestras. Ordenado por `applied` desc, igual que `conversion_by`.
+    """
+    out = []
+    for g in groups.values():
+        n = g["applied"]
+        insufficient = n < MIN_SAMPLE
+        g["n"] = n
+        g["response_rate"] = None if insufficient else round(g["responded"] / n, 3)
+        g["insufficient"] = insufficient
+        out.append(g)
+    return sorted(out, key=lambda g: -g["applied"])
+
+
+def _channel_bucket(channel: str | None) -> str:
+    """Agrupa las variantes de `messages.channel` en buckets legibles para la UI."""
+    c = (channel or "").strip().lower()
+    if c == "email":
+        return "email"
+    if c.startswith("linkedin"):
+        return "linkedin"
+    if c == "referral":
+        return "referral"
+    return c or "unknown"
+
+
+def response_rate_by_channel(db: DB) -> list[dict]:
+    """Response rate por canal de outreach (email/linkedin/referral) — Task 19 calibración.
+
+    APROXIMACIÓN DOCUMENTADA: Atlas no registra "por cuál canal se envió LA aplicación" como
+    un campo propio — sólo qué mensajes de outreach (`messages.channel`) el usuario marcó
+    `state='sent'` para cada job (vía POST /api/messages/{id}/sent). Se atribuye cada job
+    APLICADO (mismo cohorte que `conversion_by`: `applied_at` no nulo) a TODOS los canales por
+    los que envió al menos un mensaje `sent` — un job que mandó email Y LinkedIn cuenta en
+    ambos buckets, porque no hay forma de saber cuál "ganó" la respuesta. Un job aplicado sin
+    ningún mensaje `sent` (aplicó fuera de Atlas, p.ej. directo en el ATS) no se puede atribuir
+    a ningún canal y se excluye — nunca se inventa una atribución.
+
+    positive/responded usa el mismo criterio que `conversion_by`: responded_at/interview_at/
+    offer_at en `jobs` (los timestamps del funnel, no application_outcomes).
+
+    Cada fila: {key, applied, responded, n, response_rate, insufficient}. n < MIN_SAMPLE (5)
+    ⇒ response_rate=None + insufficient=True.
+    """
+    jobs_by_id = {j["id"]: j for j in db.list_jobs() if j.get("applied_at")}
+    if not jobs_by_id:
+        return []
+    placeholders = ",".join("?" * len(jobs_by_id))
+    rows = db.conn.execute(
+        f"SELECT DISTINCT job_id, channel FROM messages "
+        f"WHERE state='sent' AND channel IS NOT NULL AND job_id IN ({placeholders})",
+        list(jobs_by_id),
+    ).fetchall()
+    groups: dict[str, dict] = {}
+    attributed: set[tuple[str, str]] = set()
+    for r in rows:
+        bucket = _channel_bucket(r["channel"])
+        dedup_key = (r["job_id"], bucket)
+        if dedup_key in attributed:
+            continue  # 2 mensajes 'sent' del mismo job al mismo bucket (p.ej. linkedin_note +
+        attributed.add(dedup_key)  # linkedin_inmail) cuentan una sola vez para ese job.
+        job = jobs_by_id[r["job_id"]]
+        g = groups.setdefault(bucket, {"key": bucket, "applied": 0, "responded": 0})
+        positive = bool(job.get("responded_at") or job.get("interview_at") or job.get("offer_at"))
+        g["applied"] += 1
+        g["responded"] += 1 if positive else 0
+    return _finalize_rate_groups(groups)
+
+
+def response_rate_by_cv_version(db: DB) -> list[dict]:
+    """Response rate por variante de CV tailoreada — Task 19 calibración.
+
+    Se agrupa por `cv_versions.ats_target` (p.ej. 'greenhouse', 'lever', o 'general' cuando no
+    se detectó ATS de destino) — NO por `cv_versions.id`. Cada fila de `cv_versions` es 1:1
+    con el job para el que se generó (una CV tailoreada por vacante), así que agrupar por id
+    nunca junta más de 1 muestra por grupo; `ats_target` es la dimensión que SÍ se repite entre
+    vacantes y permite calibrar "¿esta variante de CV consigue más respuestas?".
+
+    La atribución usa `applications.cv_version_id` — la versión efectivamente empaquetada para
+    postular vía `write_package` — unida al job por `job_id`. Un job aplicado sin fila en
+    `applications` (o sin `cv_version_id`) no se puede atribuir y se excluye.
+
+    positive/responded usa el mismo criterio que `conversion_by`/`response_rate_by_channel`.
+    Cada fila: {key, applied, responded, n, response_rate, insufficient}.
+    """
+    jobs = [j for j in db.list_jobs() if j.get("applied_at")]
+    if not jobs:
+        return []
+    job_ids = [j["id"] for j in jobs]
+    placeholders = ",".join("?" * len(job_ids))
+    rows = db.conn.execute(
+        f"""SELECT a.job_id AS job_id, cv.ats_target AS ats_target
+            FROM applications a JOIN cv_versions cv ON cv.id = a.cv_version_id
+            WHERE a.cv_version_id IS NOT NULL AND a.job_id IN ({placeholders})
+            GROUP BY a.job_id""",
+        job_ids,
+    ).fetchall()
+    ats_by_job = {r["job_id"]: (r["ats_target"] or "general") for r in rows}
+    groups: dict[str, dict] = {}
+    for j in jobs:
+        key = ats_by_job.get(j["id"])
+        if key is None:
+            continue  # aplicado sin CV empaquetada en `applications` → sin atribución posible
+        g = groups.setdefault(key, {"key": key, "applied": 0, "responded": 0})
+        positive = bool(j.get("responded_at") or j.get("interview_at") or j.get("offer_at"))
+        g["applied"] += 1
+        g["responded"] += 1 if positive else 0
+    return _finalize_rate_groups(groups)
+
+
 def response_times(db: DB) -> dict:
     """Días applied→responded (timestamps de jobs) + response_days confirmados (outcomes).
 
@@ -287,6 +406,8 @@ def analytics_payload(db: DB, criteria: Criteria) -> dict:
         "by_role_term": conversion_by(db, "role_term", criteria),
         "response_times": response_times(db),
         "recommendations": recommendations(db, criteria),
+        "response_rate_by_channel": response_rate_by_channel(db),
+        "response_rate_by_cv_version": response_rate_by_cv_version(db),
     }
 
 
@@ -377,15 +498,43 @@ def job_detail(db: DB, job_id: str) -> dict | None:
     job["jd_skills"] = _jd_skills(job)  # skills the posting itself asks for (detail view)
     annotate(job)  # age_days, posted_days, salary_visible
     job["applied_days"] = _days_since(job.get("applied_at"))
+    cv_versions = db.cv_versions_for(job_id)
+    referrals = match_referrals(db, job.get("company", ""))
     return {
         "job": job,
-        "cv_versions": db.cv_versions_for(job_id),
+        "cv_versions": cv_versions,
         "messages": db.messages_for(job_id),
-        "referrals": match_referrals(db, job.get("company", "")),
+        "referrals": referrals,
         "social_mentions": db.social_mentions_for(job_id),
         "learnings": db.learnings_for_company(job.get("company", "")),
         "timeline": _timeline(job),
+        # Task 13: surface research + review data collected by earlier tasks that wasn't
+        # reaching the job detail view yet.
+        "cv_reviews": db.cv_reviews_for(job_id),
+        "review_report": _review_report(cv_versions),
+        "company_research": db.company_research_for(norm_company(job.get("company", ""))),
+        # Same fuzzy company match `referrals` already uses (Task 15's write_package applies
+        # the identical filter) — never contacts_for_company's raw "every contact" stub.
+        "suggested_contacts": [c for c in referrals if c.get("source") == "brain_research"],
     }
+
+
+def _review_report(cv_versions: list[dict]) -> str | None:
+    """Contents of the deterministic `review.md` (Task 12) for the latest tailored CV, if
+    it exists. review.md is written next to the CV's docx (`docx_path.parent / "review.md"`,
+    see engine/cli.py); never 500 the job detail over a missing/unreadable report file."""
+    if not cv_versions:
+        return None
+    path_docx = cv_versions[0].get("path_docx")
+    if not path_docx:
+        return None
+    try:
+        from pathlib import Path
+
+        review_path = Path(path_docx).parent / "review.md"
+        return review_path.read_text()
+    except OSError:
+        return None
 
 
 def _jd_skills(job: dict, *, limit: int = 16) -> list[str]:

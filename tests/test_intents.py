@@ -77,7 +77,7 @@ def test_list_pending_only_returns_pending(db):
     assert {r["id"] for r in intents.list_pending(db)} == {pend}
 
 
-def test_all_six_intent_types_enqueue(db):
+def test_all_nine_intent_types_enqueue(db):
     assert set(intents.INTENT_TYPES) == {
         "cv_review",
         "legitimacy_batch",
@@ -85,6 +85,9 @@ def test_all_six_intent_types_enqueue(db):
         "interview_prep_deep",
         "profile_expand",
         "cover_letter",
+        "company_research",
+        "contact_discovery",
+        "portfolio_research",
     }
     for t in intents.INTENT_TYPES:
         iid = intents.enqueue(db, t)
@@ -644,3 +647,136 @@ def test_intent_prompt_files_exist():
     root = Path(__file__).resolve().parents[1]
     for fname in intents.PROMPT_FILES.values():
         assert (root / "brain" / "prompts" / fname).is_file(), fname
+
+
+# ── stale detection + requeue (Task 6) ──────────────────────────────────────────
+# Two real intents on the owner profile sat `pending` for 4+ days with no visible signal.
+# `age_hours`/`is_stale` make staleness visible in list_intents/stale_intents, and `requeue`
+# gives the brain a way to unstick an `error`/`running` intent back to `pending`.
+def test_stale_pending_intent_flagged(db):
+    from datetime import UTC, datetime, timedelta
+
+    iid = intents.enqueue(db, "upskill_report", {})
+    three_days_ago = (datetime.now(UTC) - timedelta(days=3)).isoformat()
+    db.conn.execute("UPDATE intents SET created_at=? WHERE id=?", (three_days_ago, iid))
+    db.conn.commit()
+
+    stale = intents.stale_intents(db)
+    assert [s["id"] for s in stale] == [iid]
+
+    row = intents.get_intent(db, iid)
+    assert row["is_stale"] is True
+    assert 71.0 <= row["age_hours"] <= 73.0
+
+
+def test_fresh_pending_intent_not_stale(db):
+    iid = intents.enqueue(db, "upskill_report", {})
+    row = intents.get_intent(db, iid)
+    assert row["is_stale"] is False
+    assert row["age_hours"] is not None and row["age_hours"] < 1.0
+    assert intents.stale_intents(db) == []
+
+
+def test_running_intent_is_never_stale_even_if_old(db):
+    """is_stale only applies to `pending` — a long-running intent isn't 'atascado en la cola'."""
+    from datetime import UTC, datetime, timedelta
+
+    iid = intents.enqueue(db, "upskill_report", {})
+    intents.mark_running(db, iid)
+    three_days_ago = (datetime.now(UTC) - timedelta(days=3)).isoformat()
+    db.conn.execute("UPDATE intents SET created_at=? WHERE id=?", (three_days_ago, iid))
+    db.conn.commit()
+    row = intents.get_intent(db, iid)
+    assert row["is_stale"] is False
+    assert intents.stale_intents(db) == []
+
+
+def test_requeue_error_intent_clears_error_and_reenqueues(db):
+    iid = intents.enqueue(db, "upskill_report", {})
+    intents.mark_running(db, iid)
+    intents.mark_error(db, iid, "boom")
+    assert intents.get_intent(db, iid)["completed_at"] is not None  # mark_error sets it
+    row = intents.requeue(db, iid)
+    assert row["status"] == "pending"
+    assert row["error"] is None
+    # Regression: requeue used to leave a stale completed_at from the earlier error/done
+    # lifecycle, making a freshly-requeued (pending) intent look already finished.
+    assert row["completed_at"] is None
+    assert intents.get_intent(db, iid)["status"] == "pending"
+    assert intents.get_intent(db, iid)["completed_at"] is None
+
+
+def test_requeue_running_intent_becomes_pending(db):
+    iid = intents.enqueue(db, "upskill_report", {})
+    intents.mark_running(db, iid)
+    row = intents.requeue(db, iid)
+    assert row["status"] == "pending"
+
+
+def test_requeue_done_intent_raises(db):
+    iid = intents.enqueue(db, "upskill_report", {})
+    intents.mark_running(db, iid)
+    intents.mark_done(db, iid, "x:1")
+    with pytest.raises(ValueError):
+        intents.requeue(db, iid)
+    assert intents.get_intent(db, iid)["status"] == "done"
+
+
+def test_requeue_pending_intent_raises(db):
+    iid = intents.enqueue(db, "upskill_report", {})
+    with pytest.raises(ValueError):
+        intents.requeue(db, iid)
+
+
+def test_requeue_unknown_id_raises(db):
+    with pytest.raises(ValueError):
+        intents.requeue(db, "in_nope")
+
+
+# ── CLI: requeue command + EDAD column + `status` stale warning ────────────────
+def test_cli_intents_requeue_marks_pending(cli_db):
+    iid = intents.enqueue(cli_db, "upskill_report", {})
+    intents.mark_running(cli_db, iid)
+    intents.mark_error(cli_db, iid, "boom")
+    res = _run(["intents", "requeue", iid])
+    assert res.exit_code == 0, res.output
+    assert intents.get_intent(cli_db, iid)["status"] == "pending"
+
+
+def test_cli_intents_requeue_done_exits_nonzero(cli_db):
+    iid = intents.enqueue(cli_db, "upskill_report", {})
+    intents.mark_running(cli_db, iid)
+    intents.mark_done(cli_db, iid, "x:1")
+    res = _run(["intents", "requeue", iid])
+    assert res.exit_code == 2  # consistent with sibling intents commands (complete/fail/etc.)
+    assert intents.get_intent(cli_db, iid)["status"] == "done"
+
+
+def test_cli_intents_list_shows_age_column(cli_db):
+    from datetime import UTC, datetime, timedelta
+
+    iid = intents.enqueue(cli_db, "upskill_report", {})
+    three_days_ago = (datetime.now(UTC) - timedelta(days=3)).isoformat()
+    cli_db.conn.execute("UPDATE intents SET created_at=? WHERE id=?", (three_days_ago, iid))
+    cli_db.conn.commit()
+    res = _run(["intents", "list"])
+    assert res.exit_code == 0, res.output
+    assert "71" in res.output or "72" in res.output or "73" in res.output
+
+
+def test_cli_status_warns_about_stale_intents(cli_db):
+    from datetime import UTC, datetime, timedelta
+
+    iid = intents.enqueue(cli_db, "upskill_report", {})
+    three_days_ago = (datetime.now(UTC) - timedelta(days=3)).isoformat()
+    cli_db.conn.execute("UPDATE intents SET created_at=? WHERE id=?", (three_days_ago, iid))
+    cli_db.conn.commit()
+    res = _run(["status"])
+    assert res.exit_code == 0, res.output
+    assert "atascado" in res.output
+
+
+def test_cli_status_no_warning_when_no_stale_intents(cli_db):
+    res = _run(["status"])
+    assert res.exit_code == 0, res.output
+    assert "atascado" not in res.output

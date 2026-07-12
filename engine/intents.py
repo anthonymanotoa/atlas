@@ -13,11 +13,12 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable
+from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
 
 from engine.db.models import DB
-from engine.normalize import now_iso
+from engine.normalize import norm_company, now_iso, parse_dt_utc
 
 INTENT_TYPES = (
     "cv_review",
@@ -26,6 +27,9 @@ INTENT_TYPES = (
     "interview_prep_deep",
     "profile_expand",
     "cover_letter",
+    "company_research",
+    "contact_discovery",
+    "portfolio_research",
 )
 INTENT_STATUSES = ("pending", "running", "done", "error")
 
@@ -37,6 +41,9 @@ PROMPT_FILES = {
     "interview_prep_deep": "interview_prep_deep.md",
     "profile_expand": "profile_expand.md",
     "cover_letter": "cover_letter.md",
+    "company_research": "company_research.md",
+    "contact_discovery": "contact_discovery.md",
+    "portfolio_research": "portfolio_research.md",
 }
 
 _CONTEXT_BUILDERS: dict[str, Callable[[DB, dict], dict]] = {}
@@ -62,6 +69,10 @@ def _row_to_dict(row) -> dict:
         d["payload"] = json.loads(d.get("payload") or "{}")
     except (json.JSONDecodeError, TypeError):
         d["payload"] = {}
+    created = parse_dt_utc(d.get("created_at"))
+    age_hours = round((datetime.now(UTC) - created).total_seconds() / 3600, 1) if created else None
+    d["age_hours"] = age_hours
+    d["is_stale"] = d.get("status") == "pending" and age_hours is not None and age_hours > 48.0
     return d
 
 
@@ -123,6 +134,30 @@ def mark_error(db: DB, intent_id: str, error: str) -> None:
         (str(error)[:500], now_iso(), intent_id),
     )
     db.conn.commit()
+
+
+def stale_intents(db: DB, max_age_hours: float = 48.0) -> list[dict]:
+    """Pending intents older than `max_age_hours` — atascados en la cola."""
+    return [
+        i
+        for i in list_intents(db, status="pending", limit=10000)
+        if i["age_hours"] is not None and i["age_hours"] > max_age_hours
+    ]
+
+
+def requeue(db: DB, intent_id: str) -> dict:
+    """Re-enqueue a stuck `error`/`running` intent as `pending`, clearing its error.
+
+    Also clears `completed_at`: a previously-errored intent may carry a stale completed_at
+    from an earlier lifecycle, which would otherwise make a freshly-requeued (pending) intent
+    look already finished."""
+    _require(db, intent_id, ("error", "running"))
+    db.conn.execute(
+        "UPDATE intents SET status='pending', error=NULL, completed_at=NULL WHERE id=?",
+        (intent_id,),
+    )
+    db.conn.commit()
+    return get_intent(db, intent_id)
 
 
 # ── contexto determinista por intent (lo consume el brain vía `atlas intents context`) ──
@@ -499,3 +534,186 @@ def _write_profile_expand(db: DB, intent: dict, result: dict) -> str:
 
 _CONTEXT_BUILDERS["profile_expand"] = _ctx_profile_expand
 _RESULT_WRITERS["profile_expand"] = _write_profile_expand
+
+
+# ── company_research (Task 14) ────────────────────────────────────────────────
+# The brain researches the company behind a job posting on the web (funding, size, recent
+# news, hiring signals) so the outreach package can ground drafts in something real instead of
+# generic flattery. Keyed by normalized company name (not job_id): research done once is
+# reused across every other job at the same company. The context builder hands the brain the
+# job brief + whatever research already exists (so it refreshes/extends instead of repeating
+# a web search). The writer only VALIDATES the brain's JSON (non-empty str summary; list
+# signals/sources) and PERSISTS it — no LLM here ($0 invariant). Malformed → raises, leaving
+# the intent `running` for a corrected retry.
+def _ctx_company_research(db: DB, intent: dict) -> dict:
+    job = db.get_job(intent["job_id"]) or {}
+    company = job.get("company", "")
+    return {
+        "company": company,
+        "job_brief": _job_brief(job),
+        "existing_research": db.company_research_for(norm_company(company)),
+    }
+
+
+def _write_company_research(db: DB, intent: dict, result: dict) -> str:
+    summary = result.get("summary")
+    if not isinstance(summary, str) or not summary.strip():
+        raise ValueError("company_research result needs a non-empty summary (str)")
+    signals = result.get("signals", [])
+    if not isinstance(signals, list):
+        raise ValueError("signals must be a list")
+    sources = result.get("sources", [])
+    if not isinstance(sources, list):
+        raise ValueError("sources must be a list")
+    job_id = intent["job_id"]
+    job = db.get_job(job_id) if job_id else None
+    company = (job or {}).get("company", "")
+    rid = db.add_company_research(
+        norm_company(company),
+        job_id=job_id,
+        summary=summary.strip(),
+        signals=signals,
+        sources=sources,
+    )
+    return f"company_research:{rid}"
+
+
+_CONTEXT_BUILDERS["company_research"] = _ctx_company_research
+_RESULT_WRITERS["company_research"] = _write_company_research
+
+
+# ── contact_discovery (Task 15) ───────────────────────────────────────────────
+# The brain MINES public sources (company site, LinkedIn search results, press) for people who
+# might plausibly work at the company in a relevant role, and drafts an optional intro/referral
+# message. These are CANDIDATES, not verified facts: every contact carries a `confidence` so
+# the human — not the brain — decides who is worth reaching out to. The context builder hands
+# the brain the company/role + contacts already known (so it doesn't re-propose duplicates).
+# The writer only VALIDATES the brain's JSON (every contact needs name + confidence ∈
+# high|medium|low) and PERSISTS contacts (source="brain_research") + an optional draft message
+# (kind="referral_or_intro", state="draft") — no LLM here, and NOTHING is ever sent; sending is
+# a human action outside this repo. Malformed → raises, leaving the intent `running`.
+_CONTACT_CONFIDENCES = ("high", "medium", "low")
+
+
+def _ctx_contact_discovery(db: DB, intent: dict) -> dict:
+    job = db.get_job(intent["job_id"]) or {}
+    company = job.get("company", "")
+    role_title = intent["payload"].get("role_title") or job.get("title")
+    return {
+        "company": company,
+        "role_title": role_title,
+        "job_brief": _job_brief(job),
+        "existing_contacts": db.contacts_for_company(norm_company(company)),
+    }
+
+
+def _write_contact_discovery(db: DB, intent: dict, result: dict) -> str:
+    contacts = result.get("contacts")
+    if not isinstance(contacts, list) or not contacts:
+        raise ValueError("result.contacts must be a non-empty list")
+    for c in contacts:
+        if not isinstance(c, dict) or not (c.get("name") or "").strip():
+            raise ValueError("every contact needs a non-empty name")
+        if c.get("confidence") not in _CONTACT_CONFIDENCES:
+            raise ValueError(f"every contact needs confidence ∈ {_CONTACT_CONFIDENCES}")
+    draft_message = result.get("draft_message")
+    if draft_message is not None and not (
+        isinstance(draft_message, str) and draft_message.strip()
+    ):
+        raise ValueError("draft_message must be a non-empty string when present")
+
+    job = db.get_job(intent["job_id"]) or {}
+    company = job.get("company", "")
+    created = 0
+    for c in contacts:
+        confidence = c["confidence"]
+        reasoning = (c.get("reasoning") or "").strip()
+        notes = f"[brain_research] confidence={confidence}"
+        if reasoning:
+            notes += f"; {reasoning}"
+        db.upsert_research_contact(
+            name=c["name"].strip(),
+            company=company,
+            title=c.get("role"),
+            linkedin_url=c.get("profile_url"),
+            role="referral",
+            notes=notes,
+        )
+        created += 1
+
+    if draft_message:
+        db.add_message(
+            intent["job_id"],
+            channel="referral",
+            kind="referral_or_intro",
+            body=draft_message.strip(),
+            variant="brain",
+            state="draft",
+        )
+
+    return f"contacts:{created}"
+
+
+_CONTEXT_BUILDERS["contact_discovery"] = _ctx_contact_discovery
+_RESULT_WRITERS["contact_discovery"] = _write_contact_discovery
+
+
+# ── portfolio_research (Task 16) ──────────────────────────────────────────────
+# The one-time curated seed pack (config/seeds/<domain>/portfolio_references.yaml) goes
+# stale — peers redesign their sites, new standouts appear. This intent asks the brain to
+# research CURRENT peer reference portfolios for the profile's domain/target role, keyed by
+# `peer_portfolio_url` so re-running it REFRESHES existing rows instead of duplicating them
+# (see DB.upsert_peer_portfolio, Task 16 Part B). The context builder hands the brain the
+# curated seed examples + whatever the brain (or the human, via the manual "add peer" form)
+# already discovered, so it extends/refreshes rather than re-proposing duplicates. The writer
+# only VALIDATES the brain's JSON (every portfolio needs peer_name + peer_portfolio_url) and
+# PERSISTS it — no LLM here ($0 invariant). Malformed → raises, leaving the intent `running`.
+def _ctx_portfolio_research(db: DB, intent: dict) -> dict:
+    import engine.paths as paths
+    from engine.config import load_criteria, load_master_cv
+    from engine.portfolio.peer_examples import load_references
+    from engine.profiles import domain_of
+
+    domain = domain_of(paths.PROFILE_ID)
+    cv = load_master_cv()
+    target_role = (cv.get("basics") or {}).get("label")
+    if not target_role:
+        criteria = load_criteria()
+        if criteria and criteria.roles:
+            target_role = " / ".join(r.strip().title() for r in criteria.roles[:3])
+    references = load_references(domain)
+    return {
+        "domain": domain,
+        "target_role": target_role,
+        "curated_references": references["examples"],
+        "existing_peers": db.list_peer_portfolios(),
+        "patterns": references["patterns"],
+    }
+
+
+def _write_portfolio_research(db: DB, intent: dict, result: dict) -> str:
+    portfolios = result.get("portfolios")
+    if not isinstance(portfolios, list) or not portfolios:
+        raise ValueError("result.portfolios must be a non-empty list")
+    for p in portfolios:
+        if not isinstance(p, dict) or not (p.get("peer_name") or "").strip():
+            raise ValueError("every portfolio needs a non-empty peer_name")
+        if not (p.get("peer_portfolio_url") or "").strip():
+            raise ValueError("every portfolio needs a non-empty peer_portfolio_url")
+        for key in ("key_strengths", "how_to_emulate"):
+            if p.get(key) is not None and not isinstance(p[key], list):
+                raise ValueError(f"{key} must be a list when present")
+    for p in portfolios:
+        db.upsert_peer_portfolio(
+            peer_name=p["peer_name"].strip(),
+            peer_portfolio_url=p["peer_portfolio_url"].strip(),
+            role_match=p.get("role_match"),
+            key_strengths=p.get("key_strengths") or [],
+            how_to_emulate=p.get("how_to_emulate") or [],
+            source_url=p.get("source_url"),
+        )
+    return f"peer_portfolios:{len(portfolios)}"
+
+
+_CONTEXT_BUILDERS["portfolio_research"] = _ctx_portfolio_research
+_RESULT_WRITERS["portfolio_research"] = _write_portfolio_research

@@ -1,4 +1,4 @@
-import { Globe, Repeat, ShieldAlert } from "lucide-react";
+import { Globe, Layers, Repeat, ShieldAlert } from "lucide-react";
 import type { Job } from "../api";
 import { Badge } from "./ui/badge";
 
@@ -19,6 +19,22 @@ export function GeoBadge({ job }: { job: Job }) {
       title={`Remoto con restricción geográfica: ${job.geo_restriction || scope.toUpperCase()}`}
     >
       <Globe className="size-3" /> {scope.split(",")[0]}
+    </Badge>
+  );
+}
+
+/** Chip for a shortlist row that collapsed ≥2 near-identical postings (same company + core
+ * role — the "5 CVS Health postings" problem). Neutral tone: this is deduping, not a warning. */
+export function VariantBadge({ job }: { job: Job }) {
+  const n = job.variant_count ?? 1;
+  if (n < 2) return null;
+  return (
+    <Badge
+      variant="secondary"
+      className="shrink-0 px-1.5 py-0 text-[0.62rem] tabular-nums"
+      title={`${n} publicaciones casi idénticas de este puesto colapsadas en una`}
+    >
+      <Layers className="size-3" /> ×{n}
     </Badge>
   );
 }

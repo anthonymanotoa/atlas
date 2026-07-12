@@ -13,6 +13,10 @@ search_terms:
 ats:
   enabled: true
 
+# Rows tagged `demo: true` in companies.example.yaml (pipeline-validation boards, not real
+# targets) are skipped by default. Set to true only to sanity-check the ATS plumbing itself.
+include_demo: false
+
 # JobSpy aggregator. Indeed is rock-solid (no rate limit); LinkedIn is guest/no-login
 # (account-safe, IP-throttle only) and hard-capped. Google/ZipRecruiter omitted (broken).
 jobspy:
@@ -40,10 +44,10 @@ adzuna:
   results_per_country: 20
 
 # F2: liveness gate — expire dead postings (404/tombstone) at the end of each discover.
-# Off by default (adds N HTTP calls per run); always available on demand from the web UI
-# via POST /api/liveness/sweep.
+# On by default (adds up to `limit` paced HTTP calls per run); also available on demand
+# from the web UI via POST /api/liveness/sweep.
 liveness:
-  enabled: false
+  enabled: true
   limit: 40
 
 # Global pacing / safety knobs.

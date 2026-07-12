@@ -227,6 +227,8 @@ class CompanyTarget(BaseModel):
     instance: str | None = None  # workday tenant (e.g. "nvidia" in nvidia.wd5.myworkdayjobs.com)
     eu: bool = False  # lever EU host
     careers_url: str | None = None  # for re-resolution
+    demo: bool = False  # pipeline-validation board (e.g. Lever demo, Ashby) — never a real target;
+    # excluded from discover() unless the profile's sources.yaml sets include_demo: true
 
 
 def load_companies() -> list[CompanyTarget]:

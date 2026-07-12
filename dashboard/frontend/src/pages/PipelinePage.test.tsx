@@ -87,4 +87,30 @@ describe("PipelinePage", () => {
     expect(await screen.findByText("No se pudo cargar")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Reintentar" })).toBeInTheDocument();
   });
+
+  it("sin cv_template_findings no muestra el banner de CV plantilla", async () => {
+    renderRoutes("/pipeline");
+    await screen.findByText("Data Scientist");
+    expect(screen.queryByText(/CV master es la plantilla/)).not.toBeInTheDocument();
+  });
+
+  it("con cv_template_findings muestra el banner rojo persistente de CV plantilla", async () => {
+    api.overview.mockResolvedValue({
+      overview: {
+        total_jobs: 1,
+        counts: { shortlisted: 1 },
+        funnel: [],
+        response_rate: null,
+        interview_rate: null,
+        applied: 0,
+        ready: 0,
+        source_health: [],
+        cv_template_findings: ["basics.name es la plantilla: 'Ada Lovelace'"],
+      },
+      needs_action: [],
+    });
+    renderRoutes("/pipeline");
+    expect(await screen.findByText(/CV master es la plantilla/)).toBeInTheDocument();
+    expect(screen.getByText(/atlas cv promote/)).toBeInTheDocument();
+  });
 });

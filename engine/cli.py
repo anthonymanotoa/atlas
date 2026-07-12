@@ -14,6 +14,7 @@ from rich.table import Table
 
 import engine.paths as paths
 from engine import __version__
+from engine.config import load_master_cv
 from engine.paths import REPO_ROOT
 
 # Load .env (Adzuna keys etc.) without overriding a real shell env.
@@ -60,6 +61,32 @@ def _db():
     return DB()
 
 
+def _warn_if_template_cv(console: Console, cv: dict | None = None) -> bool:
+    """Print a prominent warning if the active master CV is still the seed template.
+
+    Never blocks: only warns. Returns True iff a warning was printed (useful for
+    `doctor`, which folds this into its report). Pass a pre-loaded `cv` (e.g. from a caller
+    that already called `load_master_cv()`) to avoid re-parsing the file."""
+    from engine.cv.placeholder import find_placeholders
+
+    if cv is None:
+        try:
+            cv = load_master_cv()
+        except Exception:  # noqa: BLE001 — a broken/missing CV is not this helper's job
+            return False
+    findings = find_placeholders(cv)
+    if findings:
+        console.print(
+            "[bold red]⚠ Tu master CV sigue siendo la PLANTILLA[/bold red] — "
+            "nada de lo generado es enviable. Mapea profile/master_cv.draft.yaml y corre "
+            "[bold]atlas cv promote[/bold]."
+        )
+        for f in findings:
+            console.print(f"  [red]•[/red] {f}")
+        return True
+    return False
+
+
 @app.command()
 def version() -> None:
     """Print the Atlas version."""
@@ -93,6 +120,7 @@ def doctor() -> None:
 
     console.print(f"[green]✓[/] Active profile: {paths.PROFILE_ID or 'legacy'}")
     console.print(f"[green]✓[/] DB path: {paths.DB_PATH}")
+    _warn_if_template_cv(console)
     console.print("\n[bold]Manual checklist for a true $0 guarantee:[/]")
     console.print(
         "  1. Run the brain as a Claude [bold]Cowork/Desktop scheduled task[/] (never `claude -p`)."
@@ -162,25 +190,61 @@ def score(
 def top(
     n: int = typer.Option(15, help="How many to show."),
     state: str = typer.Option("shortlisted", help="Pipeline state to list."),
+    show_all: bool = typer.Option(
+        False,
+        "--all",
+        "-a",
+        help="Show every posting, including near-identical reposts (skip variant collapsing).",
+    ),
 ) -> None:
-    """List the highest-fit jobs in a given state."""
+    """List the highest-fit jobs in a given state.
+
+    By default, near-identical reposts of the same role (same company + core title — the
+    5-CVS-Health-postings problem) collapse into a single row tagged '×N'; pass --all to see
+    every variant.
+    """
+    from engine.scoring.priority import priority as blended_priority
+
     with _db() as db:
-        jobs = db.list_jobs(state=state, limit=n)
-    table = Table(title=f"Top {state}")
-    for col in ("fit", "match", "title", "company", "remote", "id"):
+        if show_all:
+            pool = db.list_jobs(state=state)
+        else:
+            from engine.scoring.dedupe import collapse_variants
+
+            # Collapse needs the full pool BEFORE truncating to n, else a repost cluster could
+            # eat all n slots and hide other jobs that would otherwise make the cut.
+            pool = collapse_variants(db.list_jobs(state=state))
+        # Collapse (or not) first, THEN sort by blended priority, THEN take the top n — sorting
+        # before truncating so a high-match/lower-fit job doesn't get cut by a raw-fit ordering.
+        jobs = sorted(
+            pool,
+            key=lambda j: blended_priority(j.get("fit_score"), j.get("match_score")),
+            reverse=True,
+        )[:n]
+    table = Table(title=f"Top {state}" + ("" if show_all else "  (variantes colapsadas)"))
+    for col in ("PRIORIDAD", "FIT (criterios)", "CV MATCH (keywords)", "title", "company", "remote", "id"):
         table.add_column(col)
     for j in jobs:
         rem = {1: "✓", 0: "✗"}.get(j["is_remote"], "?")
         match = j.get("match_score")
+        title = (j["title"] or "")[:42]
+        variant_count = j.get("variant_count") or 1
+        if variant_count > 1:
+            title = f"{title} [dim]×{variant_count}[/]"
         table.add_row(
+            str(blended_priority(j.get("fit_score"), j.get("match_score"))),
             str(j.get("fit_score")),
             f"{match}%" if match is not None else "—",
-            (j["title"] or "")[:42],
+            title,
             (j["company"] or "")[:22],
             rem,
             j["id"],
         )
     console.print(table)
+    console.print(
+        "[dim]fit = encaje con tus criterios · CV match = cobertura de keywords de la "
+        "vacante en tu CV · prioridad = 0.7·fit + 0.3·match[/]"
+    )
 
 
 @app.command()
@@ -190,14 +254,17 @@ def tailor(
     pdf: bool = typer.Option(True, help="Also render a PDF (native, via reportlab)."),
 ) -> None:
     """Generate a parse-safe, JD-tailored CV for a job (DOCX + optional PDF)."""
-    from engine.config import load_master_cv, load_ontology
+    from engine.config import load_ontology
     from engine.cv.build import build_for_job
     from engine.cv.match import match_score
+    from engine.cv.review_report import build_review
 
+    master = load_master_cv()
+    _warn_if_template_cv(console, cv=master)
     with _db() as db:
         res = build_for_job(db, job_id, language=language, make_pdf=pdf)
         job = db.get_job(job_id) or {}
-    m = match_score(job, load_master_cv(), load_ontology())
+    m = match_score(job, master, load_ontology())
     console.print(f"[bold]CV built[/] for {job_id}  (ATS: {res.ats_target})")
     console.print(f"  DOCX: {res.docx_path}")
     console.print(f"  PDF:  {res.pdf_path or '[yellow]not generated[/]'}")
@@ -212,6 +279,12 @@ def tailor(
         console.print(
             f"  [yellow]Missing JD keywords[/] (add only if true): {', '.join(res.missing[:10])}"
         )
+    coverage = {"coverage": res.coverage, "matched": res.matched, "missing": res.missing}
+    review = build_review(res.docx_path, res.pdf_path, master, job, coverage)
+    (res.docx_path.parent / "review.md").write_text(review.markdown)
+    console.print("  Revisión determinista:")
+    for c in review.checks:
+        console.print(f"    {'✅' if c.ok else '⚠️ '} {c.name}: {c.detail}")
 
 
 @app.command(name="import-cv")
@@ -289,10 +362,11 @@ def prep(
     from engine.cv.build import build_for_job
     from engine.outreach.build import build_outreach, write_package
 
+    _warn_if_template_cv(console)
     with _db() as db:
         cv = build_for_job(db, job_id, language=language)
         build_outreach(db, job_id, language=language)
-        pkg = write_package(db, job_id, language=language)
+        pkg = write_package(db, job_id, language=language)  # also writes review.md (Important 1)
     console.print(f"[bold green]Ready[/]: {job_id}")
     console.print(f"  Coverage {cv.coverage:.0%} · parse {'✓' if cv.parse_ok else '✗'}")
     console.print(f"  Package: {pkg}")
@@ -339,6 +413,9 @@ def brain(
     json_out: bool = typer.Option(
         False, "--json", help="Emit the run summary as JSON (for the orchestrator)."
     ),
+    dry_run: bool = typer.Option(
+        False, "--dry-run", help="Preview the pipeline without any writes."
+    ),
 ) -> None:
     """Run the full daily pipeline: discover → score → prepare → brief. Sends nothing."""
     import sys
@@ -358,11 +435,21 @@ def brain(
     from brain.run_brain import run
 
     with _db() as db:
-        s = run(db, limit=limit, language=language, do_discover=discover)
+        s = run(db, limit=limit, language=language, do_discover=discover, dry_run=dry_run)
     if json_out:
         import json as _json
 
         print(_json.dumps(s, indent=2, ensure_ascii=False))
+        return
+    if dry_run:
+        console.print(
+            f"[bold cyan]DRY RUN[/] — would discover: {s['would_discover']}, "
+            f"would score: {s['would_score']}, would prep: {len(s['would_prep'])} job(s), "
+            f"pending intents: {s['pending_intents']}"
+        )
+        for j in s["would_prep"]:
+            tag = "already prepared" if j["already_prepared"] else "pending"
+            console.print(f"  - {j['title']} @ {j['company']} ({tag})")
         return
     console.print(
         f"[bold green]Brain done[/] — new {s['discover'].get('new', 0)}, "
@@ -400,29 +487,53 @@ def advise(json_out: bool = typer.Option(False, "--json", help="Emit findings as
     )
 
 
+_STATE_STYLE = {
+    "ok": "[green]{}[/]",
+    "ok_empty": "[yellow]{}[/]",
+    "unconfigured": "[dim]{}[/]",
+    "error": "[red]{}[/]",
+}
+
+
 @app.command()
 def status() -> None:
     """Show pipeline counts and the latest health of each source."""
+    from engine import intents as eng_intents
+    from engine.discovery.health import classify_sources
+
     with _db() as db:
         counts = db.counts_by_state()
         health = db.latest_source_health()
+        classified = {c["source"]: c for c in classify_sources(db)}
         last_run = db.meta_get("last_run")
+        stale = eng_intents.stale_intents(db)
+        last_sweep = db.last_liveness_sweep()
     console.print(f"[bold]Pipeline[/] (last run: {last_run or 'never'})")
     for state, n in counts.items():
         console.print(f"  {state:<12} {n}")
+    console.print(
+        f"[bold]Liveness:[/] último sweep {(last_sweep or 'nunca')[:19]} · "
+        f"{counts.get('expired', 0)} expirados"
+    )
     if health:
         table = Table(title="Source health")
-        for col in ("source", "ok", "count", "when", "error"):
+        for col in ("source", "ok", "count", "when", "state", "hint/error"):
             table.add_column(col)
         for h in health:
+            c = classified.get(h["source"], {})
+            state_label = _STATE_STYLE.get(c.get("state"), "{}").format(c.get("state", ""))
+            hint = c.get("hint") or (h["error"] or "")[:40]
             table.add_row(
                 h["source"],
                 "✓" if h["ok"] else "[red]✗[/]",
                 str(h["count"]),
                 (h["run_at"] or "")[:19],
-                (h["error"] or "")[:40],
+                state_label,
+                hint[:60],
             )
         console.print(table)
+    if stale:
+        console.print(f"[yellow]⚠ {len(stale)} intent(s) atascados >48h[/]")
 
 
 @app.command(name="export")
@@ -628,12 +739,13 @@ def portfolio_generate(
     """Render your master_cv.yaml into a standalone local portfolio (never published)."""
     from datetime import UTC, datetime
 
-    from engine.config import load_master_cv
     from engine.portfolio.builder import generate_portfolio
 
+    master = load_master_cv()
+    _warn_if_template_cv(console, cv=master)
     version = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
     with _db() as db:
-        path = generate_portfolio(load_master_cv(), version=version, include_github=github)
+        path = generate_portfolio(master, version=version, include_github=github)
         db.add_portfolio(version=version, path_html=str(path))
     console.print(f"[green]✓[/] Portafolio → {path}")
     console.print("[dim]Local y privado. Ábrelo con `atlas portfolio open`.[/]")
@@ -665,6 +777,52 @@ def portfolio_open() -> None:
     console.print(f"Abriendo {p['path_html']}")
 
 
+@portfolio_app.command("research")
+def portfolio_research(
+    enqueue: bool = typer.Option(
+        False, "--enqueue", help="Encola el intent portfolio_research (el brain investiga peers vivos)."
+    ),
+) -> None:
+    """Muestra las referencias curadas + los peers descubiertos (con fecha de research)."""
+    from engine import intents as eng_intents
+    from engine.portfolio.peer_examples import load_references
+    from engine.profiles import domain_of
+
+    if enqueue:
+        with _db() as db:
+            iid = eng_intents.enqueue(db, "portfolio_research", {})
+        console.print(
+            f"[green]✓[/] Intent {iid} encolado. El brain lo drena en el próximo `corre atlas`."
+        )
+        return
+
+    with _db() as db:
+        domain = domain_of(paths.PROFILE_ID)
+        references = load_references(domain)
+        peers = db.list_peer_portfolios()
+
+    console.print(f"[bold]Referencias curadas[/] ({domain})")
+    if not references["examples"]:
+        console.print("  (sin referencias curadas para este dominio)")
+    for ex in references["examples"]:
+        console.print(f"  • {ex.get('peer_name', '—')} — {ex.get('url', '—')}")
+
+    console.print("\n[bold]Peers descubiertos (research vivo)[/]")
+    if not peers:
+        console.print("  Ninguno todavía. Corre `atlas portfolio research --enqueue`.")
+        return
+    table = Table()
+    for col in ("peer_name", "role_match", "reviewed_at"):
+        table.add_column(col)
+    for p in peers:
+        table.add_row(
+            p.get("peer_name") or "—",
+            (p.get("role_match") or "—")[:40],
+            (p.get("reviewed_at") or "—")[:16],
+        )
+    console.print(table)
+
+
 # ── intents (F4) — la cola que el brain drena como paso 0 de "corre atlas" ─────
 intents_app = typer.Typer(help="Cola de intents (handoff web → brain). El brain la drena.")
 app.add_typer(intents_app, name="intents")
@@ -686,14 +844,19 @@ def intents_list(
         print(_json.dumps(rows, indent=2, ensure_ascii=False))
         return
     table = Table(title=f"Intents ({status})")
-    for col in ("id", "type", "job", "status", "created", "result/error"):
+    for col in ("id", "type", "job", "status", "edad", "created", "result/error"):
         table.add_column(col)
     for r in rows:
+        age = r.get("age_hours")
+        edad = f"{age}h" if age is not None else "—"
+        if r.get("is_stale"):
+            edad = f"[red]{edad}[/]"
         table.add_row(
             r["id"],
             r["type"],
             (r.get("job_id") or "—")[:18],
             r["status"],
+            edad,
             (r.get("created_at") or "")[:16],
             (r.get("result_ref") or r.get("error") or "")[:30],
         )
@@ -783,6 +946,20 @@ def intents_fail(
     console.print(f"[yellow]![/] {intent_id} → error registrado")
 
 
+@intents_app.command("requeue")
+def intents_requeue(intent_id: str) -> None:
+    """Re-enqueue a stuck (error/running) intent as pending — desatasca la cola."""
+    from engine import intents as eng_intents
+
+    with _db() as db:
+        try:
+            eng_intents.requeue(db, intent_id)
+        except ValueError as e:
+            console.print(f"[red]✗[/] {e}")
+            raise typer.Exit(2) from None
+    console.print(f"[green]✓[/] {intent_id} → pending (requeued)")
+
+
 # ── cv — utilidades de CV para el brain ────────────────────────────────────────
 cv_app = typer.Typer(help="Utilidades de CV para el brain.")
 app.add_typer(cv_app, name="cv")
@@ -800,6 +977,19 @@ def cv_dump(job_id: str) -> None:
             console.print(f"[red]✗[/] {e}")
             raise typer.Exit(2) from None
     console.print(f"[green]✓[/] {path}")
+
+
+@cv_app.command("promote")
+def cv_promote() -> None:
+    """Valida el draft y lo promueve a master (con backup)."""
+    from engine.cv.promote import PromoteError, promote_draft
+
+    try:
+        out = promote_draft(paths.PROFILE_ROOT)
+    except PromoteError as e:
+        console.print(f"[red]✗[/] {e}")
+        raise typer.Exit(1) from None
+    console.print(f"[green]✓[/] Master CV promovido: {out}")
 
 
 if __name__ == "__main__":

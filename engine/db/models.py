@@ -280,6 +280,11 @@ class DB:
         rows = self.conn.execute("SELECT state, COUNT(*) n FROM jobs GROUP BY state").fetchall()
         return {r["state"]: r["n"] for r in rows}
 
+    def last_liveness_sweep(self) -> str | None:
+        """Timestamp of the most recent liveness check across all jobs, or None if never run."""
+        row = self.conn.execute("SELECT MAX(liveness_checked_at) m FROM jobs").fetchone()
+        return row["m"] if row else None
+
     # ── posting snapshots (F2) ────────────────────────────────────────────────
     _SNAPSHOT_FIELDS = (
         "title",
@@ -504,6 +509,41 @@ class DB:
         self.conn.commit()
         return int(cur.lastrowid)
 
+    def upsert_research_contact(
+        self,
+        *,
+        name: str,
+        company: str | None,
+        title: str | None = None,
+        linkedin_url: str | None = None,
+        role: str | None = None,
+        notes: str,
+    ) -> int:
+        """Insert or update a contact discovered/corroborated by brain research
+        (contact_discovery intent). Unlike `add_contact`, this ALWAYS marks
+        source='brain_research' on conflict too — so a re-discovery of a contact that
+        already exists (e.g. from a prior connections_csv import) still surfaces in
+        write_package's "Contactos sugeridos" list — and it APPENDS `notes` to any
+        pre-existing (human-written) notes instead of clobbering them, since notes/role/
+        source were never part of add_contact's ON CONFLICT UPDATE SET."""
+        cur = self.conn.execute(
+            """INSERT INTO contacts
+               (name, company, title, linkedin_url, role, source, notes, created_at)
+               VALUES (?,?,?,?,?,'brain_research',?,?)
+               ON CONFLICT(name, company) DO UPDATE SET
+                 title=COALESCE(contacts.title, excluded.title),
+                 linkedin_url=COALESCE(contacts.linkedin_url, excluded.linkedin_url),
+                 role=COALESCE(contacts.role, excluded.role),
+                 source='brain_research',
+                 notes=CASE
+                   WHEN contacts.notes IS NULL OR contacts.notes = '' THEN excluded.notes
+                   ELSE contacts.notes || char(10) || excluded.notes
+                 END""",
+            (name, company, title, linkedin_url, role, notes, now_iso()),
+        )
+        self.conn.commit()
+        return int(cur.lastrowid)
+
     def all_contacts(self) -> list[dict]:
         """Every contact. Callers that match many jobs load this ONCE and reuse it,
         instead of re-scanning the table per job (fuzzy matching happens in the referrals layer)."""
@@ -511,7 +551,57 @@ class DB:
         return [dict(r) for r in rows]
 
     def contacts_for_company(self, company_norm: str) -> list[dict]:
-        return self.all_contacts()  # fuzzy matching happens in referrals layer
+        """Contacts whose company fuzzy-matches `company_norm`. Reuses the exact fuzzy
+        matching engine.referrals.connections.match_referrals already uses for job↔contact
+        company matching (same MATCH_THRESHOLD/rapidfuzz call — see engine/analytics.py's
+        job-detail `suggested_contacts`), so a caller like intents.py's contact_discovery
+        context is genuinely scoped to one company instead of every contact ever discovered.
+        Local import: avoids a models.py <-> connections.py import cycle (connections.py
+        imports DB)."""
+        from engine.referrals.connections import match_referrals
+
+        matched = match_referrals(self, company_norm, contacts=self.all_contacts())
+        return [{k: v for k, v in c.items() if k != "_match"} for c in matched]
+
+    # ── company research (F4 Task 14) ───────────────────────────────────────
+    def add_company_research(
+        self,
+        company_norm: str,
+        *,
+        job_id: str | None,
+        summary: str,
+        signals: list | None = None,
+        sources: list | None = None,
+    ) -> int:
+        cur = self.conn.execute(
+            """INSERT INTO company_research
+               (company_norm, job_id, summary, signals_json, sources_json, researched_at)
+               VALUES (?,?,?,?,?,?)""",
+            (
+                company_norm,
+                job_id,
+                summary,
+                json.dumps(signals or []),
+                json.dumps(sources or []),
+                now_iso(),
+            ),
+        )
+        self.conn.commit()
+        return int(cur.lastrowid)
+
+    def company_research_for(self, company_norm: str) -> dict | None:
+        """Most recent research for this normalized company name, or None."""
+        row = self.conn.execute(
+            """SELECT * FROM company_research WHERE company_norm=?
+               ORDER BY researched_at DESC, id DESC LIMIT 1""",
+            (company_norm,),
+        ).fetchone()
+        if not row:
+            return None
+        d = dict(row)
+        d["signals"] = _loads(d.get("signals_json"), [])
+        d["sources"] = _loads(d.get("sources_json"), [])
+        return d
 
     # ── applications ─────────────────────────────────────────────────────────
     def add_application(
@@ -893,6 +983,68 @@ class DB:
             d["how_to_emulate"] = _loads(d.get("how_to_emulate_json"), [])
             out.append(d)
         return out
+
+    def upsert_peer_portfolio(
+        self,
+        *,
+        peer_name: str,
+        peer_portfolio_url: str,
+        role_match: str | None = None,
+        peer_profile_url: str | None = None,
+        key_strengths: list[str] | None = None,
+        how_to_emulate: list[str] | None = None,
+        source_url: str | None = None,
+        notes: str | None = None,
+    ) -> int:
+        """Upsert a peer reference keyed by ``peer_portfolio_url`` (Task 16 Part B).
+
+        `peer_portfolios` has no UNIQUE constraint on the URL today, so this does a
+        SELECT-then-UPDATE-or-INSERT instead of `ON CONFLICT`. Re-researching the same URL
+        (the brain refreshing `portfolio_research`) UPDATES the existing row — including
+        `reviewed_at` — instead of piling up duplicates. `peer_profile_url`/`notes` are only
+        overwritten when explicitly provided, so a manual note survives a brain refresh.
+        """
+        existing = self.conn.execute(
+            "SELECT id FROM peer_portfolios WHERE peer_portfolio_url=?", (peer_portfolio_url,)
+        ).fetchone()
+        if existing:
+            pid = int(existing["id"])
+            self.conn.execute(
+                """UPDATE peer_portfolios
+                   SET peer_name=?, role_match=?,
+                       peer_profile_url=COALESCE(?, peer_profile_url),
+                       key_strengths_json=?, how_to_emulate_json=?, source_url=?,
+                       notes=COALESCE(?, notes), reviewed_at=?
+                   WHERE id=?""",
+                (
+                    peer_name,
+                    role_match,
+                    peer_profile_url,
+                    json.dumps(key_strengths or []),
+                    json.dumps(how_to_emulate or []),
+                    source_url,
+                    notes,
+                    now_iso(),
+                    pid,
+                ),
+            )
+            self.conn.commit()
+            return pid
+        return self.add_peer_portfolio(
+            peer_name=peer_name,
+            role_match=role_match,
+            peer_profile_url=peer_profile_url,
+            peer_portfolio_url=peer_portfolio_url,
+            key_strengths=key_strengths,
+            how_to_emulate=how_to_emulate,
+            source_url=source_url,
+            notes=notes,
+        )
+
+    def last_peer_review(self) -> str | None:
+        """Most recent `reviewed_at` across all peer_portfolios, or `None` if empty."""
+        row = self.conn.execute("SELECT MAX(reviewed_at) AS m FROM peer_portfolios").fetchone()
+        return row["m"] if row and row["m"] else None
 
     def record_learning_feedback(
         self,

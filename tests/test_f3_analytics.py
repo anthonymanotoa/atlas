@@ -230,4 +230,99 @@ def test_analytics_payload_shape(db: DB):
         "by_role_term",
         "response_times",
         "recommendations",
+        "response_rate_by_channel",
+        "response_rate_by_cv_version",
     } <= set(p)
+
+
+# ── Task 19: outcome calibration — response rate por canal y por versión de CV ─────────────
+def _mk_outreach(
+    db: DB, n: int, *, channel: str = "email", ats_target: str = "greenhouse", responded: bool = False
+) -> str:
+    """Un job APLICADO con un mensaje ENVIADO (channel) y una CV tailoreada empaquetada en
+    `applications` (ats_target) — los dos insumos que Task 19 necesita para atribuir canal y
+    versión de CV a un resultado."""
+    jid = _mk(db, n)
+    db.set_state(jid, "applied")
+    if responded:
+        db.set_state(jid, "responded")
+    cv_id = db.add_cv_version(
+        jid,
+        language="en",
+        ats_target=ats_target,
+        path_docx=None,
+        path_pdf=None,
+        keyword_coverage=0.8,
+        matched=[],
+        missing=[],
+        parse_ok=True,
+    )
+    db.add_application(jid, method="ats_form", apply_url=None, cv_version_id=cv_id)
+    db.add_message(jid, channel=channel, kind="cover_letter", body="x", state="sent")
+    return jid
+
+
+def test_response_rate_by_channel(db: DB):
+    # 6 jobs por email, 3 responden → n=6 (≥5) suficiente, rate=0.5
+    for n in range(1, 7):
+        _mk_outreach(db, n, channel="email", responded=n <= 3)
+    # 3 jobs por linkedin, 1 responde → n=3 (<5) insuficiente, sin % engañoso
+    for n in range(7, 10):
+        _mk_outreach(db, n, channel="linkedin_note", responded=n == 7)
+    rows = {r["key"]: r for r in analytics.response_rate_by_channel(db)}
+    assert rows["email"]["applied"] == 6
+    assert rows["email"]["responded"] == 3
+    assert rows["email"]["n"] == 6
+    assert rows["email"]["response_rate"] == 0.5
+    assert rows["email"]["insufficient"] is False
+    assert rows["linkedin"]["applied"] == 3
+    assert rows["linkedin"]["n"] == 3
+    assert rows["linkedin"]["response_rate"] is None
+    assert rows["linkedin"]["insufficient"] is True
+
+
+def test_response_rate_by_channel_job_without_sent_message_is_excluded(db: DB):
+    """Un job aplicado sin ningún mensaje `sent` no se puede atribuir a ningún canal — se
+    excluye en vez de inventar una atribución (regla anti-fabricación)."""
+    jid = _mk(db, 1)
+    db.set_state(jid, "applied")
+    rows = analytics.response_rate_by_channel(db)
+    assert rows == []
+
+
+def test_response_rate_by_cv_version(db: DB):
+    # 5 aplicaciones con CV target 'greenhouse', 4 responden → n=5 suficiente, rate=0.8
+    for n in range(1, 6):
+        _mk_outreach(db, n, ats_target="greenhouse", responded=n <= 4)
+    # 3 aplicaciones con CV target 'lever', 0 responden → n=3 insuficiente
+    for n in range(6, 9):
+        _mk_outreach(db, n, ats_target="lever", responded=False)
+    rows = {r["key"]: r for r in analytics.response_rate_by_cv_version(db)}
+    assert rows["greenhouse"]["applied"] == 5
+    assert rows["greenhouse"]["responded"] == 4
+    assert rows["greenhouse"]["n"] == 5
+    assert rows["greenhouse"]["response_rate"] == 0.8
+    assert rows["greenhouse"]["insufficient"] is False
+    assert rows["lever"]["applied"] == 3
+    assert rows["lever"]["response_rate"] is None
+    assert rows["lever"]["insufficient"] is True
+
+
+def test_response_rate_by_cv_version_without_application_row_is_excluded(db: DB):
+    """Un job aplicado cuya CV nunca se empaquetó en `applications` (cv_version_id) no se
+    puede atribuir a ninguna versión — se excluye en vez de adivinar."""
+    jid = _mk(db, 1)
+    db.set_state(jid, "applied")
+    db.add_cv_version(
+        jid,
+        language="en",
+        ats_target="greenhouse",
+        path_docx=None,
+        path_pdf=None,
+        keyword_coverage=0.8,
+        matched=[],
+        missing=[],
+        parse_ok=True,
+    )
+    rows = analytics.response_rate_by_cv_version(db)
+    assert rows == []

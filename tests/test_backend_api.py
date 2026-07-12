@@ -183,6 +183,30 @@ def test_portfolio_generate_and_peers(atlas_app):
         assert peers and peers[0]["peer_name"] == "Grace"
 
 
+# ── Task 16/17: portfolio_research intent — living peer refs + freshness ─────────
+def test_portfolio_research_endpoint_includes_peers_and_last_reviewed_at(atlas_app):
+    with TestClient(atlas_app) as client:
+        research = client.get("/api/portfolio/research").json()
+        assert research["peers"] == []
+        assert research["last_reviewed_at"] is None
+
+        client.post(
+            "/api/peers", json={"peer_name": "Grace", "peer_portfolio_url": "https://grace.example"}
+        )
+        research = client.get("/api/portfolio/research").json()
+        assert any(p["peer_name"] == "Grace" for p in research["peers"])
+        assert research["last_reviewed_at"]
+
+
+def test_enqueue_portfolio_research_intent(atlas_app):
+    with TestClient(atlas_app) as client:
+        resp = client.post("/api/intents", json={"type": "portfolio_research"})
+        assert resp.status_code == 200, resp.text
+        iid = resp.json()["id"]
+        intents = client.get("/api/intents").json()["intents"]
+        assert any(i["id"] == iid and i["type"] == "portfolio_research" for i in intents)
+
+
 # ── P3-E: interview prep ─────────────────────────────────────────────────────────
 def test_interview_flow(atlas_app):
     with TestClient(atlas_app) as client:
@@ -261,6 +285,87 @@ def test_match_score_surfaces_in_job_detail(atlas_app):
         detail = client.get(f"/api/jobs/{jid}").json()
     assert detail["job"]["match_score"] == 72
     assert detail["job"]["missing_keywords"] == ["kubernetes", "terraform"]
+
+
+# ── Task 13: research + review data surfaces in the job-detail payload ─────────
+def test_job_detail_surfaces_cv_reviews_research_and_contacts(atlas_app, tmp_path):
+    from engine.db.models import DB
+    from engine.normalize import norm_company
+
+    with TestClient(atlas_app) as client:
+        jid = _seed_job()
+
+        # Deterministic review.md lives next to the tailored CV's docx (engine/cli.py writes
+        # it at `docx_path.parent / "review.md"`); job_detail must resolve it via the latest
+        # cv_version's path_docx, never a hardcoded profile path.
+        cv_dir = tmp_path / "cvs" / "acme"
+        cv_dir.mkdir(parents=True)
+        docx_path = cv_dir / "cv.docx"
+        docx_path.write_bytes(b"fake docx")
+        review_md = "# Revision\n\n✅ ATS check: ok\n⚠️ Missing keyword: kubernetes\n"
+        (cv_dir / "review.md").write_text(review_md)
+
+        with DB() as db:
+            db.add_cv_version(
+                jid,
+                language="en",
+                ats_target="greenhouse",
+                path_docx=str(docx_path),
+                path_pdf=None,
+                keyword_coverage=0.8,
+                matched=["python"],
+                missing=["kubernetes"],
+                parse_ok=True,
+            )
+            db.add_cv_review(
+                jid,
+                intent_id=None,
+                cv_version_id=None,
+                edits=[],
+                critique={"missed_keywords": ["kubernetes"]},
+                flags=[],
+            )
+            db.add_company_research(
+                norm_company("Acme"),
+                job_id=jid,
+                summary="Acme is scaling its data platform team.",
+                signals=["hiring surge"],
+                sources=["https://acme.example/blog"],
+            )
+            db.upsert_research_contact(
+                name="Jamie Rivera",
+                company="Acme",
+                title="Engineering Manager",
+                linkedin_url="https://linkedin.com/in/jamierivera",
+                role="referral",
+                notes="[brain_research] confidence=high; posted about the open role",
+            )
+
+        detail = client.get(f"/api/jobs/{jid}").json()
+
+    assert len(detail["cv_reviews"]) == 1
+    assert detail["cv_reviews"][0]["critique"]["missed_keywords"] == ["kubernetes"]
+
+    assert detail["review_report"] == review_md
+
+    assert detail["company_research"]["summary"] == "Acme is scaling its data platform team."
+    assert detail["company_research"]["signals"] == ["hiring surge"]
+
+    names = [c["name"] for c in detail["suggested_contacts"]]
+    assert "Jamie Rivera" in names
+    suggested = detail["suggested_contacts"][0]
+    assert suggested["source"] == "brain_research"
+
+
+def test_job_detail_review_report_is_null_when_missing(atlas_app):
+    """No cv_version yet (never prepped) → review_report is null, never a 500."""
+    with TestClient(atlas_app) as client:
+        jid = _seed_job()
+        detail = client.get(f"/api/jobs/{jid}").json()
+    assert detail["review_report"] is None
+    assert detail["cv_reviews"] == []
+    assert detail["company_research"] is None
+    assert detail["suggested_contacts"] == []
 
 
 # ── Plan 019: dashboard-triggered discover→score (deterministic, keyless) ──────
@@ -507,3 +612,83 @@ def test_upskill_latest_returns_persisted_report(atlas_app):
 def test_upskill_report_unknown_id_is_404(atlas_app):
     with TestClient(atlas_app) as client:
         assert client.get("/api/upskill/999999").status_code == 404
+
+
+# ── Task 3: cv_template_findings banner field ─────────────────────────────────
+def test_overview_includes_cv_template_findings_list(atlas_app):
+    """/api/overview always exposes cv_template_findings as a list (never missing/None)."""
+    with TestClient(atlas_app) as client:
+        overview = client.get("/api/overview").json()["overview"]
+    assert isinstance(overview["cv_template_findings"], list)
+
+
+def test_overview_cv_template_findings_nonempty_for_template_cv(atlas_app):
+    """The atlas_app fixture's master CV falls back to the committed Ada Lovelace
+    template (profile/master_cv.example.yaml), so find_placeholders should flag it."""
+    with TestClient(atlas_app) as client:
+        overview = client.get("/api/overview").json()["overview"]
+    findings = overview["cv_template_findings"]
+    assert findings, "expected non-empty findings for the template master CV"
+    assert any("Ada Lovelace" in f for f in findings)
+
+
+# ── Task 8: honest source-health states surfaced via /api/system/health ───────
+def test_system_health_reports_unconfigured_adzuna(atlas_app):
+    from engine.db.models import DB
+
+    with DB() as db:
+        db.log_source_health(
+            "adzuna", False, 0, "unconfigured: missing ADZUNA_APP_ID/ADZUNA_APP_KEY", 0
+        )
+    with TestClient(atlas_app) as client:
+        sources = client.get("/api/system/health").json()["sources"]
+    (adzuna,) = [s for s in sources if s["source"] == "adzuna"]
+    assert adzuna["state"] == "unconfigured"
+    assert "ADZUNA_APP_ID" in adzuna["hint"]
+
+
+# ── Task 9: /api/board collapses near-identical shortlist reposts ─────────────
+def test_board_collapses_same_company_core_title_shortlisted_jobs(atlas_app):
+    """3 near-identical postings (same company + core title, different seniority/modality
+    wording) shortlisted separately collapse to ONE board row with variant_count == 3."""
+    from engine.db.models import DB
+    from engine.normalize import Job
+
+    with DB() as db:
+        for title, fit in [
+            ("Data Analyst", 88),
+            ("Data Analyst II", 90),
+            ("Senior Data Analyst", 92),
+        ]:
+            job = Job(
+                source="greenhouse", title=title, company="CVS Health", location="Remote"
+            ).finalize()
+            db.upsert_job(job)
+            db.set_fit(job.id, fit, [], [])
+            db.set_state(job.id, "shortlisted", {"via": "test"})
+    with TestClient(atlas_app) as client:
+        board = client.get("/api/board").json()
+    shortlisted = board["jobs"]["shortlisted"]
+    assert len(shortlisted) == 1
+    assert shortlisted[0]["variant_count"] == 3
+    assert shortlisted[0]["fit_score"] == 92  # canonical = highest fit
+    assert len(shortlisted[0]["variant_ids"]) == 3
+
+
+def test_board_does_not_collapse_applied_column(atlas_app):
+    """Applied/etc. are distinct real applications — never collapsed, unlike shortlisted."""
+    from engine.db.models import DB
+    from engine.normalize import Job
+
+    with DB() as db:
+        for title in ("Data Analyst", "Data Analyst II"):
+            job = Job(
+                source="greenhouse", title=title, company="CVS Health", location="Remote"
+            ).finalize()
+            db.upsert_job(job)
+            db.set_state(job.id, "applied", {"via": "test"})
+    with TestClient(atlas_app) as client:
+        board = client.get("/api/board").json()
+    assert len(board["jobs"]["applied"]) == 2
+    for j in board["jobs"]["applied"]:
+        assert "variant_count" not in j

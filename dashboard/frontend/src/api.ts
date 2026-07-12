@@ -39,6 +39,10 @@ export type Job = {
   // F4 Block G posting-legitimacy (ghost-job triage; orthogonal to fit/match). NULL = sin evaluar.
   legitimacy_tier?: "high" | "medium" | "low" | null;
   legitimacy_notes?: string | null; // señales observadas, nunca acusaciones
+  // Task 9: shortlist variant collapse (near-identical reposts of the same role). Only present
+  // on the "shortlisted" board column — other columns are distinct applications, never collapsed.
+  variant_count?: number; // >=1; >1 means N postings collapsed into this canonical row
+  variant_ids?: string[]; // all job ids in the group, canonical first
 };
 
 export type Action = {
@@ -64,6 +68,7 @@ export type Overview = {
   last_success?: string;
   downtime_hours?: number | null;
   source_health: { source: string; ok: number; count: number; error?: string }[];
+  cv_template_findings?: string[];
 };
 
 export type Message = {
@@ -93,6 +98,11 @@ export type Referral = {
   company?: string;
   title?: string;
   linkedin_url?: string;
+  // Present when this contact came from contact_discovery (Task 15): source is
+  // "brain_research" and notes packs "[brain_research] confidence=<low|medium|high>; <reasoning>"
+  // (see engine.intents._write_contact_discovery / engine.db.models.upsert_research_contact).
+  source?: string;
+  notes?: string;
 };
 export type Profile = { id: string; label: string; domain?: string; is_owner?: boolean };
 export type CsvColumn = { id: string; label: string };
@@ -177,6 +187,10 @@ export type PortfolioResearch = {
   examples: PeerExample[];
   patterns: Record<string, string[]>;
   prompt: string;
+  // Task 16/17: the LIVING peer set the `portfolio_research` intent keeps fresh, plus when it
+  // was last reviewed — so the UI can show a freshness date next to the curated (one-time) set.
+  peers: Peer[];
+  last_reviewed_at: string | null;
 };
 export type Peer = {
   id: number;
@@ -188,6 +202,7 @@ export type Peer = {
   how_to_emulate?: string[];
   source_url?: string;
   notes?: string;
+  reviewed_at?: string | null;
 };
 // F4 §7.1 intents queue — la web SOLO encola ($0); el brain drena la cola y ejecuta el LLM.
 // El status refleja el ciclo de vida server-side (pending → running → done|error).
@@ -263,6 +278,17 @@ export type ProfileExpansion = {
   created_at: string;
 };
 
+// Task 14: company_research intent output — read-only, the brain never sends anything.
+export type CompanyResearch = {
+  id: number;
+  company_norm: string;
+  job_id?: string | null;
+  summary: string;
+  signals: string[];
+  sources: string[];
+  researched_at: string;
+};
+
 export type JobDetail = {
   job: Job;
   cv_versions: CvVersion[];
@@ -271,6 +297,11 @@ export type JobDetail = {
   social_mentions?: SocialMention[];
   learnings?: Learning[];
   timeline: { stage: string; at: string }[];
+  // Task 13: research + review data collected by Tasks 12/14/15, surfaced in job detail.
+  cv_reviews: CvReview[];
+  review_report: string | null;
+  company_research: CompanyResearch | null;
+  suggested_contacts: Referral[];
 };
 
 // F3 §6.5 ops: system health + resolve/add company + reverse discovery.
@@ -360,6 +391,17 @@ export type Recommendation = {
   action_type: "set_criteria" | "block_company" | "none";
   payload: Record<string, unknown>;
 };
+// Task 19 — calibración de outcomes: response rate por canal de outreach y por variante de
+// CV, con muestra mínima honesta (n<5 ⇒ response_rate=null + insufficient=true, nunca un %
+// engañoso). Ver engine/analytics.py:response_rate_by_channel / response_rate_by_cv_version.
+export type RateRow = {
+  key: string;
+  applied: number;
+  responded: number;
+  n: number;
+  response_rate: number | null;
+  insufficient: boolean;
+};
 export type Analytics = {
   funnel: FunnelStage[];
   score_floor: number | null;
@@ -369,6 +411,8 @@ export type Analytics = {
   by_role_term: ConversionRow[];
   response_times: ResponseTimes;
   recommendations: Recommendation[];
+  response_rate_by_channel: RateRow[];
+  response_rate_by_cv_version: RateRow[];
 };
 
 async function get<T>(url: string): Promise<T> {

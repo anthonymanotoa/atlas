@@ -3,6 +3,7 @@ import {
   Banknote,
   Brain,
   Circle,
+  FileWarning,
   Flag,
   GraduationCap,
   Handshake,
@@ -36,4 +37,5 @@ export const SalaryIcon = Banknote; // 💰 salary
 export const InsightsIcon = Brain; // 🧠 company learnings
 export const CelebrateIcon = PartyPopper; // 🎉 all-clear empty state
 export const DowntimeIcon = TriangleAlert; // ⚠️ downtime warning
+export const CvTemplateIcon = FileWarning; // ⚠️ master CV is still the template
 export const UpskillIcon = GraduationCap; // 🎓 upskilling / gap analysis
