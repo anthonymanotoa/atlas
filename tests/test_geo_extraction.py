@@ -213,3 +213,40 @@ def test_explicit_residency_demand_beats_worldwide_mention():
 
 def test_plain_country_location_still_wins_when_no_body_signal():
     assert extract_geo_restriction("Remote — MN, US", None, True) == ("Remote — MN, US", "us")
+
+
+def test_work_from_anywhere_in_the_world_is_worldwide():
+    # "in the world"/"in the globe" are worldwide-affirming — must NOT be treated like "in the US".
+    assert extract_geo_restriction("United States", "Work from anywhere in the world.", True)[1] == (
+        "worldwide"
+    )
+    assert extract_geo_restriction("", "We are remote worldwide.", True)[1] == "worldwide"
+
+
+def test_incidental_within_the_country_does_not_override_location():
+    # "within the US business hours" is NOT a residency demand — the Brazil location must win.
+    raw, scope = extract_geo_restriction(
+        "Remote - Brazil", "You'll collaborate within the US business hours.", True
+    )
+    assert scope == "br"
+
+
+def test_remote_dash_country_prose_does_not_override_location():
+    # "Remote, US-based clients" is incidental — the Brazil location must win.
+    raw, scope = extract_geo_restriction(
+        "Remote - Brazil", "Remote, US-based clients are our focus.", True
+    )
+    assert scope == "br"
+
+
+def test_real_residency_demand_still_overrides_location():
+    # A genuine eligibility demand DOES outrank the location country.
+    raw, scope = extract_geo_restriction(
+        "Remote - Brazil", "You must reside in the United States.", True
+    )
+    assert scope == "us"
+
+
+def test_weak_pattern_still_works_as_fallback_without_location():
+    # With no location signal, the weak "within the EU" pattern is still the best we have.
+    assert extract_geo_restriction("Remote", "You are located within the EU.", True)[1] == "eu"

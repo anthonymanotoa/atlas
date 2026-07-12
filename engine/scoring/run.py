@@ -120,5 +120,5 @@ def score_jobs(db: DB, criteria: Criteria, *, rescore: bool = False) -> tuple[in
                 db.set_fit(
                     j["id"], res.score, res.reasons, res.knockouts, breakdown=res.breakdown()
                 )
-                db.set_state(j["id"], "scored", {"reason": "geo-ineligible on rescore"})
+                db.set_state(j["id"], "scored", {"reason": "disqualified on rescore"})
     return scored, shortlisted
