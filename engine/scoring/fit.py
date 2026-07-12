@@ -200,10 +200,11 @@ def score_job(job: dict, criteria: Criteria, learnings: list[dict] | None = None
             knockouts.append("presencial fuera de tus ubicaciones")
             reasons.append(f"on-site outside your locations ({job.get('location')})")
 
-    # 2c. Geo-restricted remote (F2): a remote posting restricted to a country/region that
-    #     doesn't cover the candidate is penalized and flagged — NEVER disqualified (they
-    #     stay browsable, just lower). Off when candidate_country is unset; "unknown"/""/
-    #     "worldwide" scopes never penalize (no signal ≠ restriction).
+    # 2c. Geo-restricted remote (F2): a remote posting CONFIRMED-restricted to a country/region
+    #     that doesn't cover the candidate is DISQUALIFIED (score hard-capped at 12, same path as
+    #     deal-breakers) — you can't take a job you can't legally reside for. It stays browsable
+    #     at the bottom with a visible knockout. Off when candidate_country is unset; ""/
+    #     "worldwide"/"unknown" scopes never disqualify (no signal ≠ a restriction).
     geo_scope = (job.get("geo_scope") or "").strip().lower()
     if (
         criteria.candidate_country
@@ -211,15 +212,17 @@ def score_job(job: dict, criteria: Criteria, learnings: list[dict] | None = None
         and geo_scope not in ("", "worldwide", "unknown")
         and not geo_scope_covers(geo_scope, criteria.candidate_country, criteria.acceptable_regions)
     ):
+        disq = True
         scope_label = ",".join(t.upper() for t in geo_scope.split(","))
-        knockouts.append(f"remoto restringido a {scope_label}")
+        knockouts.append(f"remoto solo {scope_label}")
         raw = job.get("geo_restriction")
+        # delta 0: the disq hard-cap (12) below enforces it; recorded so the breakdown shows WHY.
         _apply(
-            -criteria.geo_penalty,
+            0,
             "geo",
             f"remote restricted to {scope_label}"
             + (f' ("{raw}")' if raw else "")
-            + " — outside your country/regions",
+            + " — outside your country/regions (disqualified)",
         )
 
     # 2d. Geo-mismatch (F2 hygiene): the metadata says remote but the body demands office

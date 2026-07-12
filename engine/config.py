@@ -35,11 +35,11 @@ class Criteria(BaseModel):
     onsite_locations: list[str] = Field(default_factory=list)  # when set, a CONFIRMED on-site
     # posting whose location matches none of these is disqualified; REMOTE postings are exempt
     # (remote is worldwide). Lets a seeker say "on-site only in Ecuador, but remote from anywhere".
-    # ── Geo-scoring (F2): where the candidate lives, for the remote-restriction penalty ──
+    # ── Geo-scoring (F2): where the candidate lives, for the remote-restriction gate ──
     candidate_country: str = ""  # ISO-2 code (e.g. "ec"); empty = geo factor OFF.
     acceptable_regions: list[str] = Field(default_factory=lambda: ["worldwide"])
-    # regions (latam/eu/na/apac/emea) whose geo-restricted remote jobs still work for you
-    geo_penalty: float = 12.0  # points subtracted from a remote job restricted elsewhere
+    # regions (latam/eu/na/apac/emea) whose geo-restricted remote jobs still work for you. A
+    # confirmed restriction outside your country/regions DISQUALIFIES the job (see fit.py 2c).
     re_apply_window_days: int = 0  # flag jobs at companies you applied to <N days ago; 0 = off
     languages: list[str] = Field(default_factory=lambda: ["en", "es"])
     language_hard: bool = False  # if True, a confidently-detected off-language posting is

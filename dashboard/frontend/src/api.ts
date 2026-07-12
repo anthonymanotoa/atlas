@@ -142,7 +142,6 @@ export type CriteriaConfig = {
   candidate_years: number;
   candidate_country: string;
   acceptable_regions: string[];
-  geo_penalty: number;
   re_apply_window_days: number;
   shortlist_threshold: number;
   [key: string]: unknown;
