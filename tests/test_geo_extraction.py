@@ -167,3 +167,49 @@ def test_finalize_onsite_gets_empty_scope():
     ).finalize()
     assert j.geo_scope == ""
     assert j.geo_restriction is None
+
+
+# ── US-state ↔ ISO-2 collision (Task 1) ──────────────────────────────────────
+def test_us_state_code_is_not_read_as_foreign_country():
+    # "CO, US" is Colorado, not Colombia — scope must be just "us".
+    assert extract_geo_restriction("Remote — CO, US", None, True) == ("Remote — CO, US", "us")
+    assert extract_geo_restriction("Remote — PA, US", None, True) == ("Remote — PA, US", "us")
+    assert extract_geo_restriction("Remote — DE, US", None, True) == ("Remote — DE, US", "us")
+
+
+def test_full_country_name_next_to_us_is_kept():
+    # "Canada; US" names Canada in full → ca survives even though CA is a state code.
+    raw, scope = extract_geo_restriction("Remote, Canada; US", None, True)
+    assert set(scope.split(",")) == {"ca", "us"}
+
+
+def test_bare_state_code_without_us_is_left_alone():
+    # No "us" anchor → we don't guess; a lone "CO" still reads as Colombia (rare, low-signal).
+    assert extract_geo_restriction("Remote — CO", None, True) == ("Remote — CO", "co")
+
+
+# ── Evidence priority + worldwide override (Task 2) ──────────────────────────
+def test_worldwide_in_body_overrides_a_country_location():
+    # "US" in the location but the body says work-from-anywhere → not a US restriction.
+    raw, scope = extract_geo_restriction(
+        "United States", "We're fully remote — work from anywhere.", True
+    )
+    assert scope == "worldwide"
+
+
+def test_anywhere_in_the_us_is_not_worldwide():
+    # The counter-case: "anywhere in the US" is a US restriction, not worldwide.
+    raw, scope = extract_geo_restriction(
+        "United States", "You can work from anywhere in the US.", True
+    )
+    assert scope == "us"
+
+
+def test_explicit_residency_demand_beats_worldwide_mention():
+    desc = "Remote worldwide vibes, but you must reside in the United States."
+    raw, scope = extract_geo_restriction("Remote", desc, True)
+    assert scope == "us"
+
+
+def test_plain_country_location_still_wins_when_no_body_signal():
+    assert extract_geo_restriction("Remote — MN, US", None, True) == ("Remote — MN, US", "us")

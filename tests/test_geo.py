@@ -2,7 +2,20 @@
 
 from __future__ import annotations
 
-from engine.geo import COUNTRY_TO_REGION, GEO_ALIASES, geo_scope_covers, region_of
+from engine.geo import (
+    COUNTRY_TO_REGION,
+    GEO_ALIASES,
+    STATE_CODE_COLLISIONS,
+    US_STATE_CODES,
+    geo_scope_covers,
+    region_of,
+)
+
+
+def test_state_collision_set_is_the_country_state_intersection():
+    assert STATE_CODE_COLLISIONS == {c for c in COUNTRY_TO_REGION if c in US_STATE_CODES}
+    # The eight ISO-2 country codes that are also USPS state codes.
+    assert STATE_CODE_COLLISIONS == {"ar", "ca", "co", "de", "id", "in", "mt", "pa"}
 
 
 def test_map_has_the_four_regions_and_a_sane_size():

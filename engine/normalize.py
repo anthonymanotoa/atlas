@@ -9,7 +9,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from engine.geo import COUNTRY_TO_REGION, GEO_ALIASES
+from engine.geo import COUNTRY_TO_REGION, GEO_ALIASES, STATE_CODE_COLLISIONS
 from engine.lang import detect_language
 
 # Pipeline state machine. Order matters for analytics (index = stage rank).
@@ -177,7 +177,9 @@ _DESC_PATTERNS = [
     ),
 ]
 _WORLDWIDE_DESC_RE = re.compile(
-    r"\b(work\s+from\s+anywhere|remote\s+worldwide|fully\s+remote,?\s+worldwide)\b", re.I
+    r"\b(work\s+from\s+anywhere|remote\s+worldwide|fully\s+remote,?\s+worldwide)\b"
+    r"(?!\s+(?:in|within)\b)",
+    re.I,
 )
 
 
@@ -193,28 +195,46 @@ def extract_geo_restriction(
     """
     if is_remote in (0, False):
         return None, ""
-    loc = (location or "").strip()
-    if loc:
-        scopes: list[str] = []
-        for m in _LOC_ALIAS_RE.finditer(loc):
-            s = GEO_ALIASES[m.group("geo").lower()]
-            if s not in scopes:
-                scopes.append(s)
-        for m in _LOC_CODE_RE.finditer(loc):
-            s = m.group(1).lower()
-            if s not in scopes:
-                scopes.append(s)
-        if "worldwide" in scopes:
-            return loc, "worldwide"
-        if scopes:
-            return loc, ",".join(scopes)
     desc = description or ""
+    # 1. An explicit residency demand in the body is the strongest signal — it beats both a
+    #    "work from anywhere" reassurance and whatever the location field says.
     for rx in _DESC_PATTERNS:
         m = rx.search(desc)
         if m:
             return m.group(0).strip(), GEO_ALIASES[m.group("geo").lower()]
+    # 2. An explicit worldwide reassurance ("work from anywhere") outranks a country that only
+    #    appears in the location field (the "remote in <country>, but really anywhere" case).
     if _WORLDWIDE_DESC_RE.search(desc):
         return None, "worldwide"
+    # 3. Location-derived scope. Alias-derived tokens (full names / safe short forms) are
+    #    trustworthy; bare ISO-2 codes are risky because US state abbreviations collide with
+    #    country codes (CO→Colombia). When "us" is present, drop such collisions unless the
+    #    country was ALSO named in full.
+    loc = (location or "").strip()
+    if loc:
+        alias_scopes: list[str] = []
+        for m in _LOC_ALIAS_RE.finditer(loc):
+            s = GEO_ALIASES[m.group("geo").lower()]
+            if s not in alias_scopes:
+                alias_scopes.append(s)
+        code_scopes: list[str] = []
+        for m in _LOC_CODE_RE.finditer(loc):
+            s = m.group(1).lower()
+            if s not in code_scopes:
+                code_scopes.append(s)
+        us_present = "us" in alias_scopes or "us" in code_scopes
+        scopes: list[str] = list(alias_scopes)
+        for s in code_scopes:
+            if s in scopes:
+                continue
+            if us_present and s in STATE_CODE_COLLISIONS and s not in alias_scopes:
+                continue
+            scopes.append(s)
+        if "worldwide" in scopes:
+            return loc, "worldwide"
+        if scopes:
+            return loc, ",".join(scopes)
+    # 4. Nothing detected on a remote posting.
     return None, "unknown"
 
 

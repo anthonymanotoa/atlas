@@ -97,6 +97,24 @@ COUNTRY_TO_REGION: dict[str, str] = {
     "vn": "apac",
 }
 
+# USPS two-letter state/territory codes, lowercased. Used only to stop a US-scoped location
+# ("CO, US") from mis-reading a state abbreviation as the ISO-2 country that shares its spelling
+# (CO→Colombia, PA→Panama, DE→Germany, …). See extract_geo_restriction in engine/normalize.py.
+US_STATE_CODES: frozenset[str] = frozenset(
+    {
+        "al", "ak", "az", "ar", "ca", "co", "ct", "de", "fl", "ga",
+        "hi", "id", "il", "in", "ia", "ks", "ky", "la", "me", "md",
+        "ma", "mi", "mn", "ms", "mo", "mt", "ne", "nv", "nh", "nj",
+        "nm", "ny", "nc", "nd", "oh", "ok", "or", "pa", "ri", "sc",
+        "sd", "tn", "tx", "ut", "vt", "va", "wa", "wv", "wi", "wy",
+        "dc",
+    }
+)
+# The ISO-2 country codes that collide with a USPS state code: {ar, ca, co, de, id, in, mt, pa}.
+STATE_CODE_COLLISIONS: frozenset[str] = frozenset(
+    c for c in COUNTRY_TO_REGION if c in US_STATE_CODES
+)
+
 # Text alias (lowercase) → scope token. Only UNAMBIGUOUS aliases belong here: full country
 # names, region names, and safe short forms. Bare ISO-2 codes are deliberately absent —
 # lowercased they collide with English/Spanish words ("in", "us", "it", "no", "es") — and
