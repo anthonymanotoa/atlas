@@ -55,3 +55,81 @@ def test_dry_run_reports_without_writing(db: DB):
     # Zero writes: DB state is byte-for-byte unchanged.
     assert db.counts_by_state() == counts_before
     assert _event_count(db) == events_before
+
+
+def _seed_shortlisted(db: DB, title: str, company: str, fit: float) -> str:
+    j = Job(source="x", title=title, company=company, location="Remote")
+    db.upsert_job(j)
+    db.set_fit(j.id, fit, [], [])
+    db.set_state(j.id, "shortlisted")
+    return j.id
+
+
+def test_dry_run_collapses_shortlist_variants(db: DB):
+    """Task 9 dedupe (collapse_variants) must apply to the brain's OWN prep selection, not
+    just `atlas top` / `/api/board`: 5 near-identical CVS Health postings + 1 distinct job
+    must collapse to 2 would_prep entries, not 6 (the exact "7x CVS Health" bug report)."""
+    variant_titles = [
+        "Data Analyst",
+        "Data Analyst II",
+        "Senior Data Analyst",
+        "Data Analyst (Remote)",
+        "Sr. Data Analyst - Hybrid",
+    ]
+    ids = [
+        _seed_shortlisted(db, title, "CVS Health", fit=80 + i)
+        for i, title in enumerate(variant_titles)
+    ]
+    other_id = _seed_shortlisted(db, "ML Engineer", "OtherCo", fit=70)
+
+    summary = run(db, dry_run=True, do_discover=False)
+
+    assert len(summary["would_prep"]) == 2
+    by_company = {j["company"]: j for j in summary["would_prep"]}
+    assert set(by_company) == {"CVS Health", "OtherCo"}
+
+    cvs_entry = by_company["CVS Health"]
+    assert cvs_entry["variant_count"] == 5
+    assert cvs_entry["id"] == ids[-1]  # highest fit (84) among the CVS variants
+
+    other_entry = by_company["OtherCo"]
+    assert other_entry["variant_count"] == 1
+    assert other_entry["id"] == other_id
+
+
+def test_dry_run_would_prep_respects_limit_after_collapse(db: DB):
+    """`limit` must slice the COLLAPSED pool (canonicals), matching the real prep loop and
+    `atlas top` — collapsing AFTER truncating (the pre-fix behavior) would let the CVS
+    repost cluster (fit 85-89, the two highest-fit rows in the whole table) eat the entire
+    limit=2 budget with two duplicates of the SAME job, hiding Beta entirely."""
+    for i, title in enumerate(["Data Analyst", "Data Analyst II", "Senior Data Analyst"]):
+        _seed_shortlisted(db, title, "CVS Health", fit=85 + i)
+    _seed_shortlisted(db, "ML Engineer", "Beta", fit=80)
+    _seed_shortlisted(db, "Backend Engineer", "Gamma", fit=75)
+
+    summary = run(db, dry_run=True, do_discover=False, limit=2)
+
+    assert len(summary["would_prep"]) == 2
+    companies = {j["company"] for j in summary["would_prep"]}
+    # Collapsed canonicals ranked by fit: CVS cluster (89) then Beta (80) beat Gamma (75).
+    assert companies == {"CVS Health", "Beta"}
+
+
+def test_shortlisted_to_prepare_helper_collapses_variants(db: DB):
+    """Unit-test the extracted selection helper directly (both `run()`'s real prep loop and
+    the dry-run preview call this) so the collapse-then-slice behavior is locked even where
+    invoking a full real `run()` would require heavier profile/CV-layout config."""
+    from brain.run_brain import _shortlisted_to_prepare
+
+    variant_titles = ["Data Analyst", "Data Analyst II", "Senior Data Analyst"]
+    for i, title in enumerate(variant_titles):
+        _seed_shortlisted(db, title, "CVS Health", fit=80 + i)
+    other_id = _seed_shortlisted(db, "ML Engineer", "OtherCo", fit=70)
+
+    result = _shortlisted_to_prepare(db, limit=8)
+
+    assert len(result) == 2
+    ids = {j["id"] for j in result}
+    assert other_id in ids
+    cvs_job = next(j for j in result if j["company"] == "CVS Health")
+    assert cvs_job["variant_count"] == 3

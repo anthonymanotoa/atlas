@@ -31,6 +31,7 @@ from engine.normalize import norm_company, now_iso, parse_dt_utc
 from engine.outreach.build import build_outreach, write_package
 from engine.outreach.followups import followup_text
 from engine.referrals.connections import match_referrals
+from engine.scoring.dedupe import collapse_variants
 from engine.scoring.run import score_jobs
 
 # Task 18 — planner caps. Independent of `run()`'s own `--limit` (which bounds how many
@@ -40,12 +41,28 @@ PLANNER_CAP = 5
 PORTFOLIO_REVIEW_MAX_AGE_DAYS = 7
 
 
+def _shortlisted_to_prepare(db: DB, limit: int) -> list[dict]:
+    """Task 9 follow-up: the jobs the brain should actually prepare this run.
+
+    Collapses near-identical shortlist variants (same norm_company + core_title — e.g. 7
+    reposts of "Senior Data Scientist @ CVS Health") into one canonical per group BEFORE
+    slicing to `limit`, so a repost cluster doesn't burn the whole prep budget on
+    duplicates. Mirrors `atlas top` / `/api/board` (collapse the FULL shortlisted pool,
+    THEN slice) — collapsing after truncating could hide other companies behind a cluster
+    that already ate all `limit` slots. Used by both the real prep loop and the dry-run
+    preview so they can never drift from each other.
+    """
+    pool = collapse_variants(db.list_jobs(state="shortlisted"))
+    return pool[:limit]
+
+
 def _dry_run_summary(db: DB, *, limit: int, do_discover: bool) -> dict:
     """Read-only preview of what a real `run()` would do — zero writes.
 
     Reuses the same selectors the real run does (counts_by_state for what discovery
-    would hand to the scorer, list_jobs(state="shortlisted") for what prepare would
-    pick up), so this never drifts from reality without both being updated together.
+    would hand to the scorer, `_shortlisted_to_prepare` for what prepare would pick up —
+    variant-collapsed, same as the real prep loop), so this never drifts from reality
+    without both being updated together.
     """
     would_prep = [
         {
@@ -53,8 +70,9 @@ def _dry_run_summary(db: DB, *, limit: int, do_discover: bool) -> dict:
             "title": j["title"],
             "company": j["company"],
             "already_prepared": bool(db.cv_versions_for(j["id"])),
+            "variant_count": j.get("variant_count", 1),
         }
-        for j in db.list_jobs(state="shortlisted", limit=limit)
+        for j in _shortlisted_to_prepare(db, limit)
     ]
     return {
         "dry_run": True,
@@ -165,8 +183,10 @@ def run(
     scored, shortlisted = score_jobs(db, criteria)
     summary["scored"], summary["shortlisted"] = scored, shortlisted
 
-    # Prepare the top shortlisted jobs not yet prepared.
-    for j in db.list_jobs(state="shortlisted", limit=limit):
+    # Prepare the top shortlisted jobs not yet prepared. Variant-collapsed (Task 9
+    # follow-up): only the canonical of each near-identical repost cluster gets a CV/package
+    # this run — the variants stay in the DB, just not re-prepared 5-7x in a row.
+    for j in _shortlisted_to_prepare(db, limit):
         try:
             cv = build_for_job(db, j["id"], language=language)
             build_outreach(db, j["id"], language=language)
