@@ -66,8 +66,7 @@ core_keywords:                  # must-appear terms the CV audit checks for this
   - generative ai
 # ── Geo (F2): tu país, para la penalización de remotos restringidos ──
 candidate_country: ""          # tu código ISO-2 (p. ej. "ec"); vacío = factor apagado
-acceptable_regions: [worldwide] # regiones cuyos remotos restringidos sí te sirven (latam/eu/na/apac)
-geo_penalty: 12                # puntos que resta un remoto restringido fuera de tu alcance
+acceptable_regions: [worldwide] # regiones que SÍ te cubren; un remoto restringido fuera de aquí se DESCARTA (latam/eu/na/apac)
 re_apply_window_days: 0        # marca empresas donde aplicaste hace <N días; 0 = apagado
 ---
 

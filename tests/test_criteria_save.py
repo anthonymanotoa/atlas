@@ -39,7 +39,7 @@ def test_save_and_reload_roundtrip(tmp_path, monkeypatch):
         roles=["data engineer"],
         candidate_country="ec",
         acceptable_regions=["latam"],
-        geo_penalty=15.0,
+        salary_floor_usd=80000.0,
         re_apply_window_days=14,
         prose="# Mi búsqueda",
     )
@@ -49,7 +49,7 @@ def test_save_and_reload_roundtrip(tmp_path, monkeypatch):
     assert c2.roles == ["data engineer"]
     assert c2.candidate_country == "ec"
     assert c2.acceptable_regions == ["latam"]
-    assert c2.geo_penalty == 15.0
+    assert c2.salary_floor_usd == 80000.0
     assert c2.re_apply_window_days == 14
     assert "Mi búsqueda" in c2.prose
 

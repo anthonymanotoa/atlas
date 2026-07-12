@@ -10,7 +10,7 @@ def test_criteria_geo_defaults_are_off():
     c = Criteria()
     assert c.candidate_country == ""  # empty = geo factor OFF (never a real country default)
     assert c.acceptable_regions == ["worldwide"]
-    assert c.geo_penalty == 12.0
+    assert not hasattr(c, "geo_penalty")  # retired: geo is now a hard disqualifier, not a penalty
     assert c.re_apply_window_days == 0
 
 
@@ -35,45 +35,34 @@ def _job(**kw) -> dict:
     return base
 
 
-def test_us_only_remote_is_penalized_never_dq():
+def test_us_only_remote_is_disqualified():
     restricted = score_job(_job(geo_scope="us", geo_restriction="Remote — US only"), _GEO)
-    open_ = score_job(_job(geo_scope="worldwide"), _GEO)
-    assert restricted.disqualified is False
-    assert open_.score - restricted.score == 12.0
-    assert any(k.startswith("remoto restringido a US") for k in restricted.knockouts)
+    assert restricted.disqualified is True
+    assert restricted.score <= 12.0  # hard-capped like a deal-breaker
+    assert any(k.startswith("remoto solo US") for k in restricted.knockouts)
 
 
-def test_scope_in_acceptable_region_not_penalized():
+def test_scope_in_acceptable_region_not_disqualified():
     latam = score_job(_job(geo_scope="latam"), _GEO)
     own = score_job(_job(geo_scope="ec"), _GEO)
     open_ = score_job(_job(geo_scope="worldwide"), _GEO)
     assert latam.score == own.score == open_.score
+    assert not (latam.disqualified or own.disqualified or open_.disqualified)
 
 
-def test_unknown_or_missing_scope_never_penalized():
+def test_unknown_or_missing_scope_never_disqualified():
     unknown = score_job(_job(geo_scope="unknown"), _GEO)
     missing = score_job(_job(), _GEO)  # no geo_scope key at all (pre-F2 rows)
     open_ = score_job(_job(geo_scope="worldwide"), _GEO)
     assert unknown.score == missing.score == open_.score
+    assert not (unknown.disqualified or missing.disqualified or open_.disqualified)
 
 
 def test_factor_off_without_candidate_country():
     crit = Criteria(roles=["data engineer"], remote_required=True)  # candidate_country=""
     r = score_job(_job(geo_scope="us"), crit)
-    assert not any("remoto restringido" in k for k in r.knockouts)
-
-
-def test_geo_penalty_is_configurable():
-    crit = Criteria(
-        roles=["data engineer"],
-        candidate_country="ec",
-        acceptable_regions=["latam"],
-        remote_required=True,
-        geo_penalty=20.0,
-    )
-    restricted = score_job(_job(geo_scope="us"), crit)
-    open_ = score_job(_job(geo_scope="worldwide"), crit)
-    assert open_.score - restricted.score == 20.0
+    assert not any("remoto solo" in k for k in r.knockouts)
+    assert r.disqualified is False
 
 
 def test_onsite_job_ignores_geo_factor():
@@ -81,7 +70,7 @@ def test_onsite_job_ignores_geo_factor():
     r = score_job(
         {"title": "Data Engineer", "description": "x", "is_remote": 0, "geo_scope": ""}, crit
     )
-    assert not any("remoto restringido" in k for k in r.knockouts)
+    assert not any("remoto solo" in k for k in r.knockouts)
 
 
 # --- Factor 2d: remote/on-site contradiction (flag-only) ---

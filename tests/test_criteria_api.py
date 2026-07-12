@@ -44,7 +44,7 @@ def test_put_criteria_rejects_invalid_payload(atlas_app, tmp_path, monkeypatch):
     _redirect_criteria(monkeypatch, tmp_path)
     with TestClient(atlas_app) as client:
         resp = client.put(
-            "/api/criteria", json={"criteria": {"geo_penalty": "not-a-number"}, "prose": ""}
+            "/api/criteria", json={"criteria": {"salary_floor_usd": "not-a-number"}, "prose": ""}
         )
     assert resp.status_code == 422
 
@@ -65,7 +65,7 @@ def test_put_invalid_does_not_corrupt_existing_file(atlas_app, tmp_path, monkeyp
         before = (tmp_path / "config" / "criteria.md").read_text()
         # Now push garbage: it must be rejected and the file left as-is.
         resp = client.put(
-            "/api/criteria", json={"criteria": {"geo_penalty": "not-a-number"}, "prose": "# Bad"}
+            "/api/criteria", json={"criteria": {"salary_floor_usd": "not-a-number"}, "prose": "# Bad"}
         )
         assert resp.status_code == 422
         after = (tmp_path / "config" / "criteria.md").read_text()
@@ -90,7 +90,7 @@ def test_put_preserves_prose_when_only_frontmatter_changes(atlas_app, tmp_path, 
         )
         # Change only a frontmatter field; resend the prose unchanged (wizard behavior).
         state = client.get("/api/criteria").json()
-        state["criteria"]["geo_penalty"] = 20.0
+        state["criteria"]["salary_floor_usd"] = 80000.0
         assert (
             client.put(
                 "/api/criteria", json={"criteria": state["criteria"], "prose": state["prose"]}
@@ -98,7 +98,7 @@ def test_put_preserves_prose_when_only_frontmatter_changes(atlas_app, tmp_path, 
             == 200
         )
         final = client.get("/api/criteria").json()
-    assert final["criteria"]["geo_penalty"] == 20.0
+    assert final["criteria"]["salary_floor_usd"] == 80000.0
     assert "Busco algo remoto." in final["prose"]
 
 

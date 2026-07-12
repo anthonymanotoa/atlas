@@ -9,7 +9,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from engine.geo import COUNTRY_TO_REGION, GEO_ALIASES
+from engine.geo import COUNTRY_TO_REGION, GEO_ALIASES, STATE_CODE_COLLISIONS
 from engine.lang import detect_language
 
 # Pipeline state machine. Order matters for analytics (index = stage rank).
@@ -147,7 +147,14 @@ _LOC_CODE_RE = re.compile(
 )
 # Description bodies are long free text → only anchored phrases count, and the captured
 # geo must be a known alias (free text can never produce a scope).
-_DESC_PATTERNS = [
+#
+# Two tiers, by strength — because they sit on opposite sides of the location field in
+# extract_geo_restriction. RESIDENCY patterns are candidate-eligibility demands ("must reside
+# in the US"): they are unambiguous and OUTRANK a country in the location field. WEAK patterns
+# ("within the US", "Remote - US") are ambiguous mentions that also fire on incidental prose
+# ("collaborate within the US business hours"), so they must stay a FALLBACK *after* the
+# location — never override a clean location country.
+_DESC_RESIDENCY_PATTERNS = [
     # "open to <geo>[ only]" / "hiring [in] <geo>[ only]" — a candidate-facing anchor MUST
     # precede the geo. A bare "<geo> only" suffix is deliberately NOT matched: it fires on
     # market/shipping/customer prose ("we ship to France only") that carries no residency
@@ -167,8 +174,6 @@ _DESC_PATTERNS = [
         rf"(?P<geo>{_GEO_ALT})(?![A-Za-z])",
         re.I,
     ),
-    re.compile(rf"\bwithin\s+the\s+(?P<geo>{_GEO_ALT})(?![A-Za-z])", re.I),
-    re.compile(rf"\bremote\s*[(\-–—,:]\s*(?:the\s+)?(?P<geo>{_GEO_ALT})(?![A-Za-z])", re.I),
     # "only open to <geo>" / "only hiring [in] <geo>" — the mirror phrasing, "only" first.
     re.compile(
         rf"\bonly\s+(?:open\s+to|hiring)\s+(?:in\s+)?(?:the\s+)?"
@@ -176,8 +181,17 @@ _DESC_PATTERNS = [
         re.I,
     ),
 ]
+_DESC_WEAK_GEO_PATTERNS = [
+    re.compile(rf"\bwithin\s+the\s+(?P<geo>{_GEO_ALT})(?![A-Za-z])", re.I),
+    re.compile(rf"\bremote\s*[(\-–—,:]\s*(?:the\s+)?(?P<geo>{_GEO_ALT})(?![A-Za-z])", re.I),
+]
+# "work from anywhere" et al = worldwide. The trailing lookahead rejects a geo-qualified form
+# ("work from anywhere in the US") so it doesn't read as worldwide — but EXEMPTS "the world"/
+# "the globe", which are worldwide-affirming ("work from anywhere in the world").
 _WORLDWIDE_DESC_RE = re.compile(
-    r"\b(work\s+from\s+anywhere|remote\s+worldwide|fully\s+remote,?\s+worldwide)\b", re.I
+    r"\b(work\s+from\s+anywhere|remote\s+worldwide|fully\s+remote,?\s+worldwide)\b"
+    r"(?!\s+(?:in|within)\s+(?!the\s+world\b|the\s+globe\b))",
+    re.I,
 )
 
 
@@ -193,28 +207,54 @@ def extract_geo_restriction(
     """
     if is_remote in (0, False):
         return None, ""
+    desc = description or ""
+    # 1. An explicit residency DEMAND in the body is the strongest signal — it beats both a
+    #    "work from anywhere" reassurance and whatever the location field says. Only the
+    #    unambiguous candidate-eligibility patterns qualify here (not the weak mentions below).
+    for rx in _DESC_RESIDENCY_PATTERNS:
+        m = rx.search(desc)
+        if m:
+            return m.group(0).strip(), GEO_ALIASES[m.group("geo").lower()]
+    # 2. An explicit worldwide reassurance ("work from anywhere") outranks a country that only
+    #    appears in the location field (the "remote in <country>, but really anywhere" case).
+    if _WORLDWIDE_DESC_RE.search(desc):
+        return None, "worldwide"
+    # 3. Location-derived scope. Alias-derived tokens (full names / safe short forms) are
+    #    trustworthy; bare ISO-2 codes are risky because US state abbreviations collide with
+    #    country codes (CO→Colombia). When "us" is present, drop such collisions unless the
+    #    country was ALSO named in full.
     loc = (location or "").strip()
     if loc:
-        scopes: list[str] = []
+        alias_scopes: list[str] = []
         for m in _LOC_ALIAS_RE.finditer(loc):
             s = GEO_ALIASES[m.group("geo").lower()]
-            if s not in scopes:
-                scopes.append(s)
+            if s not in alias_scopes:
+                alias_scopes.append(s)
+        code_scopes: list[str] = []
         for m in _LOC_CODE_RE.finditer(loc):
             s = m.group(1).lower()
-            if s not in scopes:
-                scopes.append(s)
+            if s not in code_scopes:
+                code_scopes.append(s)
+        us_present = "us" in alias_scopes or "us" in code_scopes
+        scopes: list[str] = list(alias_scopes)
+        for s in code_scopes:
+            if s in scopes:
+                continue
+            if us_present and s in STATE_CODE_COLLISIONS and s not in alias_scopes:
+                continue
+            scopes.append(s)
         if "worldwide" in scopes:
             return loc, "worldwide"
         if scopes:
             return loc, ",".join(scopes)
-    desc = description or ""
-    for rx in _DESC_PATTERNS:
+    # 4. Weak, ambiguous geo mentions ("within the US", "Remote - US") are a fallback ONLY when
+    #    the location gave nothing — they must never override a clean location country (they
+    #    also fire on incidental prose like "within the US business hours").
+    for rx in _DESC_WEAK_GEO_PATTERNS:
         m = rx.search(desc)
         if m:
             return m.group(0).strip(), GEO_ALIASES[m.group("geo").lower()]
-    if _WORLDWIDE_DESC_RE.search(desc):
-        return None, "worldwide"
+    # 5. Nothing detected on a remote posting.
     return None, "unknown"
 
 

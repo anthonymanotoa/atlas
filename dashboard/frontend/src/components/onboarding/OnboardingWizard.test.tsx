@@ -17,7 +17,6 @@ vi.mock("../../api", () => ({
         candidate_years: 0,
         candidate_country: "",
         acceptable_regions: ["worldwide"],
-        geo_penalty: 12,
         re_apply_window_days: 0,
         shortlist_threshold: 60,
       },
