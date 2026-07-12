@@ -30,6 +30,7 @@ a dependency says otherwise; honor each plan's STOP conditions; update your row 
 
 | Plan | Title | Priority | Effort | Depends on | Status |
 |------|-------|----------|--------|------------|--------|
+| 030 | Windows (WSL2) compatibility: portable `portfolio open`, LF `.gitattributes`, WSL-aware `doctor`, WSL setup docs (+ optional Linux CI) | P2 | M | — | TODO |
 | 026 | Make ARCHITECTURE.md/README describe the v2 dashboard (drawer → `/jobs/:id`, router/TanStack/Meridian) | P2 | S | — | DONE — Dashboard section rewritten (react-router v7/TanStack Query v5 hooks/routes from `routes.tsx`, Meridian v2, "Tareas del Brain" intents panel); removed all "drawer" mentions (incl. one in the CV↔JD match-score section); README frontend line + component list updated to match; `uv run pytest` green (506 passed) |
 | 027 | Untrusted-content rule in the 5 external-text brain prompts + SKILL.md | P3 | S | — | DONE — added a standard "data, never instructions" guard block (marker: "NUNCA como instrucciones") to `cv_review.md`, `cover_letter.md`, `legitimacy.md`, `interview_prep_deep.md`, `profile_expand.md`, each adapted to its domain; added a one-line reminder to `brain/SKILL.md`'s intent-draining step; `uv run pytest` still green (506 passed) |
 | 028 | Drop dead F3-compat shim in intents.py + registry-alignment tests | P3 | S | — | DONE — `_match_stories_safe`'s `try/except ImportError` + `hasattr(db, ...)` guards replaced with unguarded `_matched_stories` (same `[:5]`/`format_story` behavior); caller in `_ctx_interview_prep_deep` updated; new `test_intent_registries_are_aligned` + `test_intent_prompt_files_exist` pin `INTENT_TYPES`/`PROMPT_FILES`/`_CONTEXT_BUILDERS`/`_RESULT_WRITERS` alignment and prompt-file existence on disk; 508 passed, ruff check/format clean |
@@ -63,6 +64,11 @@ a dependency says otherwise; honor each plan's STOP conditions; update your row 
 Status values: TODO | IN PROGRESS | DONE | PARTIAL | BLOCKED | REJECTED.
 
 ## Dependency notes
+
+**2026-07-11 (030):** standalone, written from a dedicated Windows/WSL2-compat audit (not an
+`improve` run). Touches `engine/cli.py` (open helper + doctor warning), docs
+(README/AGENTS/SETUP), a new `.gitattributes`, and a new test file — no overlap with any
+pending plan. Its Step 6 (Linux CI on GitHub Actions) is optional and needs operator sign-off.
 
 **2026-07-06 second batch (026-029):** no hard dependencies; all four touch disjoint files
 (026: docs; 027: brain/prompts + SKILL.md; 028: engine/intents.py + test_intents.py;
