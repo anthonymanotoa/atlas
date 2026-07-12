@@ -119,7 +119,12 @@ un día y corre tarde, vuelve a procesar sin crear copias (esto se llama "idempo
 **Paso 2 — Puntuar el encaje (`score`).** Cada vacante se compara contra tus criterios
 (`config/criteria.md`):
 - **Reglas duras** (descartan): ¿es 100% remoto? ¿el puesto es de los tuyos —data analyst,
-  data scientist, AI/ML engineer, "data specialist"—? ¿es senior?
+  data scientist, AI/ML engineer, "data specialist"—? ¿es senior? ¿el remoto **te admite
+  donde vives**? Un remoto con restricción confirmada a un país/región fuera de tu alcance
+  (p. ej. "solo EE.UU." viviendo tú en Ecuador) se **descarta** —sigue visible al fondo,
+  marcado `remoto solo US`, pero fuera de la preselección y del cerebro. Se controla con
+  `candidate_country` (dónde vives) y `acceptable_regions` (regiones que sí te cubren) en
+  `config/criteria.md`; un remoto sin restricción o "worldwide" nunca se penaliza.
 - **Reglas suaves** (bajan o suben el puntaje): salario ≥ ~$70k, idioma EN/ES.
 - **Banderas de descarte** ("knockout flags"): si pide ciudadanía, autorización de trabajo o
   clearance que no tienes, lo marca para que no pierdas tiempo.
