@@ -65,12 +65,15 @@ def score_jobs(db: DB, criteria: Criteria, *, rescore: bool = False) -> tuple[in
     master = load_master_cv()
     ontology = load_ontology()
     have_cv = bool(master and ontology)
+
     def _refresh_geo(j: dict) -> None:
         """Re-extract geo from the stored location/description and persist any correction.
 
         Repairs rows scored under an older extractor (e.g. the US-state ↔ ISO-2 collision that
         read "CO, US" as Colombia). Mutates `j` in place so the subsequent score sees the fix."""
-        raw, scope = extract_geo_restriction(j.get("location"), j.get("description"), j.get("is_remote"))
+        raw, scope = extract_geo_restriction(
+            j.get("location"), j.get("description"), j.get("is_remote")
+        )
         if scope != (j.get("geo_scope") or ""):
             db.set_geo(j["id"], raw, scope)
             j["geo_restriction"], j["geo_scope"] = raw, scope

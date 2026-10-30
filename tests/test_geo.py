@@ -13,9 +13,9 @@ from engine.geo import (
 
 
 def test_state_collision_set_is_the_country_state_intersection():
-    assert STATE_CODE_COLLISIONS == {c for c in COUNTRY_TO_REGION if c in US_STATE_CODES}
+    assert {c for c in COUNTRY_TO_REGION if c in US_STATE_CODES} == STATE_CODE_COLLISIONS
     # The eight ISO-2 country codes that are also USPS state codes.
-    assert STATE_CODE_COLLISIONS == {"ar", "ca", "co", "de", "id", "in", "mt", "pa"}
+    assert {"ar", "ca", "co", "de", "id", "in", "mt", "pa"} == STATE_CODE_COLLISIONS
 
 
 def test_map_has_the_four_regions_and_a_sane_size():

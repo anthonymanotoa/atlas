@@ -217,9 +217,9 @@ def test_plain_country_location_still_wins_when_no_body_signal():
 
 def test_work_from_anywhere_in_the_world_is_worldwide():
     # "in the world"/"in the globe" are worldwide-affirming — must NOT be treated like "in the US".
-    assert extract_geo_restriction("United States", "Work from anywhere in the world.", True)[1] == (
-        "worldwide"
-    )
+    assert extract_geo_restriction("United States", "Work from anywhere in the world.", True)[
+        1
+    ] == ("worldwide")
     assert extract_geo_restriction("", "We are remote worldwide.", True)[1] == "worldwide"
 
 
