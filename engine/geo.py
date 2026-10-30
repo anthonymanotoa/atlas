@@ -100,6 +100,7 @@ COUNTRY_TO_REGION: dict[str, str] = {
 # USPS two-letter state/territory codes, lowercased. Used only to stop a US-scoped location
 # ("CO, US") from mis-reading a state abbreviation as the ISO-2 country that shares its spelling
 # (CO→Colombia, PA→Panama, DE→Germany, …). See extract_geo_restriction in engine/normalize.py.
+# fmt: off
 US_STATE_CODES: frozenset[str] = frozenset(
     {
         "al", "ak", "az", "ar", "ca", "co", "ct", "de", "fl", "ga",
@@ -110,6 +111,7 @@ US_STATE_CODES: frozenset[str] = frozenset(
         "dc",
     }
 )
+# fmt: on
 # The ISO-2 country codes that collide with a USPS state code: {ar, ca, co, de, id, in, mt, pa}.
 STATE_CODE_COLLISIONS: frozenset[str] = frozenset(
     c for c in COUNTRY_TO_REGION if c in US_STATE_CODES

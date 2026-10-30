@@ -65,7 +65,8 @@ def test_put_invalid_does_not_corrupt_existing_file(atlas_app, tmp_path, monkeyp
         before = (tmp_path / "config" / "criteria.md").read_text()
         # Now push garbage: it must be rejected and the file left as-is.
         resp = client.put(
-            "/api/criteria", json={"criteria": {"salary_floor_usd": "not-a-number"}, "prose": "# Bad"}
+            "/api/criteria",
+            json={"criteria": {"salary_floor_usd": "not-a-number"}, "prose": "# Bad"},
         )
         assert resp.status_code == 422
         after = (tmp_path / "config" / "criteria.md").read_text()
